@@ -3,5 +3,11 @@
    It is public by design; what people can read and write is decided by database.rules.json.
    While it is null the page says the database isn't set up. Add ?emu to the URL to use the local emulator instead. */
 window.CHAT_CONFIG = {
-  firebase: null,
+  firebase: {
+    apiKey: "AIzaSyDClHtcxtD5JMaKRmveZWItpOTrCSTbobY",
+    authDomain: "anon-chat-2792b.firebaseapp.com",
+    databaseURL: "https://anon-chat-2792b-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "anon-chat-2792b",
+    appId: "1:443180094611:web:a5c2f0005aff1428dfe966",
+  },
 };
