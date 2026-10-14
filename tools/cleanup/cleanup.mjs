@@ -6,7 +6,13 @@ import { getDatabase } from "firebase-admin/database";
 
 const DAY = 864e5;
 const sa = process.env.FIREBASE_SERVICE_ACCOUNT; // not needed against the emulator (FIREBASE_DATABASE_EMULATOR_HOST)
-const app = initializeApp({ ...(sa ? { credential: cert(JSON.parse(sa)) } : {}), databaseURL: process.env.FIREBASE_DATABASE_URL });
+let key = null;
+if (sa) {
+  try { key = JSON.parse(sa); } catch (e) { throw new Error("FIREBASE_SERVICE_ACCOUNT is not valid JSON; paste the whole downloaded key file"); }
+  if (key?.type !== "service_account" || typeof key.project_id !== "string") // names the keys only, never their values
+    throw new Error(`FIREBASE_SERVICE_ACCOUNT is not a service account key file (it has: ${Object.keys(key || {}).join(", ") || "nothing"})`);
+}
+const app = initializeApp({ ...(key ? { credential: cert(key) } : {}), databaseURL: process.env.FIREBASE_DATABASE_URL });
 const db = getDatabase(app);
 const cutoff = Date.now() - DAY;
 
