@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="匿名聊天室">
+<title>匿名聊天室｜不用加好友，輸入 4 碼就能聊</title>
+<meta name="description" content="免費線上匿名聊天室：開房就拿到 4 碼，分享給別人就能一起聊。不用註冊、不用加 LINE 或 FB 好友，聊完即刪，也能匯出聊天記錄。適合講座討論、讀書會、狼人殺、分組報告。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="匿名聊天室｜不用加好友，輸入 4 碼就能聊">
+<meta property="og:description" content="開房拿 4 碼，分享就能聊。不用註冊、不用加好友，聊完即刪。">
+<meta property="og:locale" content="zh_TW">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ---------- home ---------- -->
+<main id="home" class="home">
+  <header class="brand">
+    <div class="logo" aria-hidden="true">💬</div>
+    <div>
+      <h1>匿名聊天室</h1>
+      <p class="tag">不用加好友，開了就聊，聊完就刪</p>
+    </div>
+    <button id="meBtn" class="me" type="button" aria-label="修改暱稱和頭像"><span class="av"></span><span class="nm"></span></button>
+  </header>
+
+  <p id="setupNote" class="note warn" hidden>這個網站還沒有連上資料庫，請在 <code>js/config.js</code> 填入 Firebase 設定。</p>
+
+  <section id="resume" class="card resume" hidden>
+    <div><b>你還在聊天室 <span class="code"></span></b><span class="sub"></span></div>
+    <button class="btn primary" type="button" data-a="resume">回到聊天室</button>
+  </section>
+
+  <section class="card">
+    <h2>加入聊天室</h2>
+    <form id="joinForm" class="joinrow" autocomplete="off">
+      <input id="joinCode" class="codein" maxlength="40" placeholder="輸入 4 碼" aria-label="聊天室代碼" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+      <button class="btn primary" type="submit">加入</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>開一個新聊天室</h2>
+    <p class="muted">開好之後把 4 碼或連結傳給大家就可以開始聊。</p>
+    <button id="createBtn" class="btn primary wide" type="button">開新聊天室</button>
+  </section>
+
+  <section class="features">
+    <div><b>🙈 不用註冊</b><span>取個暱稱、選個動物就好，不需要 LINE、FB 或 IG。</span></div>
+    <div><b>🔢 4 碼加入</b><span>代碼或連結都能進，也能投影 QR Code。</span></div>
+    <div><b>🗑️ 聊完即刪</b><span>房主結束就刪光；沒人說話 24 小時也會自動刪除。</span></div>
+    <div><b>💾 可以匯出</b><span>想留的人自己下載成文字檔或網頁檔。</span></div>
+  </section>
+  <p class="muted small center">適合講座討論、匿名讀書會、線上狼人殺、分組報告。</p>
+</main>
+
+<!-- ---------- chat ---------- -->
+<main id="chat" class="chat" hidden>
+  <header class="bar">
+    <button class="icon" type="button" data-a="home" aria-label="回首頁">‹</button>
+    <div class="ttl">
+      <b id="roomTitle"></b>
+      <button id="codeBtn" class="codechip" type="button" aria-label="分享聊天室"></button>
+    </div>
+    <button id="peopleBtn" class="icon people" type="button" aria-label="成員"><span>👥</span><span class="n"></span><i class="dot" hidden></i></button>
+    <button class="icon" type="button" data-a="menu" aria-label="更多">⋯</button>
+  </header>
+  <div id="dmBar" class="dmbar" hidden>
+    <button class="link" type="button" data-a="all">‹ 回到大家</button>
+    <span>🔒 和 <b class="dmwho"></b> 的私訊，只有你們兩個看得到</span>
+  </div>
+  <div id="list" class="list" aria-live="polite"></div>
+  <form id="composer" class="composer" autocomplete="off">
+    <textarea id="text" rows="1" maxlength="1000" placeholder="說點什麼…" aria-label="訊息"></textarea>
+    <button class="send" type="submit" aria-label="送出">➤</button>
+  </form>
+</main>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<script src="js/config.js"></script>
+<script src="js/vendor/qrcode.js"></script>
+<script src="js/app.js"></script>
+<script>if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});</script>
+</body>
+</html>

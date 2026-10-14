@@ -1,0 +1,148 @@
+// Security-rule tests against the Realtime Database emulator: npm test
+import { test, before, after, beforeEach } from "node:test";
+import { readFileSync } from "node:fs";
+import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
+import { ref, set, update, get, remove, push, serverTimestamp } from "firebase/database";
+
+let env;
+const C = "K7QM";
+const T = serverTimestamp();
+const member = (name) => ({ name, avatar: "🦊", joined: T, online: true });
+const db = (uid) => env.authenticatedContext(uid).database();
+const createRoom = (uid, { priv = false, secret = null, code = C } = {}) =>
+  update(ref(db(uid)), {
+    [`rooms/${code}`]: { meta: { owner: uid, created: T, last: T, priv }, members: { [uid]: member("房主") } },
+    [`secrets/${code}`]: secret,
+  });
+const join = (uid, key) => update(ref(db(uid)), {
+  [`rooms/${C}/members/${uid}`]: member("路人"),
+  [`rooms/${C}/meta/last`]: T,
+  ...(key != null ? { [`rooms/${C}/keys/${uid}`]: key } : {}),
+});
+const say = (uid, text = "嗨") => set(push(ref(db(uid), `rooms/${C}/msgs`)), { by: uid, name: "x", avatar: "🦊", text, at: T });
+const admin = (fn) => env.withSecurityRulesDisabled((ctx) => fn(ctx.database()));
+
+before(async () => {
+  env = await initializeTestEnvironment({
+    projectId: "demo-anon-chat",
+    database: { host: "127.0.0.1", port: 9000, rules: readFileSync(new URL("../database.rules.json", import.meta.url), "utf8") },
+  });
+});
+after(() => env.cleanup());
+beforeEach(() => env.clearDatabase());
+
+test("creating a room, and not over someone else's live room", async () => {
+  await assertFails(createRoom("alice", { code: "K7Q0" })); // 0 is not a code character
+  await assertSucceeds(createRoom("alice"));
+  await assertFails(createRoom("bob"));
+  await assertFails(update(ref(db("bob")), { [`rooms/${C}/meta/owner`]: "bob" }));
+});
+
+test("a room idle for 24 hours can be taken over or cleared by anyone", async () => {
+  await createRoom("alice");
+  await admin((d) => update(ref(d, `rooms/${C}/meta`), { last: Date.now() - 86400000 - 60000 }));
+  await assertFails(join("bob")); // can't join an expired room
+  await assertSucceeds(createRoom("bob"));
+  await admin((d) => update(ref(d, `rooms/${C}/meta`), { last: Date.now() - 86400000 - 60000 }));
+  await assertSucceeds(update(ref(db("carol")), { [`rooms/${C}`]: null, [`secrets/${C}`]: null }));
+});
+
+test("public room: anyone with the code joins, reads and talks; outsiders read nothing", async () => {
+  await createRoom("alice");
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/meta`)));
+  await assertFails(get(ref(db("bob"), `rooms/${C}/msgs`)));
+  await assertSucceeds(join("bob"));
+  await assertSucceeds(say("bob"));
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/msgs`)));
+  await assertFails(get(ref(db("carol"), `rooms/${C}/msgs`)));
+  await assertFails(get(ref(db("carol"), `rooms/${C}/members`)));
+  await assertFails(say("carol"));
+  await assertFails(get(ref(env.unauthenticatedContext().database(), `rooms/${C}/meta`)));
+});
+
+test("messages: no impersonation, length limit, server time", async () => {
+  await createRoom("alice"); await join("bob");
+  await assertFails(set(push(ref(db("bob"), `rooms/${C}/msgs`)), { by: "alice", name: "x", avatar: "🦊", text: "hi", at: T }));
+  await assertFails(set(push(ref(db("bob"), `rooms/${C}/msgs`)), { by: "bob", name: "x", avatar: "🦊", text: "hi", at: 1 }));
+  await assertFails(say("bob", "a".repeat(1001)));
+  await assertFails(say("bob", ""));
+  await assertSucceeds(say("bob", "a".repeat(1000)));
+});
+
+test("private room needs the password", async () => {
+  await createRoom("alice", { priv: true, secret: "hash-of-pw" });
+  await assertFails(join("bob"));
+  await assertFails(join("bob", "wrong"));
+  await assertSucceeds(join("bob", "hash-of-pw"));
+  await assertFails(get(ref(db("bob"), `secrets/${C}`)));
+  await assertFails(get(ref(db("bob"), `rooms/${C}/keys/alice`)));
+  await assertFails(set(ref(db("bob"), `secrets/${C}`), "mine"));
+});
+
+test("locked room lets nobody new in, but members stay", async () => {
+  await createRoom("alice"); await join("bob");
+  await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { locked: true }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { locked: true }));
+  await assertFails(join("carol"));
+  await assertSucceeds(say("bob"));
+  await assertSucceeds(update(ref(db("bob"), `rooms/${C}/members/bob`), { online: false }));
+});
+
+test("owner removes someone, who can't come back", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertFails(update(ref(db("carol"), `rooms/${C}`), { "members/bob": null, "banned/bob": true }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "members/bob": null, "banned/bob": true }));
+  await assertFails(join("bob"));
+  await assertFails(get(ref(db("bob"), `rooms/${C}/msgs`)));
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/banned/bob`)));
+});
+
+test("deleting messages: the author or the owner", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  const m = push(ref(db("bob"), `rooms/${C}/msgs`));
+  await set(m, { by: "bob", name: "x", avatar: "🦊", text: "1", at: T });
+  await assertFails(remove(ref(db("carol"), `rooms/${C}/msgs/${m.key}`)));
+  await assertFails(update(ref(db("carol"), `rooms/${C}/msgs/${m.key}`), { text: "edited" }));
+  await assertSucceeds(remove(ref(db("alice"), `rooms/${C}/msgs/${m.key}`)));
+  const n = push(ref(db("bob"), `rooms/${C}/msgs`));
+  await set(n, { by: "bob", name: "x", avatar: "🦊", text: "2", at: T });
+  await assertSucceeds(remove(ref(db("bob"), `rooms/${C}/msgs/${n.key}`)));
+});
+
+test("reactions: members toggle their own", async () => {
+  await createRoom("alice"); await join("bob");
+  const m = push(ref(db("alice"), `rooms/${C}/msgs`));
+  await set(m, { by: "alice", name: "x", avatar: "🦊", text: "1", at: T });
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/msgs/${m.key}/re/0/bob`), true));
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/msgs/${m.key}/re/0/bob`), null));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/msgs/${m.key}/re/0/alice`), true));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/msgs/${m.key}/re/9/bob`), true));
+  await assertFails(set(ref(db("carol"), `rooms/${C}/msgs/${m.key}/re/0/carol`), true));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/msgs/nope/re/0/bob`), true)); // no reacting to a deleted message
+});
+
+test("private messages: only the two people read them", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  const pair = "alice_bob";
+  await assertSucceeds(set(push(ref(db("bob"), `rooms/${C}/dm/${pair}`)), { by: "bob", to: "alice", text: "悄悄話", at: T }));
+  await assertSucceeds(get(ref(db("alice"), `rooms/${C}/dm/${pair}`)));
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/dm/${pair}`)));
+  await assertFails(get(ref(db("carol"), `rooms/${C}/dm/${pair}`)));
+  await assertFails(set(push(ref(db("carol"), `rooms/${C}/dm/${pair}`)), { by: "carol", to: "alice", text: "x", at: T }));
+  await assertFails(set(push(ref(db("bob"), `rooms/${C}/dm/bob_dave`)), { by: "bob", to: "dave", text: "x", at: T })); // dave isn't here
+  await assertFails(get(ref(db("alice"), `rooms/${C}/dm`)));
+});
+
+test("ending: only the owner deletes the room and its password", async () => {
+  await createRoom("alice", { priv: true, secret: "h" }); await join("bob", "h");
+  await assertFails(update(ref(db("bob")), { [`rooms/${C}`]: null, [`secrets/${C}`]: null }));
+  await assertSucceeds(update(ref(db("alice")), { [`rooms/${C}`]: null, [`secrets/${C}`]: null }));
+  await admin(async (d) => { if ((await get(ref(d, `secrets/${C}`))).exists()) throw new Error("password left behind"); });
+});
+
+test("members leave on their own", async () => {
+  await createRoom("alice"); await join("bob");
+  await assertFails(remove(ref(db("bob"), `rooms/${C}/members/alice`)));
+  await assertSucceeds(remove(ref(db("bob"), `rooms/${C}/members/bob`)));
+  await assertFails(say("bob"));
+});

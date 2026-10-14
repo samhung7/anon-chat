@@ -1,0 +1,23 @@
+name: Test database rules
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: database.rules.json matches tools/rules.py
+        run: python3 tools/rules.py && git diff --exit-code database.rules.json
+      - run: npm test
