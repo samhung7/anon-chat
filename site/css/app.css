@@ -89,7 +89,9 @@ code { font-size: .9em; }
 .note.warn { background: var(--warn-bg); color: var(--warn); }
 
 /* ---------- chat ---------- */
-.chat { position: fixed; inset: 0; display: flex; flex-direction: column; height: 100dvh; max-width: 760px; margin: 0 auto; background: var(--bg); }
+/* pinned to all four edges rather than a 100dvh height: on an iPhone home-screen app that height comes out
+   one status bar short, which left a strip of background under the message box */
+.chat { position: fixed; inset: 0; display: flex; flex-direction: column; max-width: 760px; margin: 0 auto; background: var(--bg); }
 .bar {
   display: flex; align-items: center; gap: 4px; padding: calc(6px + env(safe-area-inset-top)) 8px 6px;
   background: var(--surface); border-bottom: 1px solid var(--line);
@@ -248,3 +250,10 @@ ul.plist small { color: var(--muted); }
 .pins li .go img { display: block; max-width: 100%; max-height: 120px; width: auto; height: auto; border-radius: 8px; }
 .pins ul { grid-template-columns: minmax(0, 1fr); overflow-x: hidden; }
 .pins li { min-width: 0; }
+
+/* opened from the home screen: iOS blurs a band below the status bar, so keep titles clear of it */
+@media (display-mode: standalone) {
+  .home { padding-top: calc(env(safe-area-inset-top) + 20px); }
+  .bar { padding-top: calc(env(safe-area-inset-top) + 14px); }
+  .toasts { top: calc(76px + env(safe-area-inset-top)); }
+}
