@@ -34,7 +34,7 @@ member_write = o(
 is_member = lambda room: f"{room}.child('members/' + auth.uid).exists()"
 msg_write = j("auth != null", is_member(ROOM), o(
     j("!data.exists()", "newData.child('by').val() === auth.uid"),
-    j("!newData.exists()", o("data.child('by').val() === auth.uid", f"{ROOM}.child('meta/owner').val() === auth.uid")),
+    j("!newData.exists()", "data.child('by').val() === auth.uid"),   # only the author deletes a message
 ))
 DMROOM = "data.parent().parent().parent()"
 dm_write = j(
@@ -45,6 +45,25 @@ dm_write = j(
 
 S = lambda n: f"newData.isString() && newData.val().length <= {n}"
 NO = {".validate": False}
+
+# one nickname per room: names/{lowercased name} = uid. Claim a free name, or one whose holder has left;
+# give back your own; the owner clears the name of someone they remove.
+holder_gone = f"!{ROOM}.child('members/' + data.val()).exists()"
+names_write = j("auth != null", o(
+    j("newData.val() === auth.uid", o("!data.exists()", "data.val() === auth.uid", holder_gone)),
+    j("!newData.exists()", o("data.val() === auth.uid", holder_gone, f"{ROOM}.child('meta/owner').val() === auth.uid")),
+))
+name_rule = {".validate": j(S(24), "newData.val().length > 0", r"!newData.val().matches(/[.#$\[\]\/]/)",
+                            "newData.parent().parent().parent().child('names/' + newData.val().toLowerCase()).val() === $uid")}
+# a GIF picked from the KLIPY search; only images hosted by KLIPY, so nobody can post an arbitrary tracking image
+GIF = {
+    ".validate": "newData.hasChildren(['url', 'w', 'h'])",
+    "url": {".validate": S(500) + r" && newData.val().matches(/^https:\/\/([a-z0-9-]+\.)*klipy\.com\//)"},
+    "w": {".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 2000"},
+    "h": {".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 2000"},
+    "title": {".validate": S(120)},
+    "$other": NO,
+}
 rules = {"rules": {
     ".read": False, ".write": False,
     "rooms": {
@@ -70,13 +89,17 @@ rules = {"rules": {
                 "$uid": {
                     ".write": j("auth != null", member_write),
                     ".validate": "newData.hasChildren(['name', 'avatar', 'joined'])",
-                    "name": {".validate": S(24) + " && newData.val().length > 0"},
+                    "name": name_rule,
                     "avatar": {".validate": S(8)},
                     "joined": {".validate": "newData.isNumber()"},
                     "online": {".validate": "newData.isBoolean()"},
                     "$other": NO,
                 },
             },
+            "names": {"$key": {
+                ".read": "auth != null",
+                ".write": names_write,
+                ".validate": "newData.isString() && $key.length <= 24"}},
             "keys": {"$uid": {".write": "auth != null && auth.uid === $uid", ".validate": S(128)}},
             "banned": {"$uid": {
                 ".read": "auth != null && auth.uid === $uid",
@@ -86,11 +109,12 @@ rules = {"rules": {
                 ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
                 "$id": {
                     ".write": msg_write,
-                    ".validate": "newData.hasChildren(['by', 'name', 'avatar', 'text', 'at'])",
+                    ".validate": "newData.hasChildren(['by', 'name', 'avatar', 'at']) && (newData.hasChild('text') || newData.hasChild('gif'))",
                     "by": {".validate": "newData.isString()"},
                     "name": {".validate": S(24)},
                     "avatar": {".validate": S(8)},
                     "text": {".validate": S(1000) + " && newData.val().length > 0"},
+                    "gif": GIF,
                     "at": {".validate": "newData.val() === now || newData.val() === data.val()"},
                     "re": {"$k": {
                         ".validate": "$k.matches(/^[0-5]$/)",
@@ -103,10 +127,11 @@ rules = {"rules": {
                 ".read": "auth != null && ($pair.beginsWith(auth.uid + '_') || $pair.endsWith('_' + auth.uid)) && " + is_member("data.parent().parent()"),
                 "$id": {
                     ".write": dm_write,
-                    ".validate": "newData.hasChildren(['by', 'to', 'text', 'at'])",
+                    ".validate": "newData.hasChildren(['by', 'to', 'at']) && (newData.hasChild('text') || newData.hasChild('gif'))",
                     "by": {".validate": "newData.isString()"},
                     "to": {".validate": "newData.isString()"},
                     "text": {".validate": S(1000) + " && newData.val().length > 0"},
+                    "gif": GIF,
                     "at": {".validate": "newData.val() === now"},
                     "$other": NO,
                 }}},
