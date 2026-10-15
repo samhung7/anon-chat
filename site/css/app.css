@@ -1,16 +1,17 @@
 :root {
-  --bg: #f1f5f9; --surface: #ffffff; --surface-2: #f8fafc; --line: #e2e8f0;
-  --text: #0f172a; --muted: #64748b; --accent: #4f46e5; --accent-2: #eef2ff; --on-accent: #ffffff;
-  --danger: #dc2626; --warn-bg: #fef3c7; --warn: #92400e; --ok: #16a34a;
-  --shadow: 0 10px 30px rgba(15, 23, 42, .12);
+  /* ivory marble and wood beams, after the Stoa of Attalos in Athens */
+  --bg: #f4eee3; --surface: #fffcf6; --surface-2: #f8f2e7; --line: #e6dccb;
+  --text: #2e2018; --muted: #7c6b5a; --accent: #7a4529; --accent-2: #f1e5d4; --on-accent: #fffaf1;
+  --danger: #b42318; --warn-bg: #fbecc8; --warn: #7a4a0e; --ok: #3f7d3a;
+  --shadow: 0 10px 30px rgba(62, 39, 24, .14);
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0b1120; --surface: #111a2e; --surface-2: #17223a; --line: #24324d;
-    --text: #e2e8f0; --muted: #94a3b8; --accent: #818cf8; --accent-2: #1e2547; --on-accent: #0b1120;
-    --danger: #f87171; --warn-bg: #3b2f12; --warn: #fcd34d; --ok: #4ade80;
-    --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+    --bg: #17110c; --surface: #211812; --surface-2: #2a1f17; --line: #3b2c21;
+    --text: #f1e8d8; --muted: #b5a38d; --accent: #d39a68; --accent-2: #3a2a1e; --on-accent: #1b120c;
+    --danger: #f08a7e; --warn-bg: #3b2c12; --warn: #f3c969; --ok: #8fc98a;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .5);
   }
 }
 * { box-sizing: border-box; }
@@ -54,7 +55,7 @@ code { font-size: .9em; }
 /* ---------- home ---------- */
 .home { max-width: 520px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); }
 .brand { display: flex; align-items: center; gap: 12px; margin: 8px 0 20px; }
-.brand .logo { font-size: 30px; width: 52px; height: 52px; display: grid; place-items: center; background: var(--accent-2); border-radius: 16px; flex: none; border: 0; padding: 0; cursor: pointer; }
+.brand .logo { font-size: 30px; width: 52px; height: 52px; display: grid; place-items: center; background: var(--accent-2); border-radius: 16px; overflow: hidden; flex: none; border: 0; padding: 0; cursor: pointer; }
 .brand .logo:active { transform: scale(.94); }
 .brand h1 { font-size: 22px; }
 .brand .tag { margin: 0; color: var(--muted); font-size: 14px; }
@@ -141,7 +142,7 @@ code { font-size: .9em; }
 .send { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; background: var(--accent); color: var(--on-accent); font-size: 18px; }
 
 /* ---------- sheets ---------- */
-.overlay { position: fixed; inset: 0; z-index: 20; background: rgba(2, 6, 23, .5); display: flex; align-items: flex-end; justify-content: center; animation: fade .15s; }
+.overlay { position: fixed; inset: 0; z-index: 20; background: rgba(28, 18, 12, .5); display: flex; align-items: flex-end; justify-content: center; animation: fade .15s; }
 .sheet {
   width: 100%; max-width: 520px; max-height: 88dvh; overflow-y: auto; background: var(--surface); border-radius: 20px 20px 0 0;
   padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); box-shadow: var(--shadow); animation: up .18s ease-out;
@@ -268,3 +269,4 @@ html.l10n body { visibility: hidden; }
 .hmenu .merow + .merow { margin-top: 8px; }
 .langs { display: flex; flex-direction: column; gap: 6px; }
 .langs .btn[aria-checked="true"] { border-color: var(--accent); background: var(--accent-2); font-weight: 600; }
+.brand .logo img { width: 100%; height: 100%; display: block; }
