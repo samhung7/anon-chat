@@ -11,5 +11,5 @@ window.CHAT_CONFIG = {
     projectId: "anon-chat-2792b",
     appId: "1:443180094611:web:a5c2f0005aff1428dfe966",
   },
-  klipyKey: "",
+  klipyKey: "DaLjx9fHEDRC7gRl3iFXkSjXiuObhmcp48IJOssQcAFJurEPJ76fD7B0ujQdPekP", // public by design: it ships to every browser that searches
 };

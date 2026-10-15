@@ -772,13 +772,20 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
   }
   // KLIPY (klipy.com) GIF search; needs klipyKey in js/config.js
   const KLIPY = CFG.klipyKey;
-  function klipyFile(item, sizes) {
-    const f = item?.file || item?.files || {};
-    for (const size of sizes) for (const fmt of ["gif", "webp"]) {
-      const x = f[size]?.[fmt];
-      if (x?.url && GIF_HOST.test(x.url)) return { url: x.url, w: Math.round(+x.width || +x.w || 200), h: Math.round(+x.height || +x.h || 200) };
-    }
-    return null;
+  // Every gif/webp rendition in a result, wherever the response nests it (file.md.gif, files.gif, ...); no video formats.
+  function klipyFiles(item) {
+    const out = [], seen = new Set();
+    const walk = (o, path, depth) => {
+      if (!o || typeof o !== "object" || depth > 5) return;
+      if (typeof o.url === "string" && !seen.has(o.url) && /(^|\.)(gif|webp)\b/i.test(path + " " + o.url.split("?")[0].split(".").pop())) {
+        seen.add(o.url);
+        out.push({ url: o.url, w: Math.round(+o.width || +o.w || 0), h: Math.round(+o.height || +o.h || 0), ok: GIF_HOST.test(o.url) });
+      }
+      for (const [k, v] of Object.entries(o)) if (!/mp4|webm|video/i.test(k)) walk(v, path + "." + k, depth + 1);
+    };
+    walk(item?.file || item?.files || item, "", 0);
+    if (out.length && !out.some((f) => f.ok)) console.warn("KLIPY media host not accepted:", out[0].url);
+    return out.filter((f) => f.ok && f.w > 0 && f.h > 0);
   }
   async function klipy(q, page = 1) {
     const base = `https://api.klipy.com/api/v1/${encodeURIComponent(KLIPY)}/gifs/${q ? "search" : "trending"}`;
@@ -787,10 +794,16 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
     const res = await fetch(`${base}?${qs}`);
     if (!res.ok) throw new Error("klipy " + res.status);
     const body = await res.json();
-    const items = body?.data?.data || body?.data || [];
+    const items = body?.data?.data || body?.data || body?.results || [];
     return (Array.isArray(items) ? items : []).map((it) => {
-      const show = klipyFile(it, ["sm", "xs", "md"]), send = klipyFile(it, ["md", "sm", "hd"]);
-      return show && send ? { show, send: { ...send, title: String(it.title || "").slice(0, 120) } } : null;
+      const files = klipyFiles(it);
+      if (!files.length) return null;
+      // preview: the smallest one at least 100px wide; to send: the one closest to 300px wide
+      const bySize = [...files].sort((a, b) => a.w - b.w);
+      const show = bySize.find((f) => f.w >= 100) || bySize[bySize.length - 1];
+      const send = [...files].sort((a, b) => Math.abs(a.w - 300) - Math.abs(b.w - 300))[0];
+      const fit = (f) => ({ url: f.url, w: Math.min(f.w, 2000), h: Math.min(f.h, 2000) });
+      return { show: fit(show), send: { ...fit(send), title: String(it.title || "").slice(0, 120) } };
     }).filter(Boolean);
   }
   function gifPanel(box) {
