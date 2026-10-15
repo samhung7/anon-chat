@@ -102,6 +102,8 @@
   // nicknames are unique per room, compared without case; Firebase keys can't hold . # $ [ ] /
   const cleanName = (n) => String(n || "").replace(/[.#$[\]/]/g, "").replace(/\s+/g, " ").trim().slice(0, 12);
   const nameKey = (n) => n.toLowerCase();
+  // the uid holding a nickname in a room, or null
+  const nameHolder = (code, name) => fb.get(roomRef(code, "names/" + nameKey(name))).then((s) => s.val(), () => null);
   // inRoom: also rename in the room we're in (fails, and asks again, if someone there has that name)
   async function askMe(firstTime, note = "", inRoom = !firstTime) {
     const cur = me() || (() => { const [a, n] = AVATARS[(Math.random() * AVATARS.length) | 0]; return { avatar: a, name: n, auto: true }; })();
@@ -122,11 +124,16 @@
       const m = { avatar: pick, name: cleanName(input.value) || AVATARS.find((x) => x[0] === pick)[1] };
       if (inRoom && R && !R.gone && R.members[uid]) {
         const old = R.members[uid].name;
-        const upd = { [`members/${uid}/name`]: m.name, [`members/${uid}/avatar`]: m.avatar };
-        if (nameKey(old) !== nameKey(m.name)) Object.assign(upd, { [`names/${nameKey(m.name)}`]: uid, [`names/${nameKey(old)}`]: null });
-        else upd[`names/${nameKey(m.name)}`] = uid;
+        const upd = { [`members/${uid}/name`]: m.name, [`members/${uid}/avatar`]: m.avatar, [`names/${nameKey(m.name)}`]: uid };
+        // give the old name back only if it's ours: in a room from before unique names, or with a
+        // duplicate left over from then, someone else may hold it, and releasing it would fail the whole rename
+        if (nameKey(old) !== nameKey(m.name) && (await nameHolder(R.code, old)) === uid) upd[`names/${nameKey(old)}`] = null;
         try { await fb.update(roomRef(R.code), upd); }
-        catch (e) { warn.textContent = `「${m.name}」在這個聊天室已經有人用了，換一個吧。`; warn.hidden = false; input.value = m.name; continue; }
+        catch (e) {
+          const holder = await nameHolder(R.code, m.name);
+          warn.textContent = holder && holder !== uid ? `「${m.name}」在這個聊天室已經有人用了，換一個吧。` : "沒有改成功，請再試一次。";
+          warn.hidden = false; input.value = m.name; continue;
+        }
       }
       store.set(ME_KEY, JSON.stringify(m));
       showMe();
@@ -250,7 +257,7 @@
         key = await hashPw(code, pw);
       }
       for (;;) {
-        const holder = await fb.get(roomRef(code, "names/" + nameKey(m.name))).then((s) => s.val(), () => null);
+        const holder = await nameHolder(code, m.name);
         const upd = {
           [`rooms/${code}/members/${uid}`]: { name: m.name, avatar: m.avatar, joined: T(), online: true },
           [`rooms/${code}/names/${nameKey(m.name)}`]: uid,
@@ -525,7 +532,8 @@
       if (what === "dm") return openDm(id);
       const m = R.members[id];
       if (m && (await confirmSheet(`移出 ${m.avatar} ${m.name}？`, "對方會馬上離開，而且不能再用這個裝置回來。", "移出"))) {
-        fb.update(roomRef(R.code), { [`members/${id}`]: null, [`names/${nameKey(m.name)}`]: null, [`banned/${id}`]: true }).then(() => toast(`已移出 ${m.name}`), () => toast("移不出去，請再試一次"));
+        const release = (await nameHolder(R.code, m.name)) === id; // don't free a name someone else still uses
+        fb.update(roomRef(R.code), { [`members/${id}`]: null, ...(release ? { [`names/${nameKey(m.name)}`]: null } : {}), [`banned/${id}`]: true }).then(() => toast(`已移出 ${m.name}`), () => toast("移不出去，請再試一次"));
       }
     });
   }
@@ -546,7 +554,8 @@
       const code = R.code;
       R.gone = true; leaveListeners();
       const mine = R.members[uid];
-      await fb.update(fb.ref(db), { [`rooms/${code}/members/${uid}`]: null, [`rooms/${code}/keys/${uid}`]: null, ...(mine ? { [`rooms/${code}/names/${nameKey(mine.name)}`]: null } : {}) }).catch(() => {});
+      const release = mine && (await nameHolder(code, mine.name)) === uid; // same reason as in askMe
+      await fb.update(fb.ref(db), { [`rooms/${code}/members/${uid}`]: null, [`rooms/${code}/keys/${uid}`]: null, ...(release ? { [`rooms/${code}/names/${nameKey(mine.name)}`]: null } : {}) }).catch(() => {});
       R = null; store.set(ROOM_KEY, null); home();
     }
     if (a === "end") endRoom();
