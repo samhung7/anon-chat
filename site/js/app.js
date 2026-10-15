@@ -508,7 +508,7 @@
     if (!notifyOn(R.code)) return;
     const a = author(v, dmWith);
     const title = dmWith ? t("dmToast", { who: a.name }) : `${a.avatar} ${a.name} | ${R.meta?.title || t("roomN", { code: R.code })}`;
-    const opts = { body: dmWith ? t("openToRead") : v.gif ? t("sentGif") : (v.text || "").slice(0, 120), tag: "room-" + R.code, renotify: true, icon: "icons/icon-192.png", data: { url: roomUrl(R.code) } };
+    const opts = { body: dmWith ? t("openToRead") : v.gif ? t("sentGif") : (v.text || "").slice(0, 120), tag: "room-" + R.code, renotify: true, icon: "icons/stoa-192.png", data: { url: roomUrl(R.code) } };
     try {
       const reg = await navigator.serviceWorker?.getRegistration();
       if (reg) return await reg.showNotification(title, opts); // phones only show notifications through the service worker
