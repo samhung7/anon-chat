@@ -41,6 +41,11 @@
           "xt": {
             ".validate": "newData.isString() && newData.val().length <= 400 && newData.val().matches(/^[A-Za-z0-9_-]+$/) && newData.parent().child('enc').val() === true"
           },
+          "pins": {
+            "$slot": {
+              ".validate": "$slot.matches(/^[0-2]$/) && newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{1,32}$/)"
+            }
+          },
           "$other": {
             ".validate": false
           }
@@ -133,6 +138,9 @@
             },
             "x": {
               ".validate": "newData.isString() && newData.val().length <= 4000 && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
+            },
+            "rp": {
+              ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{1,32}$/) && !(newData.parent().parent().parent().child('meta/enc').val() === true)"
             },
             "at": {
               ".validate": "newData.val() === now || newData.val() === data.val()"

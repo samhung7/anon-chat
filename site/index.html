@@ -24,7 +24,7 @@
 <!-- ---------- home ---------- -->
 <main id="home" class="home">
   <header class="brand">
-    <div class="logo" aria-hidden="true">💬</div>
+    <button id="logoBtn" class="logo" type="button" aria-label="開新聊天室" title="開新聊天室">💬</button>
     <div>
       <h1>匿名聊天室</h1>
       <p class="tag">不用加好友，開了就聊，聊完就刪</p>
@@ -85,12 +85,17 @@
     <button class="link" type="button" data-a="all">‹ 回到大家</button>
     <span>🔒 和 <b class="dmwho"></b> 的私訊，只有你們兩個看得到</span>
   </div>
+  <div id="pins" class="pins" hidden></div>
   <div id="notifyBar" class="dmbar" hidden>
     <span>🔔 有新訊息時要通知你嗎？之後可以在「⋯」裡關掉。</span>
     <button class="link" type="button" data-a="notifyYes">開啟通知</button>
     <button class="link" type="button" data-a="notifyNo">不用</button>
   </div>
   <div id="list" class="list" aria-live="polite"></div>
+  <div id="replyBar" class="replybar" hidden>
+    <span class="rtxt"></span>
+    <button class="icon small" type="button" data-a="noreply" aria-label="取消回覆">✕</button>
+  </div>
   <div id="picker" class="picker" hidden></div>
   <form id="composer" class="composer" autocomplete="off">
     <textarea id="text" rows="1" maxlength="1000" placeholder="說點什麼…" aria-label="訊息"></textarea>

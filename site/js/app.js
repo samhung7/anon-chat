@@ -207,6 +207,7 @@
     if (p.g && typeof p.g.url === "string") out.gif = { url: p.g.url.slice(0, 500), w: Math.min(+p.g.w || 200, 2000), h: Math.min(+p.g.h || 200, 2000), title: String(p.g.title || "").slice(0, 120) };
     else out.text = String(p.t || "").slice(0, 1000);
     if (!dmWith) { out.name = String(p.n || "？").slice(0, 24); out.avatar = String(p.a || "👤").slice(0, 8); }
+    if (typeof p.r === "string" && /^[\w-]{1,32}$/.test(p.r)) out.rp = p.r;
     return out;
   }
 
@@ -426,7 +427,7 @@
     // raw/rawSeen: member records as stored; members/seen: as shown (decrypted). Everything that arrives goes
     // through one queue (q), so decrypting never reorders messages.
     R = { code, c, meta: null, members: {}, seen: {}, raw: {}, rawSeen: {}, msgs: new Map(), dms: new Map(), plain: new Map(), dk: new Map(),
-          view: "all", unread: {}, off: [], gone: false, ready: false, q: Promise.resolve(), t0: Date.now() + offset };
+          view: "all", unread: {}, drafts: {}, reply: null, off: [], gone: false, ready: false, q: Promise.resolve(), t0: Date.now() + offset };
     rememberRoom(code);
     history.replaceState(null, "", "?room=" + code + (EMU && params.get("as") ? "&as=" + params.get("as") : ""));
     $("#list").replaceChildren();
@@ -441,7 +442,7 @@
       if (!s.exists()) return gone("ended");
       const meta = s.val();
       if (R.c) meta.title = meta.xt ? (await unseal(R.c.aes, meta.xt, "t"))?.t || "" : "";
-      R.meta = meta; renderHeader();
+      R.meta = meta; renderHeader(); renderPins();
     }), lost));
     on(fb.onValue(roomRef(code, "members"), (s) => queue(async () => {
       const raw = s.val() || {};
@@ -459,9 +460,9 @@
       renderHeader(); refreshNames();
     }), lost));
     const q = fb.query(roomRef(code, "msgs"), fb.limitToLast(MAX_LOAD));
-    on(fb.onChildAdded(q, (s) => queue(async () => { const v = await openMsg(s.val()); R.msgs.set(s.key, v); if (R.view === "all") addMsg(s.key, v); noteNew(v, null); }), lost));
+    on(fb.onChildAdded(q, (s) => queue(async () => { const v = await openMsg(s.val()); R.msgs.set(s.key, v); if (R.view === "all") addMsg(s.key, v); if (pinIds().includes(s.key)) renderPins(); noteNew(v, null); }), lost));
     on(fb.onChildChanged(q, (s) => queue(async () => { const v = await openMsg(s.val()); R.msgs.set(s.key, v); if (R.view === "all") updateMsg(s.key, v); })));
-    on(fb.onChildRemoved(q, (s) => queue(() => { R.msgs.delete(s.key); if (R.view === "all") document.getElementById("m-" + s.key)?.remove(); })));
+    on(fb.onChildRemoved(q, (s) => queue(() => { R.msgs.delete(s.key); if (R.view === "all") document.getElementById("m-" + s.key)?.remove(); renderPins(); })));
 
     // online / offline
     const mine = roomRef(code, "members/" + uid + "/online");
@@ -590,12 +591,66 @@
         el("span", { class: "av", text: author(v, dm).avatar }),
         el("span", { class: "nm", text: author(v, dm).name + (owner ? " 👑" : "") }),
         el("time", { text: fmtTime(v.at) })),
+      v.rp ? replyQuote(v.rp, dm) : null,
       v.gif ? el("div", { class: "bub gifbub" }, gifImg(v.gif)) : el("div", { class: "bub" }, linkify(v.text || "")),
       dm ? null : el("div", { class: "re" }));
     if (!dm) fillReacts(node, v);
-    node.addEventListener("click", (e) => { if (!e.target.closest("a, .re")) msgActions(id, v, dm); });
+    node.addEventListener("click", (e) => { if (!e.target.closest("a, .re, .rpq")) msgActions(id, v, dm); });
     return node;
   }
+  // one line naming a message: who, and the start of what they said
+  const findMsg = (id, dm) => (dm ? R.dms.get(R.view)?.get(id) : R.msgs.get(id));
+  const snippet = (v) => (v.gif ? "GIF" : (v.text || "").replace(/\s+/g, " ").slice(0, 80));
+  function replyQuote(rp, dm) {
+    const o = findMsg(rp, dm);
+    return el("button", { type: "button", class: "rpq", onclick: () => jumpTo(rp, dm) },
+      o ? el("b", { text: author(o, dm).name + "：" }) : null, o ? snippet(o) : "原訊息已刪除");
+  }
+  function jumpTo(id, dm) {
+    const node = document.getElementById((dm ? "d-" : "m-") + id);
+    if (!node) return toast("找不到原訊息，可能已經刪除了");
+    node.scrollIntoView({ block: "center", behavior: "smooth" });
+    node.classList.remove("flash"); void node.offsetWidth; node.classList.add("flash");
+  }
+  function startReply(id, v, dm) {
+    R.reply = { id, dm };
+    const bar = $("#replyBar");
+    $(".rtxt", bar).replaceChildren("↩ 回覆 ", el("b", { text: author(v, dm).name }), "：" + snippet(v));
+    bar.hidden = false; $("#text").focus();
+  }
+  function cancelReply() { if (R) R.reply = null; $("#replyBar").hidden = true; }
+
+  /* ---------- pinned announcements (meta/pins, owner only, at most 3) ---------- */
+  const pinIds = () => Object.entries(R?.meta?.pins || {}).sort(([a], [b]) => a - b).map(([, id]) => id);
+  let pinsOpen = false;
+  function renderPins() {
+    const box = $("#pins");
+    if (!R) return;
+    const ids = pinIds();
+    box.hidden = !ids.length || R.view !== "all";
+    if (box.hidden) return box.replaceChildren();
+    // newest message first; one gone from the room still shows, so the owner can take it down
+    const items = ids.map((id) => ({ id, v: R.msgs.get(id) })).sort((a, b) => (b.v?.at || 0) - (a.v?.at || 0));
+    const line = (it) => (it.v ? snippet(it.v) : "（這則訊息已刪除）");
+    box.classList.toggle("open", pinsOpen);
+    box.replaceChildren(...[
+      el("button", { type: "button", class: "pinhead", "aria-expanded": String(pinsOpen), onclick: () => { pinsOpen = !pinsOpen; renderPins(); } },
+        el("span", { text: "📌" }), el("span", { class: "one", text: pinsOpen ? "公告" : line(items[0]) }),
+        el("span", { class: "n", text: ids.length > 1 || pinsOpen ? `${ids.length} 則` : "" }), el("span", { class: "chev", text: "▾" })),
+      pinsOpen ? el("ul", {}, items.map((it) => el("li", {},
+        el("button", { type: "button", class: "go", onclick: () => it.v && jumpTo(it.id) },
+          it.v ? el("small", { text: `${author(it.v).avatar} ${author(it.v).name} · ${fmtTime(it.v.at)}` }) : null,
+          it.v?.gif ? gifImg(it.v.gif) : line(it)),
+        isOwner() ? el("button", { type: "button", class: "btn small unpin", text: "取消置頂", onclick: () => pin(it.id, false) }) : null))) : null].filter(Boolean));
+  }
+  function pin(id, on) {
+    const pins = R.meta?.pins || {};
+    const slot = on ? ["0", "1", "2"].find((k) => !pins[k]) : Object.keys(pins).find((k) => pins[k] === id);
+    if (slot === undefined) return toast(on ? "最多置頂三則，請先取消一則" : "");
+    fb.set(roomRef(R.code, "meta/pins/" + slot), on ? id : null)
+      .then(() => toast(on ? "📌 已置頂為公告" : "已取消置頂"), () => toast("沒有成功，請再試一次"));
+  }
+
   function addMsg(id, v, dm) {
     const list = $("#list");
     const stick = list.scrollHeight - list.scrollTop - list.clientHeight < 80 || v.by === uid;
@@ -617,6 +672,14 @@
   }
   function renderView() {
     closePicker();
+    // each view keeps its own unsent text, so a private message can't slip into the room (or the other way)
+    const ta = $("#text");
+    if (R.shown !== R.view) {
+      if (R.shown !== undefined) R.drafts[R.shown] = ta.value;
+      ta.value = R.drafts[R.view] || ""; ta.dispatchEvent(new Event("input"));
+      R.shown = R.view; cancelReply();
+    }
+    renderPins();
     const list = $("#list");
     list.replaceChildren();
     $("#dmBar").hidden = R.view === "all";
@@ -645,8 +708,10 @@
   async function send(text, gif) {
     text = (text || "").trim().slice(0, 1000);
     if ((!text && !gif) || !R || R.gone) return false;
+    const rp = R.reply && !!R.reply.dm === (R.view !== "all") ? R.reply.id : null;
     const body = gif ? { gif } : { text };
     const sealed = gif ? { g: gif } : { t: text };
+    if (rp) { sealed.r = rp; if (!R.c) body.rp = rp; }
     const m = R.members[uid] || me(); // the name this room knows me by
     const base = `rooms/${R.code}`;
     const upd = { [`${base}/meta/last`]: T() };
@@ -661,7 +726,7 @@
       const p = `${base}/dm/${pairKey(uid, R.view)}`;
       upd[`${p}/${fb.push(fb.ref(db, p)).key}`] = { by: uid, to: R.view, x: await seal(key, sealed, "d:" + uid), at: T() };
     }
-    $("#list .empty")?.remove();
+    $("#list .empty")?.remove(); cancelReply();
     fb.update(fb.ref(db), upd).catch((e) => { console.error(e); toast("送不出去，請檢查網路"); });
     return true;
   }
@@ -674,7 +739,9 @@
       const on = !!v.re?.[k]?.[uid];
       return el("button", { type: "button", class: "chip big" + (on ? " on" : ""), "data-a": "re" + k, text: emo });
     }));
-    const btns = v.gif || v.bad ? [] : [["copy", "複製文字"]];
+    const btns = v.bad ? [] : [["reply", "↩ 回覆"]];
+    if (!v.gif && !v.bad) btns.push(["copy", "複製文字"]);
+    if (!dm && !v.bad && isOwner()) btns.push(pinIds().includes(id) ? ["unpin", "取消置頂"] : ["pin", "📌 置頂為公告"]);
     if (!dm && v.by !== uid && R.members[v.by]) btns.push(["dm", "私訊 " + author(v).name]);
     if (canDel) btns.push(["del", "刪除訊息", "danger"]);
     const body = el("div", {}, v.gif ? el("div", { class: "quote gifq" }, gifImg(v.gif)) : el("blockquote", { class: "quote", text: v.text.length > 140 ? v.text.slice(0, 140) + "…" : v.text }), reacts);
@@ -683,6 +750,8 @@
     if (a === "react") return react(id, picked, !v.re?.[picked]?.[uid]);
     if (a === "copy") navigator.clipboard?.writeText(v.text).then(() => toast("已複製"), () => toast("複製不了"));
     if (a === "dm") openDm(v.by);
+    if (a === "reply") startReply(id, v, dm);
+    if (a === "pin" || a === "unpin") pin(id, a === "pin");
     if (a === "del" && (await confirmSheet("刪除這則訊息？", "所有人都看不到這則訊息了。", "刪除"))) fb.remove(roomRef(R.code, "msgs/" + id)).catch(() => toast("刪不掉，請再試一次"));
   }
 
@@ -1130,6 +1199,7 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
   if (!FB?.databaseURL) { $("#setupNote").hidden = false; document.body.classList.add("nodb"); }
   $("#meBtn").addEventListener("click", homeMenu);
   $("#createBtn").addEventListener("click", create);
+  $("#logoBtn").addEventListener("click", create);
   $("#joinForm").addEventListener("submit", (e) => { e.preventDefault(); join($("#joinCode").value); });
   $("#joinCode").addEventListener("input", (e) => { const v = e.target.value; if (!/[/?]/.test(v)) e.target.value = v.toUpperCase(); });
   $("#resume").addEventListener("click", (e) => {
@@ -1148,12 +1218,15 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
   if (!KLIPY) $("#composer [data-a=gif]").hidden = true;
   $("#composer").addEventListener("click", (e) => { const b = e.target.closest(".tool"); if (b) openPicker(b.dataset.a); });
   $("#peopleBtn").addEventListener("click", people);
+  // tapping the conversation while the emoji / GIF panel is open just closes the panel
+  ["#list", "#pins"].forEach((s) => $(s).addEventListener("click", (e) => { if (pickerOpen) { closePicker(); e.stopPropagation(); e.preventDefault(); } }, true));
   $("#chat").addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]")?.dataset.a;
     if (a === "home") { if (R?.view !== "all") { R.view = "all"; renderView(); } else home(); }
     if (a === "menu") menu();
     if (a === "all") { R.view = "all"; renderView(); }
     if (a === "notifyYes" || a === "notifyNo") setNotify(a === "notifyYes");
+    if (a === "noreply") cancelReply();
   });
   const ta = $("#text");
   const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };

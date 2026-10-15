@@ -97,6 +97,19 @@ test("only the owner renames the room", async () => {
   await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { title: null }));
 });
 
+test("pins: the owner pins up to three messages; replies point at a message", async () => {
+  await createRoom("alice"); await join("bob");
+  await assertFails(set(ref(db("bob"), `rooms/${C}/meta/pins/0`), "-Nabc123"));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/pins/0`), "-Nabc123"));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/pins/2`), "-Nxyz_9"));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/meta/pins/3`), "-Nabc123"));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/meta/pins/1`), "not/a key"));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/pins/0`), null));
+  const msgs = ref(db("bob"), `rooms/${C}/msgs`);
+  await assertSucceeds(set(push(msgs), { by: "bob", name: "bob", avatar: "🦊", text: "同意", rp: "-Nabc123", at: T }));
+  await assertFails(set(push(msgs), { by: "bob", name: "bob", avatar: "🦊", text: "同意", rp: "a.b", at: T }));
+});
+
 test("owner removes someone, who can't come back", async () => {
   await createRoom("alice"); await join("bob"); await join("carol");
   await assertFails(update(ref(db("carol"), `rooms/${C}`), { "members/bob": null, "banned/bob": true }));
@@ -208,6 +221,8 @@ test("encrypted room: only ciphertext and hashed nicknames", async () => {
   await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { enc: false }));
   await assertFails(set(ref(db("alice"), `rooms/${C}/meta/enc`), null));
   await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/locked`), true));
+  await assertFails(set(push(msgs), { by: "bob", x: "c2VhbGVk", rp: "-Nabc123", at: T })); // a reply is sealed inside x
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/pins/0`), "-Nabc123"));
   // renaming keeps the title sealed
   await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { title: "明文" }));
   await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { xt: "bmV3" }));
