@@ -62,6 +62,7 @@ name_rule = {".validate": j(S(24), "newData.val().length > 0", r"!newData.val().
 # in an encrypted room the nickname's claim is a keyed hash of it (h), so names stay unique without the server seeing them
 hash_rule = {".validate": j(S(24), r"newData.val().matches(/^[0-9a-f]{24}$/)", ENC(MEMBER_ROOM),
                             f"{MEMBER_ROOM}.child('names/' + newData.val()).val() === $uid")}
+PUSH_ID = r"newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{1,32}$/)"   # a message's key
 SEALED = lambda n: S(n) + r" && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
 # a GIF picked from the KLIPY search; only images hosted by KLIPY, so nobody can post an arbitrary tracking image
 GIF = {
@@ -95,6 +96,8 @@ rules = {"rules": {
                 "enc": {".validate": "newData.isBoolean()"},
                 "kc": {".validate": S(32)},   # lets a joiner tell a wrong key from a right one
                 "xt": {".validate": SEALED(400) + " && newData.parent().child('enc').val() === true"},
+                # up to three messages the owner pins as announcements, one per slot
+                "pins": {"$slot": {".validate": "$slot.matches(/^[0-2]$/) && " + PUSH_ID}},
                 "$other": NO,
             },
             "members": {
@@ -134,6 +137,7 @@ rules = {"rules": {
                     "text": {".validate": S(1000) + " && newData.val().length > 0 && !" + ENC(MEMBER_ROOM)},
                     "gif": dict(GIF, **{".validate": GIF[".validate"] + " && !" + ENC(MEMBER_ROOM)}),
                     "x": {".validate": SEALED(4000)},
+                    "rp": {".validate": PUSH_ID + " && !" + ENC(MEMBER_ROOM)},   # the message this one replies to (sealed inside x when encrypted)
                     "at": {".validate": "newData.val() === now || newData.val() === data.val()"},
                     "re": {"$k": {
                         ".validate": "$k.matches(/^[0-5]$/)",

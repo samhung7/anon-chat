@@ -54,7 +54,8 @@ code { font-size: .9em; }
 /* ---------- home ---------- */
 .home { max-width: 520px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); }
 .brand { display: flex; align-items: center; gap: 12px; margin: 8px 0 20px; }
-.brand .logo { font-size: 30px; width: 52px; height: 52px; display: grid; place-items: center; background: var(--accent-2); border-radius: 16px; flex: none; }
+.brand .logo { font-size: 30px; width: 52px; height: 52px; display: grid; place-items: center; background: var(--accent-2); border-radius: 16px; flex: none; border: 0; padding: 0; cursor: pointer; }
+.brand .logo:active { transform: scale(.94); }
 .brand h1 { font-size: 22px; }
 .brand .tag { margin: 0; color: var(--muted); font-size: 14px; }
 .me { margin-left: auto; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 14px 4px 6px; min-height: 44px; flex: none; }
@@ -219,3 +220,26 @@ ul.plist small { color: var(--muted); }
 .tab[aria-selected="true"] { border-color: var(--accent); background: var(--accent-2); color: var(--accent); font-weight: 600; }
 .bub.ro { cursor: default; }
 .rofoot { margin: 0; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); text-align: center; font-size: 13px; color: var(--muted); background: var(--surface); border-top: 1px solid var(--line); }
+
+/* pinned announcements: one line until opened */
+.pins { background: var(--surface); border-bottom: 1px solid var(--line); font-size: 14px; }
+.pins .pinhead { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; color: inherit; font: inherit; padding: 8px 14px; text-align: left; cursor: pointer; }
+.pins .pinhead .one { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pins .pinhead .n { color: var(--muted); font-size: 12px; flex: none; }
+.pins .pinhead .chev { color: var(--muted); flex: none; transition: transform .15s; }
+.pins.open .pinhead .chev { transform: rotate(180deg); }
+.pins ul { list-style: none; margin: 0; padding: 0 14px 8px; display: grid; gap: 6px; max-height: 40dvh; overflow-y: auto; }
+.pins li { display: flex; align-items: flex-start; gap: 8px; background: var(--accent-2); border-radius: 10px; padding: 7px 10px; }
+.pins li .go { flex: 1; min-width: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; padding: 0; white-space: pre-wrap; word-break: break-word; cursor: pointer; }
+.pins li small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+.pins li .unpin { flex: none; }
+/* replies */
+.rpq { display: block; max-width: 100%; border: 0; border-left: 3px solid var(--accent); background: var(--surface-2); color: var(--muted); font: inherit; font-size: 13px;
+  text-align: left; border-radius: 8px; padding: 4px 9px; margin: 0 2px 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.rpq b { color: var(--text); font-weight: 600; }
+.replybar { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 14px; background: var(--surface); border-top: 1px solid var(--line); font-size: 13px; }
+.replybar .rtxt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); border-left: 3px solid var(--accent); padding-left: 8px; }
+.replybar .rtxt b { color: var(--text); }
+.icon.small { min-width: 32px; width: 32px; height: 32px; font-size: 14px; }
+.msg.flash .bub { animation: flash 1.6s ease; }
+@keyframes flash { 0%, 40% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
