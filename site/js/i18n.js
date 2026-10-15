@@ -42,6 +42,16 @@
     },
   };
   window.I18N = I18N;
+  // light or dark as picked in the home menu (chat-theme); without a pick the device decides
+  I18N.theme = (pick) => {
+    if (pick !== undefined) { try { pick ? localStorage.setItem("chat-theme", pick) : localStorage.removeItem("chat-theme"); } catch (e) {} }
+    let v = null;
+    try { v = localStorage.getItem("chat-theme"); } catch (e) {}
+    v = v === "light" || v === "dark" ? v : null;
+    v ? document.documentElement.setAttribute("data-theme", v) : document.documentElement.removeAttribute("data-theme");
+    return v;
+  };
+  I18N.theme();
   // the page is written in Traditional Chinese; in any other language keep it out of sight until it's translated
   document.documentElement.lang = I18N.lang;
   if (I18N.lang !== "zh-TW") document.documentElement.classList.add("l10n");

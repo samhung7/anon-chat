@@ -914,7 +914,7 @@
     const sec = (h, list) => `<h2>${esc(h)}</h2>${list.map(row).join("") || `<p class="e">${esc(t("noMsgs"))}</p>`}`;
     const data = JSON.stringify(a).replace(/</g, "\\u003c");
     return `<!doctype html><html lang="${I18N.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(a.title)}</title>
-<style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#1e293b;background:#f8fafc}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e2e8f0}.sub{color:#64748b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#64748b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#4f46e5;color:#fff;border-color:#4f46e5}.g{max-width:240px;height:auto;border-radius:12px}.r{font-size:13px;margin-top:2px}.e{color:#94a3b8}@media(prefers-color-scheme:dark){body{background:#0f172a;color:#e2e8f0}.b{background:#1e293b;border-color:#334155}h2{border-color:#334155}}</style></head><body>
+<style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#3d2b23;background:#efe5dc}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e4d5ca}.sub{color:#8a766b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#8a766b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e4d5ca;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#d0b8ac;color:#3d2b23;border-color:#d0b8ac}.g{max-width:240px;height:auto;border-radius:12px}.r{font-size:13px;margin-top:2px}.e{color:#b8a59a}@media(prefers-color-scheme:dark){body{background:#1e1815;color:#efe5dc}.b{background:#29211d;border-color:#45372f}.me .b{color:#2a1f1a}h2{border-color:#45372f}}</style></head><body>
 <h1>${esc(a.title)}</h1><div class="sub">${esc(t("expSub", { code: a.code, t: fmtFull(a.exported) }))}</div>
 ${sec(t("everyone"), a.messages)}
 ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join("")}
@@ -972,6 +972,10 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
         el("span", { class: "av", text: "🌐" }),
         el("span", { class: "txt" }, el("b", { text: t("language") + (I18N.lang === "en" ? "" : " · Language") }), el("small", { text: I18N.LANGS.find(([c]) => c === I18N.lang)[1] })),
         el("span", { class: "chev", text: "›" })),
+      el("button", { type: "button", class: "merow", "data-a": "theme" },
+        el("span", { class: "av", text: "🌓" }),
+        el("span", { class: "txt" }, el("b", { text: t("theme") }), el("small", { text: t({ light: "themeLight", dark: "themeDark" }[I18N.theme()] || "themeSystem") })),
+        el("span", { class: "chev", text: "›" })),
       el("h3", { text: t("myRecords") }),
       list.length ? el("ul", { class: "reclist" }, list.map((r) => el("li", {},
         el("button", { type: "button", class: "rec", "data-open": r.id },
@@ -987,6 +991,7 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
     }).then((a) => {
       if (a === "me") askMe(false);
       else if (a === "lang") pickLang();
+      else if (a === "theme") pickTheme();
       else if (a?.startsWith("open:")) openRecord(null, a.slice(5));
     });
   }
@@ -1002,6 +1007,19 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
     if (!a?.startsWith("lang:")) return;
     I18N.set(a.slice(5) || null);
     showMe(); home(); homeMenu();
+  }
+  // light, dark, or whatever the device uses (the default)
+  async function pickTheme() {
+    const cur = I18N.theme() || "";
+    const list = el("div", { class: "langs", role: "radiogroup" },
+      [["", t("themeSystem")], ["light", "☀️ " + t("themeLight")], ["dark", "🌙 " + t("themeDark")]].map(([v, n]) =>
+        el("button", { type: "button", class: "btn wide", role: "radio", "data-theme": v, "aria-checked": String(v === cur), text: n })));
+    const a = await sheet(t("theme"), list, [["close", t("close")]], {
+      onOpen: (ov) => list.addEventListener("click", (e) => { const b = e.target.closest("[data-theme]"); if (b) ov.close("theme:" + b.dataset.theme); }),
+    });
+    if (!a?.startsWith("theme:")) return;
+    I18N.theme(a.slice(6) || null);
+    homeMenu();
   }
   async function importFile(file) {
     if (!file) return;

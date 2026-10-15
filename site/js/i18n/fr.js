@@ -252,4 +252,8 @@ I18N.add("fr", {
   backToRoom: "Retour au salon ›",
   language: "Langue",
   followDevice: "Comme mon appareil",
+  theme: "Apparence",
+  themeSystem: "Comme l’appareil",
+  themeLight: "Clair",
+  themeDark: "Sombre",
 });

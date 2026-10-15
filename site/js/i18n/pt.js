@@ -252,4 +252,8 @@ I18N.add("pt", {
   backToRoom: "Voltar para a sala ›",
   language: "Idioma",
   followDevice: "Igual ao meu dispositivo",
+  theme: "Aparência",
+  themeSystem: "Igual ao dispositivo",
+  themeLight: "Claro",
+  themeDark: "Escuro",
 });

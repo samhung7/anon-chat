@@ -252,4 +252,8 @@ I18N.add("de", {
   backToRoom: "Zurück zum Raum ›",
   language: "Sprache",
   followDevice: "Wie auf meinem Gerät",
+  theme: "Darstellung",
+  themeSystem: "Wie auf dem Gerät",
+  themeLight: "Hell",
+  themeDark: "Dunkel",
 });
