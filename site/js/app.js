@@ -74,7 +74,14 @@
   const now = () => Date.now() + offset; // server time
   const isOwner = () => !!R?.meta && R.meta.owner === uid;
   const pairKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
-  const nameOf = (id) => { const m = R?.members?.[id]; return m ? `${m.avatar} ${m.name}` : "已離開的人"; };
+  const who = (id) => R?.members?.[id] || R?.seen?.[id] || null; // R.seen keeps people who have left
+  const nameOf = (id) => { const m = who(id); return m ? `${m.avatar} ${m.name}` : "已離開的人"; };
+  // GIFs come from the KLIPY search and only from KLIPY's servers (database.rules.json checks the same)
+  const GIF_HOST = /^https:\/\/([a-z0-9-]+\.)*klipy\.com\//;
+  function gifImg(g) {
+    if (!g || !GIF_HOST.test(g.url || "")) return el("span", { class: "muted", text: "（GIF）" });
+    return el("img", { src: g.url, width: g.w, height: g.h, alt: g.title || "GIF", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" });
+  }
 
   // text with clickable links; everything goes in as text, never as HTML
   function linkify(text) {
@@ -92,7 +99,11 @@
 
   /* ---------- identity: nickname + animal, kept on this device ---------- */
   const me = () => { try { const m = JSON.parse(store.get(ME_KEY)); if (m && m.name) return m; } catch (e) {} return null; };
-  function askMe(firstTime) {
+  // nicknames are unique per room, compared without case; Firebase keys can't hold . # $ [ ] /
+  const cleanName = (n) => String(n || "").replace(/[.#$[\]/]/g, "").replace(/\s+/g, " ").trim().slice(0, 12);
+  const nameKey = (n) => n.toLowerCase();
+  // inRoom: also rename in the room we're in (fails, and asks again, if someone there has that name)
+  async function askMe(firstTime, note = "", inRoom = !firstTime) {
     const cur = me() || (() => { const [a, n] = AVATARS[(Math.random() * AVATARS.length) | 0]; return { avatar: a, name: n, auto: true }; })();
     let pick = cur.avatar, auto = !!cur.auto;
     const input = el("input", { class: "field", maxlength: 12, autocomplete: "off", id: "meName", "aria-label": "暱稱" });
@@ -102,16 +113,25 @@
       class: "avbtn", type: "button", "aria-label": n, "aria-pressed": String(a === pick), text: a,
       onclick: (e) => { pick = a; grid.querySelectorAll(".avbtn").forEach((x) => x.setAttribute("aria-pressed", String(x === e.currentTarget))); if (auto) input.value = n; },
     })));
-    const body = el("div", {}, el("p", { class: "muted", text: "不用註冊，其他人只會看到這個名字和頭像。" }), grid, el("label", { class: "lbl", for: "meName", text: "暱稱" }), input);
+    const warn = el("p", { class: "note warn", hidden: !note, text: note });
+    const body = el("div", {}, warn, el("p", { class: "muted", text: "不用註冊，其他人只會看到這個名字和頭像。同一個聊天室裡暱稱不能重複。" }), grid, el("label", { class: "lbl", for: "meName", text: "暱稱" }), input);
     input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) body.closest(".overlay")?.querySelector("[data-a=yes]").click(); });
-    return sheet(firstTime ? "先選一個身分" : "修改身分", body, [["no", "取消"], ["yes", "確定", "primary"]], { onOpen: () => !firstTime || input.select() }).then((a) => {
+    for (;;) {
+      const a = await sheet(firstTime ? "先選一個身分" : note ? "換一個暱稱" : "修改身分", body, [["no", "取消"], ["yes", "確定", "primary"]], { onOpen: () => (firstTime || note) && input.select() });
       if (a !== "yes") return null;
-      const m = { avatar: pick, name: input.value.trim().slice(0, 12) || AVATARS.find((x) => x[0] === pick)[1] };
+      const m = { avatar: pick, name: cleanName(input.value) || AVATARS.find((x) => x[0] === pick)[1] };
+      if (inRoom && R && !R.gone && R.members[uid]) {
+        const old = R.members[uid].name;
+        const upd = { [`members/${uid}/name`]: m.name, [`members/${uid}/avatar`]: m.avatar };
+        if (nameKey(old) !== nameKey(m.name)) Object.assign(upd, { [`names/${nameKey(m.name)}`]: uid, [`names/${nameKey(old)}`]: null });
+        else upd[`names/${nameKey(m.name)}`] = uid;
+        try { await fb.update(roomRef(R.code), upd); }
+        catch (e) { warn.textContent = `「${m.name}」在這個聊天室已經有人用了，換一個吧。`; warn.hidden = false; input.value = m.name; continue; }
+      }
       store.set(ME_KEY, JSON.stringify(m));
       showMe();
-      if (R && !R.gone) fb.update(fb.ref(db, `rooms/${R.code}/members/${uid}`), { name: m.name, avatar: m.avatar }).catch(() => {});
       return m;
-    });
+    }
   }
   const ensureMe = async () => me() || (await askMe(true));
   function showMe() {
@@ -182,7 +202,7 @@
         if (title.value.trim()) meta.title = title.value.trim().slice(0, 40);
         try {
           await fb.update(fb.ref(db), {
-            [`rooms/${code}`]: { meta, members: { [uid]: { name: m.name, avatar: m.avatar, joined: T(), online: true } } },
+            [`rooms/${code}`]: { meta, members: { [uid]: { name: m.name, avatar: m.avatar, joined: T(), online: true } }, names: { [nameKey(m.name)]: uid } },
             [`secrets/${code}`]: priv ? await hashPw(code, pw.value.trim()) : null,
           });
         } catch (e) { if (/permission/i.test(e.message)) continue; throw e; } // code in use: draw another
@@ -218,21 +238,37 @@
       if (await fb.get(roomRef(code, "banned/" + uid)).then((s) => s.val(), () => null)) { toast("你已經被房主移出這個聊天室"); return; }
       if (meta.locked) { toast("房主已經鎖住聊天室，暫時不能加入"); return; }
       busy(false);
-      const m = await ensureMe();
+      let m = await ensureMe();
       busy(true);
       if (!m) return;
-      const upd = { [`rooms/${code}/members/${uid}`]: { name: m.name, avatar: m.avatar, joined: T(), online: true }, [`rooms/${code}/meta/last`]: T() };
+      let key = null;
       if (meta.priv) {
         busy(false);
         const pw = await askPassword(meta, code);
         busy(true);
         if (pw == null) return;
-        upd[`rooms/${code}/keys/${uid}`] = await hashPw(code, pw);
+        key = await hashPw(code, pw);
       }
-      try { await fb.update(fb.ref(db), upd); }
-      catch (e) {
-        if (!/permission/i.test(e.message)) throw e;
-        toast(meta.priv ? "密碼不對" : "加入不了這個聊天室"); return;
+      for (;;) {
+        const holder = await fb.get(roomRef(code, "names/" + nameKey(m.name))).then((s) => s.val(), () => null);
+        const upd = {
+          [`rooms/${code}/members/${uid}`]: { name: m.name, avatar: m.avatar, joined: T(), online: true },
+          [`rooms/${code}/names/${nameKey(m.name)}`]: uid,
+          [`rooms/${code}/meta/last`]: T(),
+        };
+        if (key) upd[`rooms/${code}/keys/${uid}`] = key;
+        try { await fb.update(fb.ref(db), upd); break; }
+        catch (e) {
+          if (!/permission/i.test(e.message)) throw e;
+          if (holder && holder !== uid) { // someone here already goes by this name
+            busy(false);
+            m = await askMe(false, `「${m.name}」在這個聊天室已經有人用了，換一個暱稱再加入。`, false);
+            busy(true);
+            if (!m) return;
+            continue;
+          }
+          toast(meta.priv ? "密碼不對" : "加入不了這個聊天室"); return;
+        }
       }
       await enter(code);
     } catch (e) { failed(e); } finally { busy(false); }
@@ -247,7 +283,7 @@
   /* ---------- inside a room ---------- */
   async function enter(code) {
     leaveListeners();
-    R = { code, meta: null, members: {}, msgs: new Map(), dms: new Map(), view: "all", unread: {}, off: [], gone: false, ready: false };
+    R = { code, meta: null, members: {}, seen: {}, msgs: new Map(), dms: new Map(), view: "all", unread: {}, off: [], gone: false, ready: false };
     store.set(ROOM_KEY, code);
     history.replaceState(null, "", "?room=" + code + (EMU && params.get("as") ? "&as=" + params.get("as") : ""));
     $("#list").replaceChildren();
@@ -267,6 +303,7 @@
       if (R.ready) Object.entries(next).forEach(([id, m]) => { if (!R.members[id] && id !== uid) toast(`${m.avatar} ${m.name} 加入了`); });
       if (R.ready) Object.entries(R.members).forEach(([id, m]) => { if (!next[id] && id !== uid) toast(`${m.avatar} ${m.name} 離開了`); });
       R.members = next; R.ready = true;
+      Object.assign(R.seen, JSON.parse(JSON.stringify(next)));
       if (!next[uid]) return checkGone();
       Object.keys(next).forEach((id) => id !== uid && watchDm(id));
       renderHeader();
@@ -322,8 +359,12 @@
     if (why === "self") return home();
     const text = { ended: "聊天室已經結束（房主結束了，或超過 24 小時沒人說話），訊息都已刪除。", kicked: "房主把你移出了這個聊天室。", left: "你已經不在這個聊天室裡了。" }[why];
     $("#composer").classList.add("off");
-    const a = await sheet("聊天室已經結束", el("p", { class: "muted", text: text + "畫面上的記錄還在你的裝置上，關掉前可以先匯出。" }), [["export", "匯出記錄"], ["home", "回首頁", "primary"]]);
-    if (a === "export") { await exportSheet(); }
+    for (;;) {
+      const a = await sheet("聊天室已經結束", el("p", { class: "muted", text: text + "畫面上的記錄還在你的裝置上，關掉前可以先存起來。" }), [["save", "存到這台裝置", "primary"], ["export", "下載檔案"], ["home", "回首頁"]]);
+      if (a === "save") { const id = saveRecord(archive()); if (id) return openRecord(null, id); continue; }
+      if (a === "export") { await exportSheet(); continue; }
+      break;
+    }
     home();
   }
 
@@ -347,10 +388,10 @@
     const cont = prev && prev.dataset.by === v.by && v.at - Number(prev.dataset.at) < 180000;
     const node = el("div", { class: "msg" + (mine ? " mine" : "") + (cont ? " cont" : ""), id: (dm ? "d-" : "m-") + id, "data-by": v.by, "data-at": v.at, "data-id": id },
       cont ? null : el("div", { class: "who" },
-        el("span", { class: "av", text: dm ? (mine ? me()?.avatar : R.members[v.by]?.avatar || "👤") : v.avatar }),
-        el("span", { class: "nm", text: (dm ? (mine ? me()?.name : R.members[v.by]?.name || "已離開的人") : v.name) + (owner ? " 👑" : "") }),
+        el("span", { class: "av", text: dm ? who(v.by)?.avatar || "👤" : v.avatar }),
+        el("span", { class: "nm", text: (dm ? who(v.by)?.name || "已離開的人" : v.name) + (owner ? " 👑" : "") }),
         el("time", { text: fmtTime(v.at) })),
-      el("div", { class: "bub" }, linkify(v.text)),
+      v.gif ? el("div", { class: "bub gifbub" }, gifImg(v.gif)) : el("div", { class: "bub" }, linkify(v.text || "")),
       dm ? null : el("div", { class: "re" }));
     if (!dm) fillReacts(node, v);
     node.addEventListener("click", (e) => { if (!e.target.closest("a, .re")) msgActions(id, v, dm); });
@@ -359,6 +400,7 @@
   function addMsg(id, v, dm) {
     const list = $("#list");
     const stick = list.scrollHeight - list.scrollTop - list.clientHeight < 80 || v.by === uid;
+    $(".empty", list)?.remove();
     list.append(bubble(id, v, dm));
     if (stick) list.scrollTop = list.scrollHeight;
   }
@@ -375,6 +417,7 @@
     }).filter(Boolean));
   }
   function renderView() {
+    closePicker();
     const list = $("#list");
     list.replaceChildren();
     $("#dmBar").hidden = R.view === "all";
@@ -400,19 +443,20 @@
   }
 
   /* ---------- actions ---------- */
-  async function send(text) {
-    text = text.trim().slice(0, 1000);
-    if (!text || !R || R.gone) return false;
-    const m = me();
+  async function send(text, gif) {
+    text = (text || "").trim().slice(0, 1000);
+    if ((!text && !gif) || !R || R.gone) return false;
+    const body = gif ? { gif } : { text };
+    const m = R.members[uid] || me(); // the name this room knows me by
     const base = `rooms/${R.code}`;
     const upd = { [`${base}/meta/last`]: T() };
     if (R.view === "all") {
       const id = fb.push(fb.ref(db, base + "/msgs")).key;
-      upd[`${base}/msgs/${id}`] = { by: uid, name: m.name, avatar: m.avatar, text, at: T() };
+      upd[`${base}/msgs/${id}`] = { by: uid, name: m.name, avatar: m.avatar, ...body, at: T() };
     } else {
       if (!R.members[R.view]) { toast("對方已經離開聊天室了"); return false; }
       const p = `${base}/dm/${pairKey(uid, R.view)}`;
-      upd[`${p}/${fb.push(fb.ref(db, p)).key}`] = { by: uid, to: R.view, text, at: T() };
+      upd[`${p}/${fb.push(fb.ref(db, p)).key}`] = { by: uid, to: R.view, ...body, at: T() };
     }
     $("#list .empty")?.remove();
     fb.update(fb.ref(db), upd).catch((e) => { console.error(e); toast("送不出去，請檢查網路"); });
@@ -422,15 +466,15 @@
 
   async function msgActions(id, v, dm) {
     if (!R || R.gone) return;
-    const canDel = !dm && (v.by === uid || isOwner());
+    const canDel = !dm && v.by === uid;
     const reacts = dm ? null : el("div", { class: "reactrow" }, REACTS.map((emo, k) => {
       const on = !!v.re?.[k]?.[uid];
       return el("button", { type: "button", class: "chip big" + (on ? " on" : ""), "data-a": "re" + k, text: emo });
     }));
-    const btns = [["copy", "複製文字"]];
+    const btns = v.gif ? [] : [["copy", "複製文字"]];
     if (!dm && v.by !== uid && R.members[v.by]) btns.push(["dm", "私訊 " + v.name]);
     if (canDel) btns.push(["del", "刪除訊息", "danger"]);
-    const body = el("div", {}, el("blockquote", { class: "quote", text: v.text.length > 140 ? v.text.slice(0, 140) + "…" : v.text }), reacts);
+    const body = el("div", {}, v.gif ? el("div", { class: "quote gifq" }, gifImg(v.gif)) : el("blockquote", { class: "quote", text: v.text.length > 140 ? v.text.slice(0, 140) + "…" : v.text }), reacts);
     let picked = null;
     const a = await sheet("", body, btns, { onOpen: (ov) => reacts?.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { picked = +b.dataset.a.slice(2); ov.close("react"); } }) });
     if (a === "react") return react(id, picked, !v.re?.[picked]?.[uid]);
@@ -481,7 +525,7 @@
       if (what === "dm") return openDm(id);
       const m = R.members[id];
       if (m && (await confirmSheet(`移出 ${m.avatar} ${m.name}？`, "對方會馬上離開，而且不能再用這個裝置回來。", "移出"))) {
-        fb.update(roomRef(R.code), { [`members/${id}`]: null, [`banned/${id}`]: true }).then(() => toast(`已移出 ${m.name}`), () => toast("移不出去，請再試一次"));
+        fb.update(roomRef(R.code), { [`members/${id}`]: null, [`names/${nameKey(m.name)}`]: null, [`banned/${id}`]: true }).then(() => toast(`已移出 ${m.name}`), () => toast("移不出去，請再試一次"));
       }
     });
   }
@@ -501,7 +545,8 @@
     if (a === "leave" && (await confirmSheet("離開聊天室？", "離開後就看不到新的訊息了。" + (R.meta?.priv ? "要回來得再輸入一次密碼。" : ""), "離開"))) {
       const code = R.code;
       R.gone = true; leaveListeners();
-      await fb.update(fb.ref(db), { [`rooms/${code}/members/${uid}`]: null, [`rooms/${code}/keys/${uid}`]: null }).catch(() => {});
+      const mine = R.members[uid];
+      await fb.update(fb.ref(db), { [`rooms/${code}/members/${uid}`]: null, [`rooms/${code}/keys/${uid}`]: null, ...(mine ? { [`rooms/${code}/names/${nameKey(mine.name)}`]: null } : {}) }).catch(() => {});
       R = null; store.set(ROOM_KEY, null); home();
     }
     if (a === "end") endRoom();
@@ -517,54 +562,265 @@
     R = null; store.set(ROOM_KEY, null); home();
   }
 
-  /* ---------- export ---------- */
-  function transcript() {
+  /* ---------- export, and saved records ----------
+     Everything is exported from one archive object; the .json file is that object, and the .html file carries it
+     too (in a <script type="application/json">), so either can be imported back and read here, read-only. */
+  const ARCHIVE = "anon-chat-archive";
+  function archive() {
     const meta = R.meta || {};
-    const all = [...R.msgs.values()];
-    const dms = [...R.dms.entries()].filter(([, box]) => box.size).map(([other, box]) => ({ other, name: nameOf(other), msgs: [...box.values()] }));
-    return { title: meta.title || "聊天室 " + R.code, code: R.code, created: meta.created, exported: Date.now(), all, dms, me: me() };
+    const self = R.members[uid] || R.seen[uid] || me();
+    const reacts = (v) => {
+      const out = {};
+      REACTS.forEach((e, k) => { const n = Object.keys(v.re?.[k] || {}).length; if (n) out[e] = n; });
+      return Object.keys(out).length ? out : undefined;
+    };
+    const one = (v, author) => ({ name: author.name, avatar: author.avatar, at: v.at, text: v.text || undefined, gif: v.gif || undefined, mine: v.by === uid || undefined });
+    return {
+      format: ARCHIVE, version: 1,
+      title: meta.title || "聊天室 " + R.code, code: R.code, created: meta.created, exported: Date.now(),
+      me: { name: self.name, avatar: self.avatar },
+      messages: [...R.msgs.values()].map((v) => ({ ...one(v, v), owner: v.by === meta.owner || undefined, reactions: reacts(v) })),
+      dms: [...R.dms.entries()].filter(([, box]) => box.size).map(([other, box]) => {
+        const them = who(other) || { name: "已離開的人", avatar: "👤" };
+        return { with: { name: them.name, avatar: them.avatar }, messages: [...box.values()].map((v) => one(v, v.by === uid ? self : them)) };
+      }),
+    };
   }
-  function toText(t) {
-    const line = (time, who, text) => `[${fmtFull(time)}] ${who}：${text.replace(/\n/g, "\n    ")}`;
-    const out = [`${t.title}（代碼 ${t.code}）`, `匯出時間：${fmtFull(t.exported)}`, "", "── 大家 ──"];
-    t.all.forEach((v) => out.push(line(v.at, `${v.avatar} ${v.name}`, v.text)));
-    if (!t.all.length) out.push("（沒有訊息）");
-    t.dms.forEach((d) => {
-      out.push("", `── 🔒 和 ${d.name} 的私訊 ──`);
-      d.msgs.forEach((v) => out.push(line(v.at, v.by === uid ? `${t.me.avatar} ${t.me.name}（我）` : d.name, v.text)));
-    });
+  // an imported file is untrusted: keep only the fields we know, with the same limits as the database
+  function readArchive(o) {
+    if (!o || o.format !== ARCHIVE || o.version !== 1 || !Array.isArray(o.messages)) throw new Error("not-archive");
+    const str = (x, n) => (typeof x === "string" ? x.slice(0, n) : "");
+    const num = (x) => (Number.isFinite(+x) ? +x : 0);
+    const gif = (g) => (g && typeof g.url === "string" && GIF_HOST.test(g.url) ? { url: g.url.slice(0, 500), w: num(g.w) || 200, h: num(g.h) || 200, title: str(g.title, 120) } : undefined);
+    const msg = (m) => {
+      const out = { name: str(m?.name, 24) || "？", avatar: str(m?.avatar, 8), at: num(m?.at), text: str(m?.text, 1000) || undefined, gif: gif(m?.gif), mine: m?.mine === true || undefined, owner: m?.owner === true || undefined };
+      if (m?.reactions && typeof m.reactions === "object") {
+        const r = {}; REACTS.forEach((e) => { const n = num(m.reactions[e]); if (n > 0) r[e] = Math.min(n, 9999); });
+        if (Object.keys(r).length) out.reactions = r;
+      }
+      return out;
+    };
+    const keep = (list) => (Array.isArray(list) ? list : []).slice(0, 5000).map(msg).filter((m) => m.text || m.gif);
+    return {
+      format: ARCHIVE, version: 1, title: str(o.title, 60) || "聊天記錄", code: str(o.code, 4), created: num(o.created), exported: num(o.exported),
+      me: { name: str(o.me?.name, 24), avatar: str(o.me?.avatar, 8) },
+      messages: keep(o.messages),
+      dms: (Array.isArray(o.dms) ? o.dms : []).slice(0, 200).map((d) => ({ with: { name: str(d?.with?.name, 24) || "？", avatar: str(d?.with?.avatar, 8) }, messages: keep(d?.messages) })).filter((d) => d.messages.length),
+    };
+  }
+  const countOf = (a) => a.messages.length + a.dms.reduce((s, d) => s + d.messages.length, 0);
+  const label = (m) => `${m.avatar} ${m.name}`;
+  function toText(a) {
+    const line = (m) => `[${fmtFull(m.at)}] ${label(m)}${m.mine ? "（我）" : ""}：${m.gif ? `[GIF] ${m.gif.title || ""} ${m.gif.url}`.replace(/\s+/g, " ") : m.text.replace(/\n/g, "\n    ")}`;
+    const out = [`${a.title}（代碼 ${a.code}）`, `匯出時間：${fmtFull(a.exported)}`, "", "── 大家 ──"];
+    a.messages.forEach((m) => out.push(line(m)));
+    if (!a.messages.length) out.push("（沒有訊息）");
+    a.dms.forEach((d) => { out.push("", `── 🔒 和 ${label(d.with)} 的私訊 ──`); d.messages.forEach((m) => out.push(line(m))); });
     return out.join("\n") + "\n";
   }
-  function toHtml(t) {
+  function toHtml(a) {
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    const row = (v, who, mine) => `<div class="m${mine ? " me" : ""}"><div class="h">${esc(who)} <time>${esc(fmtFull(v.at))}</time></div><div class="b">${esc(v.text)}</div>${v.re ? `<div class="r">${REACTS.map((e, k) => { const n = Object.keys(v.re[k] || {}).length; return n ? `${e} ${n}` : ""; }).filter(Boolean).join("　")}</div>` : ""}</div>`;
-    const sec = (h, body) => `<h2>${esc(h)}</h2>${body || '<p class="e">（沒有訊息）</p>'}`;
-    return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(t.title)}</title>
-<style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#1e293b;background:#f8fafc}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e2e8f0}.sub{color:#64748b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#64748b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#4f46e5;color:#fff;border-color:#4f46e5}.r{font-size:13px;margin-top:2px}.e{color:#94a3b8}@media(prefers-color-scheme:dark){body{background:#0f172a;color:#e2e8f0}.b{background:#1e293b;border-color:#334155}h2{border-color:#334155}}</style></head><body>
-<h1>${esc(t.title)}</h1><div class="sub">代碼 ${esc(t.code)} · 匯出時間 ${esc(fmtFull(t.exported))}</div>
-${sec("大家", t.all.map((v) => row(v, `${v.avatar} ${v.name}`, v.by === uid)).join(""))}
-${t.dms.map((d) => sec(`🔒 和 ${d.name} 的私訊`, d.msgs.map((v) => row(v, v.by === uid ? `${t.me.avatar} ${t.me.name}（我）` : d.name, v.by === uid)).join(""))).join("")}
+    const row = (m) => `<div class="m${m.mine ? " me" : ""}"><div class="h">${esc(label(m))}${m.owner ? " 👑" : ""} <time>${esc(fmtFull(m.at))}</time></div>${m.gif ? `<img class="g" src="${esc(m.gif.url)}" width="${+m.gif.w}" height="${+m.gif.h}" alt="${esc(m.gif.title || "GIF")}" loading="lazy">` : `<div class="b">${esc(m.text)}</div>`}${m.reactions ? `<div class="r">${Object.entries(m.reactions).map(([e, n]) => `${e} ${n}`).join("　")}</div>` : ""}</div>`;
+    const sec = (h, list) => `<h2>${esc(h)}</h2>${list.map(row).join("") || '<p class="e">（沒有訊息）</p>'}`;
+    const data = JSON.stringify(a).replace(/</g, "\\u003c");
+    return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(a.title)}</title>
+<style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#1e293b;background:#f8fafc}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e2e8f0}.sub{color:#64748b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#64748b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#4f46e5;color:#fff;border-color:#4f46e5}.g{max-width:240px;height:auto;border-radius:12px}.r{font-size:13px;margin-top:2px}.e{color:#94a3b8}@media(prefers-color-scheme:dark){body{background:#0f172a;color:#e2e8f0}.b{background:#1e293b;border-color:#334155}h2{border-color:#334155}}</style></head><body>
+<h1>${esc(a.title)}</h1><div class="sub">代碼 ${esc(a.code)} · 匯出時間 ${esc(fmtFull(a.exported))} · 這個檔案可以在匿名聊天室匯入</div>
+${sec("大家", a.messages)}
+${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join("")}
+<script type="application/json" id="${ARCHIVE}">${data}</script>
 </body></html>`;
   }
-  async function exportSheet() {
-    if (!R) return;
-    const t = transcript();
-    const n = t.all.length + t.dms.reduce((s, d) => s + d.msgs.length, 0);
-    const a = await sheet("匯出聊天記錄", el("p", { class: "muted", text: `共 ${n} 則訊息，包含你自己的私訊。檔案只會存在你的裝置上。` }), [["txt", "文字檔 .txt"], ["html", "網頁檔 .html", "primary"]]);
-    if (!a) return;
-    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-    const name = `chat-${t.code}-${stamp}.${a}`; // ASCII: some browsers drop non-ASCII download names
-    const blob = new Blob([a === "txt" ? toText(t) : toHtml(t)], { type: a === "txt" ? "text/plain;charset=utf-8" : "text/html;charset=utf-8" });
-    const link = el("a", { href: URL.createObjectURL(blob), download: name });
+  function download(a, kind) {
+    const stamp = new Date(a.exported || Date.now()).toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    const name = `chat-${a.code || "record"}-${stamp}.${kind}`; // ASCII: some browsers drop non-ASCII download names
+    const body = kind === "txt" ? toText(a) : kind === "html" ? toHtml(a) : JSON.stringify(a, null, 1);
+    const type = { txt: "text/plain", html: "text/html", json: "application/json" }[kind] + ";charset=utf-8";
+    const link = el("a", { href: URL.createObjectURL(new Blob([body], { type })), download: name });
     document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 10000);
     toast("已下載 " + name);
   }
+  async function exportSheet() {
+    if (!R) return;
+    const a = archive();
+    const pick = await sheet("匯出聊天記錄", el("div", {},
+      el("p", { class: "muted", text: `共 ${countOf(a)} 則訊息，包含你自己的私訊。` }),
+      el("p", { class: "muted small", text: "「存到這台裝置」之後可以在首頁的「我的聊天記錄」打開；JSON 和網頁檔都能在其他裝置匯入回來。" })),
+      [["save", "存到這台裝置", "primary"], ["json", "JSON 檔（可匯入）"], ["html", "網頁檔 .html（可匯入）"], ["txt", "文字檔 .txt"]]);
+    if (pick === "save") saveRecord(a);
+    else if (pick) download(a, pick);
+  }
+
+  // saved records live in this browser's storage; nothing is uploaded
+  const REC_LIST = "chat-records", REC = (id) => "chat-record:" + id;
+  const records = () => { try { const l = JSON.parse(store.get(REC_LIST)); return Array.isArray(l) ? l : []; } catch (e) { return []; } };
+  function saveRecord(a, quiet) {
+    const id = `${a.code || "x"}-${a.exported || Date.now()}`;
+    try {
+      localStorage.setItem(REC(id), JSON.stringify(a));
+      const list = records().filter((r) => r.id !== id);
+      list.unshift({ id, title: a.title, code: a.code, exported: a.exported, n: countOf(a) });
+      localStorage.setItem(REC_LIST, JSON.stringify(list));
+    } catch (e) { toast("這台裝置的空間不夠，請改用下載檔案"); return null; }
+    if (!quiet) toast("已存到「我的聊天記錄」");
+    showRecords();
+    return id;
+  }
+  function deleteRecord(id) {
+    store.set(REC(id), null);
+    try { localStorage.setItem(REC_LIST, JSON.stringify(records().filter((r) => r.id !== id))); } catch (e) {}
+    showRecords();
+  }
+  function showRecords() {
+    const list = records(), box = $("#records .reclist");
+    box.replaceChildren(...list.map((r) => el("li", {},
+      el("button", { type: "button", class: "rec", "data-open": r.id },
+        el("b", { text: r.title }), el("small", { text: `${r.code ? "代碼 " + r.code + " · " : ""}${r.n} 則 · ${new Date(r.exported).toLocaleDateString("zh-TW")}` })))));
+    $("#records .none").hidden = list.length > 0;
+  }
+  async function importFile(file) {
+    if (!file) return;
+    if (file.size > 8e6) { toast("檔案太大了"); return; }
+    let a;
+    try {
+      const text = await file.text();
+      let raw;
+      if (/^\s*</.test(text)) { // an exported .html: the archive rides along inside it
+        const tag = new DOMParser().parseFromString(text, "text/html").getElementById(ARCHIVE);
+        raw = tag && JSON.parse(tag.textContent);
+      } else raw = JSON.parse(text);
+      a = readArchive(raw);
+    } catch (e) { toast("這不是匿名聊天室匯出的檔案"); return; }
+    const id = saveRecord(a, true);
+    openRecord(id ? null : a, id);
+  }
+
+  /* ---------- reading a saved record (read-only) ---------- */
+  let REC_VIEW = null; // { a, id, tab }
+  function openRecord(a, id) {
+    if (!a) { try { a = readArchive(JSON.parse(localStorage.getItem(REC(id)))); } catch (e) { toast("這份記錄打不開了"); deleteRecord(id); return; } }
+    REC_VIEW = { a, id, tab: -1 };
+    $("#home").hidden = true; $("#chat").hidden = true; $("#record").hidden = false;
+    $("#recTitle").textContent = a.title;
+    $("#recSub").textContent = `📁 唯讀記錄 · ${fmtFull(a.exported)} 匯出`;
+    const tabs = $("#recTabs");
+    tabs.replaceChildren(el("button", { type: "button", class: "tab", "data-tab": -1, text: `大家（${a.messages.length}）` }),
+      ...a.dms.map((d, i) => el("button", { type: "button", class: "tab", "data-tab": i, text: `🔒 ${label(d.with)}` })));
+    tabs.hidden = !a.dms.length;
+    renderRecord();
+  }
+  function renderRecord() {
+    const { a, tab } = REC_VIEW;
+    $("#recTabs").querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(+b.dataset.tab === tab)));
+    const list = tab < 0 ? a.messages : a.dms[tab].messages;
+    const box = $("#recList");
+    let prev = null;
+    box.replaceChildren(...(list.length ? list.map((m) => {
+      const cont = prev && prev.name === m.name && !!prev.mine === !!m.mine && m.at - prev.at < 180000;
+      prev = m;
+      return el("div", { class: "msg" + (m.mine ? " mine" : "") + (cont ? " cont" : "") },
+        cont ? null : el("div", { class: "who" }, el("span", { class: "av", text: m.avatar }), el("span", { class: "nm", text: m.name + (m.owner ? " 👑" : "") }), el("time", { text: fmtFull(m.at) })),
+        m.gif ? el("div", { class: "bub gifbub ro" }, gifImg(m.gif)) : el("div", { class: "bub ro" }, linkify(m.text)),
+        m.reactions ? el("div", { class: "re" }, Object.entries(m.reactions).map(([e, n]) => el("span", { class: "chip", text: `${e} ${n}` }))) : null);
+    }) : [el("p", { class: "empty", text: "沒有訊息" })]));
+    box.scrollTop = 0;
+  }
+  async function recordMenu() {
+    const { a, id } = REC_VIEW;
+    const pick = await sheet(a.title, el("p", { class: "muted", text: "這是匯入或保存的聊天記錄，只能閱讀，不能修改。" }),
+      [["json", "下載 JSON 檔"], ["html", "下載網頁檔"], ["txt", "下載文字檔"], ...(id ? [["del", "從這台裝置刪除", "danger"]] : [])]);
+    if (pick === "del" && (await confirmSheet("刪除這份記錄？", "只會從這台裝置刪除，已經下載的檔案不受影響。", "刪除"))) { deleteRecord(id); home(); }
+    else if (pick && pick !== "del") download(a, pick);
+  }
+
+  /* ---------- emoji and GIF pickers ---------- */
+  const EMOJI = {
+    "😀": "😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😋 😜 🤪 😝 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😌 😔 😪 😴 😷 🤒 🤕 🤢 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 🤡 👻 👽 🤖 💩",
+    "👍": "👍 👎 👌 🤌 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐️ 🖖 👋 👏 🙌 👐 🤲 🤝 🙏 💪 🫶 ✍️ 👀 🧠 🫡 🤷 🤦 🙋 🙆 🙅 💁 🙇",
+    "❤️": "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💯 💢 💥 💫 💦 💨 🕳️ 💬 💭 💤 ✨ 🔥 ⭐ 🌟 ⚡ 🎉 🎊 🎈 🎁 🏆 🥇",
+    "🐶": "🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🙈 🙉 🙊 🐔 🐧 🐦 🐤 🦆 🦉 🦄 🐝 🦋 🐌 🐞 🐢 🐍 🐙 🦑 🐠 🐬 🐳 🦈 🐲 🌸 🌻 🌈 ☀️ 🌙 ☔ ❄️",
+    "🍔": "🍎 🍊 🍋 🍌 🍉 🍇 🍓 🍑 🥭 🍍 🥝 🍅 🥑 🌽 🍞 🧀 🍳 🥓 🍔 🍟 🍕 🌭 🌮 🍜 🍝 🍣 🍱 🥟 🍙 🍚 🍦 🍩 🍪 🎂 🍰 🍫 🍬 🧋 ☕ 🍵 🍺 🍻 🥂 🍷",
+    "⚽": "⚽ 🏀 🏈 ⚾ 🎾 🏐 🏓 🏸 🥅 ⛳ 🎯 🎳 🎮 🕹️ 🎲 ♟️ 🧩 🎨 🎬 🎤 🎧 🎸 🎹 🥁 📚 📖 ✏️ 📝 📌 📎 💡 💻 📱 ⏰ 📅 🗳️ ✅ ❌ ❓ ❗ ⚠️ 🆗 🆒 🆕",
+  };
+  let pickerOpen = null; // "emoji" | "gif" | null
+  function closePicker() { pickerOpen = null; $("#picker").hidden = true; $("#composer").querySelectorAll(".tool").forEach((b) => b.setAttribute("aria-pressed", "false")); }
+  function openPicker(kind) {
+    if (pickerOpen === kind) return closePicker();
+    pickerOpen = kind;
+    $("#composer").querySelectorAll(".tool").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.a === kind)));
+    const box = $("#picker");
+    box.hidden = false;
+    if (kind === "emoji") {
+      const grid = el("div", { class: "emojigrid" });
+      const fill = (cat) => {
+        grid.replaceChildren(...EMOJI[cat].split(" ").map((e) => el("button", { type: "button", class: "emo", text: e })));
+        cats.querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.cat === cat)));
+      };
+      const cats = el("div", { class: "cats", role: "tablist" }, Object.keys(EMOJI).map((c) => el("button", { type: "button", role: "tab", "data-cat": c, text: c, onclick: () => fill(c) })));
+      grid.addEventListener("click", (e) => { const b = e.target.closest(".emo"); if (b) insertAtCursor(b.textContent); });
+      box.replaceChildren(cats, grid);
+      fill(Object.keys(EMOJI)[0]);
+    } else gifPanel(box);
+  }
+  function insertAtCursor(t) {
+    const ta = $("#text");
+    const a = ta.selectionStart ?? ta.value.length, b = ta.selectionEnd ?? ta.value.length;
+    ta.value = (ta.value.slice(0, a) + t + ta.value.slice(b)).slice(0, 1000);
+    ta.selectionStart = ta.selectionEnd = Math.min(a + t.length, ta.value.length);
+    ta.dispatchEvent(new Event("input"));
+  }
+  // KLIPY (klipy.com) GIF search; needs klipyKey in js/config.js
+  const KLIPY = CFG.klipyKey;
+  function klipyFile(item, sizes) {
+    const f = item?.file || item?.files || {};
+    for (const size of sizes) for (const fmt of ["gif", "webp"]) {
+      const x = f[size]?.[fmt];
+      if (x?.url && GIF_HOST.test(x.url)) return { url: x.url, w: Math.round(+x.width || +x.w || 200), h: Math.round(+x.height || +x.h || 200) };
+    }
+    return null;
+  }
+  async function klipy(q, page = 1) {
+    const base = `https://api.klipy.com/api/v1/${encodeURIComponent(KLIPY)}/gifs/${q ? "search" : "trending"}`;
+    const qs = new URLSearchParams({ per_page: 24, page, locale: "zh_TW", rating: "pg-13", customer_id: uid || "guest" });
+    if (q) qs.set("q", q);
+    const res = await fetch(`${base}?${qs}`);
+    if (!res.ok) throw new Error("klipy " + res.status);
+    const body = await res.json();
+    const items = body?.data?.data || body?.data || [];
+    return (Array.isArray(items) ? items : []).map((it) => {
+      const show = klipyFile(it, ["sm", "xs", "md"]), send = klipyFile(it, ["md", "sm", "hd"]);
+      return show && send ? { show, send: { ...send, title: String(it.title || "").slice(0, 120) } } : null;
+    }).filter(Boolean);
+  }
+  function gifPanel(box) {
+    const input = el("input", { class: "field gifq-in", type: "search", placeholder: "搜尋 GIF，例如：好耶、無言、cat", enterkeyhint: "search", "aria-label": "搜尋 GIF" });
+    const grid = el("div", { class: "gifgrid" });
+    const foot = el("div", { class: "gifby", text: "Powered by KLIPY" });
+    box.replaceChildren(input, grid, foot);
+    let n = 0;
+    const load = async () => {
+      const mine = ++n;
+      grid.replaceChildren(el("p", { class: "muted small", text: "載入中…" }));
+      try {
+        const list = await klipy(input.value.trim());
+        if (mine !== n) return;
+        grid.replaceChildren(...(list.length ? list.map((g) => el("button", { type: "button", class: "gifpick", title: g.send.title, onclick: () => { send("", g.send); closePicker(); } },
+          el("img", { src: g.show.url, alt: g.send.title || "GIF", loading: "lazy", referrerpolicy: "no-referrer" }))) : [el("p", { class: "muted small", text: "找不到相關的 GIF" })]));
+      } catch (e) { console.error(e); if (mine === n) grid.replaceChildren(el("p", { class: "muted small", text: "GIF 搜尋暫時無法使用" })); }
+    };
+    let t = 0;
+    input.addEventListener("input", () => { clearTimeout(t); t = setTimeout(load, 350); });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); clearTimeout(t); load(); } });
+    load();
+    if (matchMedia("(pointer: fine)").matches) input.focus();
+  }
 
   /* ---------- screens ---------- */
-  function showChat() { $("#home").hidden = true; $("#chat").hidden = false; renderView(); }
+  function showChat() { $("#home").hidden = true; $("#record").hidden = true; $("#chat").hidden = false; renderView(); }
   function home() {
-    $("#chat").hidden = true; $("#home").hidden = false;
+    $("#chat").hidden = true; $("#record").hidden = true; $("#home").hidden = false;
+    REC_VIEW = null; closePicker();
     $("#composer").classList.remove("off");
     document.title = "匿名聊天室｜不用加好友，輸入 4 碼就能聊";
     history.replaceState(null, "", location.pathname + (EMU && params.get("as") ? "?as=" + params.get("as") : ""));
@@ -593,6 +849,21 @@ ${t.dms.map((d) => sec(`🔒 和 ${d.name} 的私訊`, d.msgs.map((v) => row(v, 
   $("#joinCode").addEventListener("input", (e) => { const v = e.target.value; if (!/[/?]/.test(v)) e.target.value = v.toUpperCase(); });
   $("#resume").addEventListener("click", (e) => { if (e.target.closest("[data-a=resume]")) join(store.get(ROOM_KEY)); });
   $("#codeBtn").addEventListener("click", share);
+  showRecords();
+  $("#records").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-open]");
+    if (b) openRecord(null, b.dataset.open);
+    if (e.target.closest("[data-a=import]")) $("#importFile").click();
+  });
+  $("#importFile").addEventListener("change", (e) => { importFile(e.target.files[0]); e.target.value = ""; });
+  $("#record").addEventListener("click", (e) => {
+    const a = e.target.closest("[data-a]")?.dataset.a, t = e.target.closest("[data-tab]");
+    if (a === "home") home();
+    if (a === "menu") recordMenu();
+    if (t) { REC_VIEW.tab = +t.dataset.tab; renderRecord(); }
+  });
+  if (!KLIPY) $("#composer [data-a=gif]").hidden = true;
+  $("#composer").addEventListener("click", (e) => { const b = e.target.closest(".tool"); if (b) openPicker(b.dataset.a); });
   $("#peopleBtn").addEventListener("click", people);
   $("#chat").addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]")?.dataset.a;
@@ -609,7 +880,7 @@ ${t.dms.map((d) => sec(`🔒 和 ${d.name} 的私訊`, d.msgs.map((v) => row(v, 
   });
   $("#composer").addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (await send(ta.value)) { ta.value = ""; grow(); }
+    if (await send(ta.value)) { ta.value = ""; grow(); if (pickerOpen === "emoji") closePicker(); }
     ta.focus();
   });
 

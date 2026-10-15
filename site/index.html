@@ -53,6 +53,14 @@
     <button id="createBtn" class="btn primary wide" type="button">開新聊天室</button>
   </section>
 
+  <section id="records" class="card">
+    <h2>我的聊天記錄</h2>
+    <p class="muted none">聊天室結束前存下來的記錄會放在這裡，也可以匯入之前下載的 JSON 或網頁檔。記錄只會存在這台裝置上。</p>
+    <ul class="reclist"></ul>
+    <button class="btn wide" type="button" data-a="import">📂 匯入聊天記錄檔</button>
+    <input id="importFile" type="file" accept=".json,.html,.htm,application/json,text/html" hidden>
+  </section>
+
   <section class="features">
     <div><b>🙈 不用註冊</b><span>取個暱稱、選個動物就好，不需要 LINE、FB 或 IG。</span></div>
     <div><b>🔢 4 碼加入</b><span>代碼或連結都能進，也能投影 QR Code。</span></div>
@@ -78,10 +86,25 @@
     <span>🔒 和 <b class="dmwho"></b> 的私訊，只有你們兩個看得到</span>
   </div>
   <div id="list" class="list" aria-live="polite"></div>
+  <div id="picker" class="picker" hidden></div>
   <form id="composer" class="composer" autocomplete="off">
+    <button class="tool" type="button" data-a="emoji" aria-label="表情符號" aria-pressed="false">😊</button>
+    <button class="tool giftool" type="button" data-a="gif" aria-label="GIF" aria-pressed="false">GIF</button>
     <textarea id="text" rows="1" maxlength="1000" placeholder="說點什麼…" aria-label="訊息"></textarea>
     <button class="send" type="submit" aria-label="送出">➤</button>
   </form>
+</main>
+
+<!-- ---------- a saved record, read-only ---------- -->
+<main id="record" class="chat" hidden>
+  <header class="bar">
+    <button class="icon" type="button" data-a="home" aria-label="回首頁">‹</button>
+    <div class="ttl"><b id="recTitle"></b><small id="recSub" class="muted"></small></div>
+    <button class="icon" type="button" data-a="menu" aria-label="更多">⋯</button>
+  </header>
+  <div id="recTabs" class="tabs" role="tablist"></div>
+  <div id="recList" class="list"></div>
+  <p class="rofoot">📁 這是保存下來的聊天記錄，只能閱讀</p>
 </main>
 
 <div id="toasts" class="toasts" aria-live="polite"></div>

@@ -11,11 +11,12 @@ const member = (name) => ({ name, avatar: "🦊", joined: T, online: true });
 const db = (uid) => env.authenticatedContext(uid).database();
 const createRoom = (uid, { priv = false, secret = null, code = C } = {}) =>
   update(ref(db(uid)), {
-    [`rooms/${code}`]: { meta: { owner: uid, created: T, last: T, priv }, members: { [uid]: member("房主") } },
+    [`rooms/${code}`]: { meta: { owner: uid, created: T, last: T, priv }, members: { [uid]: member("房主") }, names: { "房主": uid } },
     [`secrets/${code}`]: secret,
   });
-const join = (uid, key) => update(ref(db(uid)), {
-  [`rooms/${C}/members/${uid}`]: member("路人"),
+const join = (uid, key, name = uid) => update(ref(db(uid)), {
+  [`rooms/${C}/members/${uid}`]: member(name),
+  [`rooms/${C}/names/${name.toLowerCase()}`]: uid,
   [`rooms/${C}/meta/last`]: T,
   ...(key != null ? { [`rooms/${C}/keys/${uid}`]: key } : {}),
 });
@@ -91,19 +92,19 @@ test("locked room lets nobody new in, but members stay", async () => {
 test("owner removes someone, who can't come back", async () => {
   await createRoom("alice"); await join("bob"); await join("carol");
   await assertFails(update(ref(db("carol"), `rooms/${C}`), { "members/bob": null, "banned/bob": true }));
-  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "members/bob": null, "banned/bob": true }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "members/bob": null, "names/bob": null, "banned/bob": true }));
   await assertFails(join("bob"));
   await assertFails(get(ref(db("bob"), `rooms/${C}/msgs`)));
   await assertSucceeds(get(ref(db("bob"), `rooms/${C}/banned/bob`)));
 });
 
-test("deleting messages: the author or the owner", async () => {
+test("deleting messages: only the author (not even the owner)", async () => {
   await createRoom("alice"); await join("bob"); await join("carol");
   const m = push(ref(db("bob"), `rooms/${C}/msgs`));
   await set(m, { by: "bob", name: "x", avatar: "🦊", text: "1", at: T });
   await assertFails(remove(ref(db("carol"), `rooms/${C}/msgs/${m.key}`)));
   await assertFails(update(ref(db("carol"), `rooms/${C}/msgs/${m.key}`), { text: "edited" }));
-  await assertSucceeds(remove(ref(db("alice"), `rooms/${C}/msgs/${m.key}`)));
+  await assertFails(remove(ref(db("alice"), `rooms/${C}/msgs/${m.key}`)));
   const n = push(ref(db("bob"), `rooms/${C}/msgs`));
   await set(n, { by: "bob", name: "x", avatar: "🦊", text: "2", at: T });
   await assertSucceeds(remove(ref(db("bob"), `rooms/${C}/msgs/${n.key}`)));
@@ -143,6 +144,33 @@ test("ending: only the owner deletes the room and its password", async () => {
 test("members leave on their own", async () => {
   await createRoom("alice"); await join("bob");
   await assertFails(remove(ref(db("bob"), `rooms/${C}/members/alice`)));
-  await assertSucceeds(remove(ref(db("bob"), `rooms/${C}/members/bob`)));
+  await assertSucceeds(update(ref(db("bob"), `rooms/${C}`), { "members/bob": null, "names/bob": null }));
   await assertFails(say("bob"));
+});
+
+test("nicknames are unique in a room, ignoring case", async () => {
+  await createRoom("alice"); await join("bob", null, "Sam");
+  await assertFails(join("carol", null, "Sam"));
+  await assertFails(join("carol", null, "SAM"));
+  await assertFails(update(ref(db("carol")), { [`rooms/${C}/members/carol`]: member("Sam"), [`rooms/${C}/names/sam-2`]: "carol" })); // name must match its claim
+  await assertFails(update(ref(db("carol")), { [`rooms/${C}/members/carol`]: member("a/b"), [`rooms/${C}/names/ab`]: "carol" })); // characters a key can't hold
+  await assertSucceeds(join("carol", null, "Ray"));
+  // renaming: claim the new name and give back the old one
+  await assertFails(update(ref(db("carol"), `rooms/${C}`), { "members/carol/name": "Sam" }));
+  await assertSucceeds(update(ref(db("carol"), `rooms/${C}`), { "members/carol/name": "Ray2", "names/ray2": "carol", "names/ray": null }));
+  await assertFails(set(ref(db("carol"), `rooms/${C}/names/sam`), null)); // can't free someone else's name
+  // when the holder has left, the name is free again
+  await admin((d) => remove(ref(d, `rooms/${C}/members/bob`)));
+  await assertSucceeds(join("dave", null, "Sam"));
+});
+
+test("GIFs: only images hosted by KLIPY", async () => {
+  await createRoom("alice"); await join("bob");
+  const gif = (url) => set(push(ref(db("bob"), `rooms/${C}/msgs`)), { by: "bob", name: "x", avatar: "🦊", gif: { url, w: 200, h: 150, title: "cat" }, at: T });
+  await assertSucceeds(gif("https://static.klipy.com/ii/abc/cat.gif"));
+  await assertFails(gif("https://evil.example.com/track.gif"));
+  await assertFails(gif("https://klipy.com.evil.example/x.gif"));
+  await assertFails(gif("http://static.klipy.com/x.gif"));
+  await assertFails(set(push(ref(db("bob"), `rooms/${C}/msgs`)), { by: "bob", name: "x", avatar: "🦊", at: T })); // neither text nor gif
+  await assertSucceeds(set(push(ref(db("bob"), `rooms/${C}/dm/alice_bob`)), { by: "bob", to: "alice", gif: { url: "https://static.klipy.com/x.gif", w: 1, h: 1 }, at: T }));
 });

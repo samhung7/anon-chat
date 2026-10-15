@@ -1,0 +1,30 @@
+# Publishes database.rules.json to Firebase when it changes on main.
+# Uses the FIREBASE_SERVICE_ACCOUNT and FIREBASE_DATABASE_URL secrets (see cleanup.yml); without them it does nothing.
+name: Publish database rules
+on:
+  push:
+    branches: [main]
+    paths: [database.rules.json]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: rules
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+    steps:
+      - if: env.FIREBASE_SERVICE_ACCOUNT == ''
+        run: echo "FIREBASE_SERVICE_ACCOUNT is not set; skipping."
+      - if: env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: actions/checkout@v4
+      - if: env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: env.FIREBASE_SERVICE_ACCOUNT != ''
+        working-directory: tools/cleanup
+        run: npm ci && node deploy-rules.mjs
