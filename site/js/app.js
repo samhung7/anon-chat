@@ -1231,6 +1231,9 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
   const ta = $("#text");
   const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };
   ta.addEventListener("input", grow);
+  // the keyboard covers the home indicator, so the home-screen app's extra space under the box goes while typing
+  ta.addEventListener("focus", () => document.body.classList.add("typing"));
+  ta.addEventListener("blur", () => document.body.classList.remove("typing"));
   // Enter sends on a keyboard; on phones Enter is a new line and the button sends. Never while an IME is composing.
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && matchMedia("(pointer: fine)").matches) { e.preventDefault(); $("#composer").requestSubmit(); }
