@@ -11,119 +11,129 @@
 <!-- not black-translucent: drawing under the status bar puts titles under iOS's blur band and leaves the page
      a status bar short of the bottom edge, which then clips the message box -->
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="匿名聊天室">
-<title>匿名聊天室｜不用加好友，輸入 4 碼就能聊</title>
-<meta name="description" content="免費線上匿名聊天室：開房就拿到 4 碼，分享給別人就能一起聊。不用註冊、不用加 LINE 或 FB 好友，聊完即刪，也能匯出聊天記錄。適合講座討論、讀書會、狼人殺、分組報告。">
+<meta name="apple-mobile-web-app-title" content="Stoa Talk">
+<title>Stoa Talk｜不用加好友，輸入 4 碼就能聊</title>
+<meta name="description" content="Stoa Talk 免費線上匿名討論室：開房就拿到 4 碼，分享給別人就能一起聊。不用註冊、不用加 LINE 或 FB 好友，聊完即刪，也能匯出聊天記錄。適合講座問答、讀書會、工作坊、團隊專案。">
 <meta property="og:type" content="website">
-<meta property="og:title" content="匿名聊天室｜不用加好友，輸入 4 碼就能聊">
+<meta property="og:title" content="Stoa Talk｜不用加好友，輸入 4 碼就能聊">
 <meta property="og:description" content="開房拿 4 碼，分享就能聊。不用註冊、不用加好友，聊完即刪。">
 <meta property="og:locale" content="zh_TW">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="css/app.css?v=dev">
+<script src="js/i18n.js?v=dev"></script>
 </head>
 <body>
 
 <!-- ---------- home ---------- -->
 <main id="home" class="home">
   <header class="brand">
-    <button id="logoBtn" class="logo" type="button" aria-label="開新聊天室" title="開新聊天室">💬</button>
+    <button id="logoBtn" class="logo" type="button" aria-label="開新聊天室" title="開新聊天室" data-i18n-attr="aria-label:newRoom;title:newRoom">💬</button>
     <div>
-      <h1>匿名聊天室</h1>
-      <p class="tag">不用加好友，開了就聊，聊完就刪</p>
+      <h1>Stoa Talk</h1>
+      <p class="tag" data-i18n="tagline">不用加好友，開了就聊，聊完就刪</p>
     </div>
-    <button id="meBtn" class="me" type="button" aria-label="選單：身分和聊天記錄"><span class="av"></span><span class="burger" aria-hidden="true">☰</span></button>
+    <button id="meBtn" class="me" type="button" aria-label="選單：身分、聊天記錄和語言" data-i18n-attr="aria-label:menuAria"><span class="av"></span><span class="burger" aria-hidden="true">☰</span></button>
   </header>
 
-  <p id="setupNote" class="note warn" hidden>這個網站還沒有連上資料庫，請在 <code>js/config.js</code> 填入 Firebase 設定。</p>
+  <p id="setupNote" class="note warn" hidden data-i18n="setupNote">這個網站還沒有連上資料庫，請在 js/config.js 填入 Firebase 設定。</p>
 
   <section id="resume" class="card resume" hidden>
-    <h2>你還在聊天室</h2>
+    <h2 data-i18n="stillIn">你還在聊天室</h2>
     <ul class="roomlist"></ul>
     <div class="pager" hidden>
-      <button class="btn small" type="button" data-a="prev">‹ 上一頁</button>
+      <button class="btn small" type="button" data-a="prev" data-i18n="prevPage">‹ 上一頁</button>
       <span class="pg"></span>
-      <button class="btn small" type="button" data-a="next">下一頁 ›</button>
+      <button class="btn small" type="button" data-a="next" data-i18n="nextPage">下一頁 ›</button>
     </div>
   </section>
 
   <section class="card">
-    <h2>加入聊天室</h2>
+    <h2 data-i18n="joinRoom">加入聊天室</h2>
     <form id="joinForm" class="joinrow" autocomplete="off">
-      <input id="joinCode" class="codein" maxlength="40" placeholder="輸入 4 碼" aria-label="聊天室代碼" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
-      <button class="btn primary" type="submit">加入</button>
+      <input id="joinCode" class="codein" maxlength="40" placeholder="輸入 4 碼" aria-label="聊天室代碼" data-i18n-attr="placeholder:codePh;aria-label:codeAria" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+      <button class="btn primary" type="submit" data-i18n="join">加入</button>
     </form>
   </section>
 
   <section class="card">
-    <h2>開一個新聊天室</h2>
-    <p class="muted">開好之後把 4 碼或連結傳給大家就可以開始聊。</p>
-    <button id="createBtn" class="btn primary wide" type="button">開新聊天室</button>
+    <h2 data-i18n="newRoomH">開一個新聊天室</h2>
+    <p class="muted" data-i18n="newRoomHint">開好之後把 4 碼或連結傳給大家就可以開始聊。</p>
+    <button id="createBtn" class="btn primary wide" type="button" data-i18n="newRoom">開新聊天室</button>
   </section>
 
   <input id="importFile" type="file" accept=".json,.html,.htm,application/json,text/html" hidden>
 
   <section class="features">
-    <div><b>🙈 不用註冊</b><span>取個暱稱、選個動物就好，不需要 LINE、FB 或 IG。</span></div>
-    <div><b>🔢 4 碼加入</b><span>代碼或連結都能進，也能投影 QR Code。</span></div>
-    <div><b>🗑️ 聊完即刪</b><span>房主結束就刪光；沒人說話 24 小時也會自動刪除。</span></div>
-    <div><b>💾 可以匯出</b><span>想留的人自己下載成文字檔或網頁檔。</span></div>
-    <div class="wide"><b>🔐 端對端加密</b><span>私訊一律加密；開房時也能選加密，連伺服器都看不到聊天內容。</span></div>
+    <div><b data-i18n="f1t">🙈 不用註冊</b><span data-i18n="f1">取個暱稱、選個動物就好，不需要 LINE、FB 或 IG。</span></div>
+    <div><b data-i18n="f2t">🔢 4 碼加入</b><span data-i18n="f2">代碼或連結都能進，也能投影 QR Code。</span></div>
+    <div><b data-i18n="f3t">🗑️ 聊完即刪</b><span data-i18n="f3">房主結束就刪光；沒人說話 24 小時也會自動刪除。</span></div>
+    <div><b data-i18n="f4t">💾 可以匯出</b><span data-i18n="f4">想留的人自己下載成文字檔或網頁檔。</span></div>
+    <div class="wide"><b data-i18n="f5t">🔐 端對端加密</b><span data-i18n="f5">私訊一律加密；閉門會議連伺服器都看不到聊天內容。</span></div>
   </section>
-  <p class="muted small center">適合講座討論、匿名讀書會、線上狼人殺、分組報告。</p>
+  <p class="muted small center" data-i18n="useFor">適合講座問答、讀書會、工作坊和團隊專案。</p>
 </main>
 
 <!-- ---------- chat ---------- -->
 <main id="chat" class="chat" hidden>
   <header class="bar">
-    <button class="icon" type="button" data-a="home" aria-label="回首頁">‹</button>
+    <button class="icon" type="button" data-a="home" aria-label="回首頁" data-i18n-attr="aria-label:backHome">‹</button>
     <div class="ttl">
       <b id="roomTitle"></b>
-      <button id="codeBtn" class="codechip" type="button" aria-label="分享聊天室"></button>
+      <button id="codeBtn" class="codechip" type="button" aria-label="分享聊天室" data-i18n-attr="aria-label:shareRoom"></button>
     </div>
-    <button id="peopleBtn" class="icon people" type="button" aria-label="成員"><span>👥</span><span class="n"></span><i class="dot" hidden></i></button>
-    <button class="icon" type="button" data-a="menu" aria-label="更多">⋯</button>
+    <button id="peopleBtn" class="icon people" type="button" aria-label="成員" data-i18n-attr="aria-label:members"><span>👥</span><span class="n"></span><i class="dot" hidden></i></button>
+    <button class="icon" type="button" data-a="menu" aria-label="更多" data-i18n-attr="aria-label:more">⋯</button>
   </header>
   <div id="dmBar" class="dmbar" hidden>
-    <button class="link" type="button" data-a="all">‹ 回到大家</button>
-    <span>🔒 和 <b class="dmwho"></b> 的私訊，只有你們兩個看得到</span>
+    <button class="link" type="button" data-a="all" data-i18n="backAll">‹ 回到大家</button>
+    <span class="dmwho"></span>
   </div>
   <div id="pins" class="pins" hidden></div>
   <div id="notifyBar" class="dmbar" hidden>
-    <span>🔔 有新訊息時要通知你嗎？之後可以在「⋯」裡關掉。</span>
-    <button class="link" type="button" data-a="notifyYes">開啟通知</button>
-    <button class="link" type="button" data-a="notifyNo">不用</button>
+    <span data-i18n="notifyAsk">🔔 有新訊息時要通知你嗎？之後可以在「⋯」裡關掉。</span>
+    <button class="link" type="button" data-a="notifyYes" data-i18n="notifyYes">開啟通知</button>
+    <button class="link" type="button" data-a="notifyNo" data-i18n="notifyNo">不用</button>
   </div>
   <div id="list" class="list" aria-live="polite"></div>
   <div id="replyBar" class="replybar" hidden>
     <span class="rtxt"></span>
-    <button class="icon small" type="button" data-a="noreply" aria-label="取消回覆">✕</button>
+    <button class="icon small" type="button" data-a="noreply" aria-label="取消回覆" data-i18n-attr="aria-label:cancelReply">✕</button>
   </div>
   <div id="picker" class="picker" hidden></div>
   <form id="composer" class="composer" autocomplete="off">
-    <textarea id="text" rows="1" maxlength="1000" placeholder="說點什麼…" aria-label="訊息"></textarea>
-    <button class="tool" type="button" data-a="emoji" aria-label="表情符號" aria-pressed="false">😊</button>
+    <textarea id="text" rows="1" maxlength="1000" placeholder="說點什麼…" aria-label="訊息" data-i18n-attr="placeholder:textPh;aria-label:msgAria"></textarea>
+    <button class="tool" type="button" data-a="emoji" aria-label="表情符號" data-i18n-attr="aria-label:emojiAria" aria-pressed="false">😊</button>
     <button class="tool giftool" type="button" data-a="gif" aria-label="GIF" aria-pressed="false">GIF</button>
-    <button class="send" type="submit" aria-label="送出">➤</button>
+    <button class="send" type="submit" aria-label="送出" data-i18n-attr="aria-label:sendAria">➤</button>
   </form>
 </main>
 
 <!-- ---------- a saved record, read-only ---------- -->
 <main id="record" class="chat" hidden>
   <header class="bar">
-    <button class="icon" type="button" data-a="home" aria-label="回首頁">‹</button>
+    <button class="icon" type="button" data-a="home" aria-label="回首頁" data-i18n-attr="aria-label:backHome">‹</button>
     <div class="ttl"><b id="recTitle"></b><small id="recSub" class="muted"></small></div>
-    <button class="icon" type="button" data-a="menu" aria-label="更多">⋯</button>
+    <button class="icon" type="button" data-a="menu" aria-label="更多" data-i18n-attr="aria-label:more">⋯</button>
   </header>
   <div id="recTabs" class="tabs" role="tablist"></div>
   <div id="recList" class="list"></div>
-  <p class="rofoot">📁 這是保存下來的聊天記錄，只能閱讀</p>
+  <p class="rofoot" data-i18n="roFoot">📁 這是保存下來的聊天記錄，只能閱讀</p>
 </main>
 
 <div id="toasts" class="toasts" aria-live="polite"></div>
 
 <script src="js/config.js?v=dev"></script>
+<script src="js/i18n/zh-TW.js?v=dev"></script>
+<script src="js/i18n/zh-CN.js?v=dev"></script>
+<script src="js/i18n/en.js?v=dev"></script>
+<script src="js/i18n/ja.js?v=dev"></script>
+<script src="js/i18n/ko.js?v=dev"></script>
+<script src="js/i18n/es.js?v=dev"></script>
+<script src="js/i18n/fr.js?v=dev"></script>
+<script src="js/i18n/de.js?v=dev"></script>
+<script src="js/i18n/pt.js?v=dev"></script>
 <script src="js/vendor/qrcode.js?v=dev"></script>
 <script src="js/app.js?v=dev"></script>
 <script>if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});</script>
