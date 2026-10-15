@@ -299,44 +299,37 @@
   async function create() {
     const m = await ensureMe(); if (!m) return;
     const title = el("input", { class: "field", maxlength: 40, placeholder: "例如：週三讀書會（可以不填）", id: "newTitle" });
-    const pw = el("input", { class: "field", maxlength: 40, placeholder: "設定密碼", id: "newPw", autocomplete: "new-password" });
-    const pwWrap = el("div", { hidden: true }, el("label", { class: "lbl", for: "newPw", text: "密碼" }), pw, el("p", { class: "muted small", text: "進來的人除了 4 碼，還要輸入這組密碼。" }));
-    let priv = false;
-    const seg = el("div", { class: "seg", role: "radiogroup", "aria-label": "誰可以加入" },
-      el("button", { type: "button", role: "radio", "aria-checked": "true", "data-v": "pub", text: "🌐 公開：有碼就能進" }),
-      el("button", { type: "button", role: "radio", "aria-checked": "false", "data-v": "priv", text: "🔒 私人：還要密碼" }));
+    // two kinds: public (the 4-character code is enough) or private, which is always end-to-end encrypted
+    let enc = false;
+    const seg = el("div", { class: "seg", role: "radiogroup", "aria-label": "聊天室類型" },
+      el("button", { type: "button", role: "radio", "aria-checked": "true", "data-v": "pub", text: "🌐 公開聊天室" }),
+      el("button", { type: "button", role: "radio", "aria-checked": "false", "data-v": "priv", text: "🔐 私人聊天室" }));
+    const pubNote = el("p", { class: "muted small", text: "有 4 碼或連結的人都能加入。" });
+    const encNote = el("div", { class: "encnote", hidden: true },
+      el("b", { text: "🔐 端對端加密" }),
+      el("p", { class: "muted small", text: "名稱、暱稱和訊息只有拿到連結的人看得到，伺服器也看不到。只能用連結或 QR code 加入，光輸入 4 碼進不來。" }));
     seg.addEventListener("click", (e) => {
       const b = e.target.closest("button"); if (!b) return;
-      priv = b.dataset.v === "priv";
+      enc = b.dataset.v === "priv";
       seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-checked", String(x === b)));
-      pwWrap.hidden = !priv; if (priv) pw.focus();
+      pubNote.hidden = enc; encNote.hidden = !enc;
     });
-    const enc = el("input", { type: "checkbox", id: "newEnc" });
-    const encRow = el("label", { class: "check", for: "newEnc" }, enc, el("span", {},
-      el("b", { text: "🔐 端對端加密" }),
-      el("small", { text: "名稱、暱稱和訊息只有拿到連結的人看得到，伺服器也看不到。只能用連結或 QR code 加入，光輸入 4 碼進不來。" })));
-    const body = el("div", {}, el("label", { class: "lbl", for: "newTitle", text: "聊天室名稱" }), title, el("label", { class: "lbl", text: "誰可以加入" }), seg, pwWrap, encRow);
-    for (;;) {
-      const a = await sheet("開新聊天室", body, [["no", "取消"], ["yes", "開始", "primary"]]);
-      if (a !== "yes") return;
-      if (priv && !pw.value.trim()) { toast("私人聊天室要設定密碼"); continue; }
-      break;
-    }
+    const body = el("div", {}, el("label", { class: "lbl", for: "newTitle", text: "聊天室名稱" }), title, el("label", { class: "lbl", text: "聊天室類型" }), seg, pubNote, encNote);
+    if (await sheet("開新聊天室", body, [["no", "取消"], ["yes", "開始", "primary"]]) !== "yes") return;
     busy(true);
     try {
       await connect();
-      const raw = enc.checked ? crypto.getRandomValues(new Uint8Array(32)) : null;
+      const raw = enc ? crypto.getRandomValues(new Uint8Array(32)) : null;
       const c = raw && (await roomCrypto(raw));
       const t = title.value.trim().slice(0, 40);
       for (let i = 0; i < 30; i++) {
         const code = Array.from({ length: 4 }, () => CODE_CHARS[(Math.random() * CODE_CHARS.length) | 0]).join("");
-        const meta = { owner: uid, created: T(), last: T(), priv };
+        const meta = { owner: uid, created: T(), last: T(), priv: false };
         if (c) { meta.enc = true; meta.kc = await keyCheck(c); if (t) meta.xt = await seal(c.aes, { t }, "t"); }
         else if (t) meta.title = t;
         try {
           await fb.update(fb.ref(db), {
             [`rooms/${code}`]: { meta, members: { [uid]: await memberRec(c, uid, m, { joined: T(), online: true, pk: (await myDh()).pub }) }, names: { [await nkey(c, m.name)]: uid } },
-            [`secrets/${code}`]: priv ? await hashPw(code, pw.value.trim()) : null,
           });
         } catch (e) { if (/permission/i.test(e.message)) continue; throw e; } // code in use: draw another
         if (raw) store.set(ROOMKEY(code), b64u(raw));
