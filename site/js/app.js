@@ -20,7 +20,12 @@
   const FB = EMU ? { apiKey: "demo-key", projectId: "demo-anon-chat", databaseURL: `http://${location.hostname}:9000?ns=demo-anon-chat` } : CFG.firebase;
   const SDK = new URL("js/vendor/firebase.js", location.href).href;
   const ME_KEY = "chat-me", ROOMS_KEY = "chat-rooms";
-  const AVATARS = [["🐻", "小熊"], ["🦊", "狐狸"], ["🐼", "熊貓"], ["🐯", "老虎"], ["🦁", "獅子"], ["🐸", "青蛙"], ["🐵", "猴子"], ["🐧", "企鵝"], ["🦉", "貓頭鷹"], ["🐙", "章魚"], ["🦄", "獨角獸"], ["🐶", "小狗"], ["🐱", "小貓"], ["🐰", "兔子"], ["🐨", "無尾熊"], ["🐲", "小龍"]];
+  // interface text in the chosen language (js/i18n.js)
+  const t = I18N.t, APP = "Stoa Talk";
+  // each animal with its name in the current language, which is also the default nickname
+  // the same, with elements in the slots: a list to append
+  const tEl = (key, nodes) => t(key).split(/(\{\w+\})/).map((part) => nodes[part.slice(1, -1)] ?? part).filter((x) => x !== "");
+  const AVATARS = () => ["🐻", "🦊", "🐼", "🐯", "🦁", "🐸", "🐵", "🐧", "🦉", "🐙", "🦄", "🐶", "🐱", "🐰", "🐨", "🐲"].map((a, i) => [a, t("av" + i)]);
   const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // no 0/O, 1/I/L
   const REACTS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
   const DAY = 864e5, MAX_LOAD = 2000;
@@ -69,19 +74,19 @@
       onOpen?.(ov);
     });
   }
-  const confirmSheet = (title, text, ok, cls = "danger") => sheet(title, el("p", { class: "muted", text }), [["no", "取消"], ["yes", ok, cls]]).then((a) => a === "yes");
-  const fmtTime = (t) => new Date(t).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false });
-  const fmtFull = (t) => new Date(t).toLocaleString("zh-TW", { hour12: false });
+  const confirmSheet = (title, text, ok, cls = "danger") => sheet(title, el("p", { class: "muted", text }), [["no", t("cancel")], ["yes", ok, cls]]).then((a) => a === "yes");
+  const fmtTime = (t) => new Date(t).toLocaleTimeString(I18N.lang, { hour: "2-digit", minute: "2-digit", hour12: false });
+  const fmtFull = (t) => new Date(t).toLocaleString(I18N.lang, { hour12: false });
   const roomUrl = (code) => location.origin + location.pathname + "?room=" + code + (R?.c && store.get(ROOMKEY(code)) ? "#k=" + store.get(ROOMKEY(code)) : "");
   const now = () => Date.now() + offset; // server time
   const isOwner = () => !!R?.meta && R.meta.owner === uid;
   const pairKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
   const who = (id) => R?.members?.[id] || R?.seen?.[id] || null; // R.seen keeps people who have left
-  const nameOf = (id) => { const m = who(id); return m ? `${m.avatar} ${m.name}` : "已離開的人"; };
+  const nameOf = (id) => { const m = who(id); return m ? `${m.avatar} ${m.name}` : t("someoneLeft"); };
   // GIFs come from the KLIPY search and only from KLIPY's servers (database.rules.json checks the same)
   const GIF_HOST = /^https:\/\/([a-z0-9-]+\.)*klipy\.com\//;
   function gifImg(g) {
-    if (!g || !GIF_HOST.test(g.url || "")) return el("span", { class: "muted", text: "（GIF）" });
+    if (!g || !GIF_HOST.test(g.url || "")) return el("span", { class: "muted", text: t("gifGone") });
     return el("img", { src: g.url, width: g.w, height: g.h, alt: g.title || "GIF", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" });
   }
 
@@ -166,7 +171,7 @@
       if (raw) {
         try { const c = await roomCrypto(unb64u(raw)); if ((await keyCheck(c)) === meta.kc) return c; } catch (e) {}
         store.set(ROOMKEY(code), null);
-        note = "這個連結打不開這個聊天室，請確認是完整的邀請連結。";
+        note = t("badLink");
       }
       busy(false);
       const k = await askLink(code, note);
@@ -176,13 +181,13 @@
     }
   }
   function askLink(code, note) {
-    const input = el("input", { class: "field", id: "joinLink", autocomplete: "off", placeholder: "貼上完整的邀請連結", "aria-label": "邀請連結" });
+    const input = el("input", { class: "field", id: "joinLink", autocomplete: "off", placeholder: t("linkPh"), "aria-label": t("linkAria") });
     const body = el("div", {}, el("p", { class: "note warn", hidden: !note, text: note }),
-      el("p", { class: "muted", text: `聊天室 ${code} 有端對端加密，只有拿到完整連結或掃 QR code 的人才看得到內容。請向邀請你的人要連結，貼在這裡。` }), input);
+      el("p", { class: "muted", text: t("needLink", { code }) }), input);
     input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) body.closest(".overlay")?.querySelector("[data-a=yes]").click(); });
-    return sheet("🔐 需要邀請連結", body, [["no", "取消"], ["yes", "加入", "primary"]], { onOpen: () => input.focus() })
+    return sheet(t("needLinkTitle"), body, [["no", t("cancel")], ["yes", t("join"), "primary"]], { onOpen: () => input.focus() })
       .then((a) => (a === "yes" ? input.value.match(KEY_RE)?.[1] || (/^[A-Za-z0-9_-]{43}$/.test(input.value.trim()) ? input.value.trim() : "") : null))
-      .then((k) => (k === "" ? askLink(code, "這不是完整的邀請連結，連結的最後應該有一段 #k=…。") : k));
+      .then((k) => (k === "" ? askLink(code, t("notFullLink")) : k));
   }
   // a member record as stored: plain, or sealed in an encrypted room (c)
   async function memberRec(c, id, m, extra) {
@@ -203,7 +208,7 @@
       if (p) R.plain.set(v.x, p);
     }
     const out = { ...v }; delete out.x;
-    if (!p) return { ...out, text: dmWith ? "🔒 無法解密這則私訊" : "🔒 無法解密這則訊息", bad: true };
+    if (!p) return { ...out, text: t(dmWith ? "cantDecryptDm" : "cantDecrypt"), bad: true };
     if (p.g && typeof p.g.url === "string") out.gif = { url: p.g.url.slice(0, 500), w: Math.min(+p.g.w || 200, 2000), h: Math.min(+p.g.h || 200, 2000), title: String(p.g.title || "").slice(0, 120) };
     else out.text = String(p.t || "").slice(0, 1000);
     if (!dmWith) { out.name = String(p.n || "？").slice(0, 24); out.avatar = String(p.a || "👤").slice(0, 8); }
@@ -223,22 +228,22 @@
   const myKeyIn = (id) => (R.c ? R.raw[id]?.h : R.members[id] && nameKey(R.members[id].name)); // the claim someone holds now
   // inRoom: also rename in the room we're in (fails, and asks again, if someone there has that name)
   async function askMe(firstTime, note = "", inRoom = !firstTime) {
-    const cur = me() || (() => { const [a, n] = AVATARS[(Math.random() * AVATARS.length) | 0]; return { avatar: a, name: n, auto: true }; })();
+    const cur = me() || (() => { const all = AVATARS(), [a, n] = all[(Math.random() * all.length) | 0]; return { avatar: a, name: n, auto: true }; })();
     let pick = cur.avatar, auto = !!cur.auto;
-    const input = el("input", { class: "field", maxlength: 12, autocomplete: "off", id: "meName", "aria-label": "暱稱" });
+    const input = el("input", { class: "field", maxlength: 12, autocomplete: "off", id: "meName", "aria-label": t("nickname") });
     input.value = cur.name;
     input.addEventListener("input", () => (auto = false));
-    const grid = el("div", { class: "avatars" }, AVATARS.map(([a, n]) => el("button", {
+    const grid = el("div", { class: "avatars" }, AVATARS().map(([a, n]) => el("button", {
       class: "avbtn", type: "button", "aria-label": n, "aria-pressed": String(a === pick), text: a,
       onclick: (e) => { pick = a; grid.querySelectorAll(".avbtn").forEach((x) => x.setAttribute("aria-pressed", String(x === e.currentTarget))); if (auto) input.value = n; },
     })));
     const warn = el("p", { class: "note warn", hidden: !note, text: note });
-    const body = el("div", {}, warn, el("p", { class: "muted", text: "不用註冊，其他人只會看到這個名字和頭像。同一個聊天室裡暱稱不能重複。" }), grid, el("label", { class: "lbl", for: "meName", text: "暱稱" }), input);
+    const body = el("div", {}, warn, el("p", { class: "muted", text: t("meHint") }), grid, el("label", { class: "lbl", for: "meName", text: t("nickname") }), input);
     input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) body.closest(".overlay")?.querySelector("[data-a=yes]").click(); });
     for (;;) {
-      const a = await sheet(firstTime ? "先選一個身分" : note ? "換一個暱稱" : "修改身分", body, [["no", "取消"], ["yes", "確定", "primary"]], { onOpen: () => (firstTime || note) && input.select() });
+      const a = await sheet(t(firstTime ? "meFirst" : note ? "meRetry" : "meEdit"), body, [["no", t("cancel")], ["yes", t("ok"), "primary"]], { onOpen: () => (firstTime || note) && input.select() });
       if (a !== "yes") return null;
-      const m = { avatar: pick, name: cleanName(input.value) || AVATARS.find((x) => x[0] === pick)[1] };
+      const m = { avatar: pick, name: cleanName(input.value) || AVATARS().find((x) => x[0] === pick)[1] };
       if (inRoom && R && !R.gone && R.members[uid]) {
         const oldK = myKeyIn(uid), newK = await nkey(R.c, m.name);
         const rec = await memberRec(R.c, uid, m, {});
@@ -250,7 +255,7 @@
         try { await fb.update(roomRef(R.code), upd); }
         catch (e) {
           const holder = await holderOf(R.code, newK);
-          warn.textContent = holder && holder !== uid ? `「${m.name}」在這個聊天室已經有人用了，換一個吧。` : "沒有改成功，請再試一次。";
+          warn.textContent = holder && holder !== uid ? t("nameTaken", { name: m.name }) : t("renameFail");
           warn.hidden = false; input.value = m.name; continue;
         }
       }
@@ -289,8 +294,8 @@
   }
   function failed(e) {
     console.error(e);
-    if (e?.message === "no-config") toast("還沒有設定資料庫");
-    else toast(navigator.onLine ? "連線出了問題，請再試一次" : "沒有網路連線");
+    if (e?.message === "no-config") toast(t("noDb"));
+    else toast(t(navigator.onLine ? "netErr" : "offline"));
   }
   let busyN = 0;
   function busy(on) { busyN += on ? 1 : -1; document.body.classList.toggle("busy", busyN > 0); }
@@ -298,35 +303,35 @@
   /* ---------- creating and joining ---------- */
   async function create() {
     const m = await ensureMe(); if (!m) return;
-    const title = el("input", { class: "field", maxlength: 40, placeholder: "例如：週三讀書會（可以不填）", id: "newTitle" });
+    const title = el("input", { class: "field", maxlength: 40, placeholder: t("titlePh"), id: "newTitle" });
     // two kinds: public (the 4-character code is enough) or private, which is always end-to-end encrypted
     let enc = false;
-    const seg = el("div", { class: "seg", role: "radiogroup", "aria-label": "聊天室類型" },
-      el("button", { type: "button", role: "radio", "aria-checked": "true", "data-v": "pub", text: "🌐 公開聊天室" }),
-      el("button", { type: "button", role: "radio", "aria-checked": "false", "data-v": "priv", text: "🔐 私人聊天室" }));
-    const pubNote = el("p", { class: "muted small", text: "有 4 碼或連結的人都能加入。" });
+    const seg = el("div", { class: "seg", role: "radiogroup", "aria-label": t("roomType") },
+      el("button", { type: "button", role: "radio", "aria-checked": "true", "data-v": "pub", text: t("openStoa") }),
+      el("button", { type: "button", role: "radio", "aria-checked": "false", "data-v": "priv", text: t("closedSession") }));
+    const pubNote = el("p", { class: "muted small", text: t("pubNote") });
     const encNote = el("div", { class: "encnote", hidden: true },
-      el("b", { text: "🔐 端對端加密" }),
-      el("p", { class: "muted small", text: "名稱、暱稱和訊息只有拿到連結的人看得到，伺服器也看不到。只能用連結或 QR code 加入，光輸入 4 碼進不來。" }));
+      el("b", { text: t("e2ee") }),
+      el("p", { class: "muted small", text: t("encNote") }));
     seg.addEventListener("click", (e) => {
       const b = e.target.closest("button"); if (!b) return;
       enc = b.dataset.v === "priv";
       seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-checked", String(x === b)));
       pubNote.hidden = enc; encNote.hidden = !enc;
     });
-    const body = el("div", {}, el("label", { class: "lbl", for: "newTitle", text: "聊天室名稱" }), title, el("label", { class: "lbl", text: "聊天室類型" }), seg, pubNote, encNote);
-    if (await sheet("開新聊天室", body, [["no", "取消"], ["yes", "開始", "primary"]]) !== "yes") return;
+    const body = el("div", {}, el("label", { class: "lbl", for: "newTitle", text: t("roomName") }), title, el("label", { class: "lbl", text: t("roomType") }), seg, pubNote, encNote);
+    if (await sheet(t("newRoom"), body, [["no", t("cancel")], ["yes", t("start"), "primary"]]) !== "yes") return;
     busy(true);
     try {
       await connect();
       const raw = enc ? crypto.getRandomValues(new Uint8Array(32)) : null;
       const c = raw && (await roomCrypto(raw));
-      const t = title.value.trim().slice(0, 40);
+      const name = title.value.trim().slice(0, 40);
       for (let i = 0; i < 30; i++) {
         const code = Array.from({ length: 4 }, () => CODE_CHARS[(Math.random() * CODE_CHARS.length) | 0]).join("");
         const meta = { owner: uid, created: T(), last: T(), priv: false };
-        if (c) { meta.enc = true; meta.kc = await keyCheck(c); if (t) meta.xt = await seal(c.aes, { t }, "t"); }
-        else if (t) meta.title = t;
+        if (c) { meta.enc = true; meta.kc = await keyCheck(c); if (name) meta.xt = await seal(c.aes, { t: name }, "t"); }
+        else if (name) meta.title = name;
         try {
           await fb.update(fb.ref(db), {
             [`rooms/${code}`]: { meta, members: { [uid]: await memberRec(c, uid, m, { joined: T(), online: true, pk: (await myDh()).pub }) }, names: { [await nkey(c, m.name)]: uid } },
@@ -337,7 +342,7 @@
         share();
         return;
       }
-      toast("暫時開不了新聊天室，請再試一次");
+      toast(t("createFail"));
     } catch (e) { failed(e); } finally { busy(false); }
   }
 
@@ -348,7 +353,7 @@
   };
   async function join(raw) {
     const code = cleanCode(raw);
-    if (code.length !== 4) { toast("代碼是 4 個字"); return; }
+    if (code.length !== 4) { toast(t("code4")); return; }
     const linkKey = String(raw || "").match(KEY_RE)?.[1];
     if (linkKey) store.set(ROOMKEY(code), linkKey); // a pasted invite link of an encrypted room
     if (R?.code === code && !R.gone) { showChat(); return; }
@@ -357,7 +362,7 @@
       await connect();
       const meta = (await fb.get(roomRef(code, "meta"))).val();
       if (!meta || meta.last < now() - DAY) {
-        toast("找不到這個聊天室，可能已經結束了");
+        toast(t("notFound"));
         if (meta) fb.update(fb.ref(db), { [`rooms/${code}`]: null, [`secrets/${code}`]: null }).catch(() => {}); // expired: clear it out
         store.set(ROOMKEY(code), null);
         forgetRoom(code); if (!$("#home").hidden) showResume();
@@ -368,8 +373,8 @@
       // already inside (coming back)?
       const mine = await fb.get(roomRef(code, "members/" + uid)).then((s) => s.val(), () => null);
       if (mine) { await enter(code, c); return; }
-      if (await fb.get(roomRef(code, "banned/" + uid)).then((s) => s.val(), () => null)) { toast("你已經被房主移出這個聊天室"); return; }
-      if (meta.locked) { toast("房主已經鎖住聊天室，暫時不能加入"); return; }
+      if (await fb.get(roomRef(code, "banned/" + uid)).then((s) => s.val(), () => null)) { toast(t("bannedToast")); return; }
+      if (meta.locked) { toast(t("lockedToast")); return; }
       busy(false);
       let m = await ensureMe();
       busy(true);
@@ -396,22 +401,22 @@
           if (!/permission/i.test(e.message)) throw e;
           if (holder && holder !== uid) { // someone here already goes by this name
             busy(false);
-            m = await askMe(false, `「${m.name}」在這個聊天室已經有人用了，換一個暱稱再加入。`, false);
+            m = await askMe(false, t("nameTakenJoin", { name: m.name }), false);
             busy(true);
             if (!m) return;
             continue;
           }
-          toast(meta.priv ? "密碼不對" : "加入不了這個聊天室"); return;
+          toast(t(meta.priv ? "wrongPw" : "cantJoin")); return;
         }
       }
       await enter(code, c);
     } catch (e) { failed(e); } finally { busy(false); }
   }
   function askPassword(meta, code) {
-    const input = el("input", { class: "field", maxlength: 40, type: "password", id: "joinPw", autocomplete: "off", "aria-label": "密碼" });
-    const body = el("div", {}, el("p", { class: "muted", text: `「${meta.title || code}」是私人聊天室，請輸入房主給你的密碼。` }), input);
+    const input = el("input", { class: "field", maxlength: 40, type: "password", id: "joinPw", autocomplete: "off", "aria-label": t("pwAria") });
+    const body = el("div", {}, el("p", { class: "muted", text: t("pwBody", { title: meta.title || code }) }), input);
     input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) body.closest(".overlay")?.querySelector("[data-a=yes]").click(); });
-    return sheet("🔒 需要密碼", body, [["no", "取消"], ["yes", "加入", "primary"]], { onOpen: () => input.focus() }).then((a) => (a === "yes" && input.value.trim() ? input.value.trim() : null));
+    return sheet(t("pwTitle"), body, [["no", t("cancel")], ["yes", t("join"), "primary"]], { onOpen: () => input.focus() }).then((a) => (a === "yes" && input.value.trim() ? input.value.trim() : null));
   }
 
   /* ---------- inside a room ---------- */
@@ -444,8 +449,8 @@
       R.raw = raw; Object.assign(R.rawSeen, JSON.parse(JSON.stringify(raw)));
       const dh = await myDh();
       if (raw[uid] && raw[uid].pk !== dh.pub) fb.set(roomRef(code, `members/${uid}/pk`), dh.pub).catch(() => {}); // members from before encrypted private messages
-      if (R.ready) Object.entries(next).forEach(([id, m]) => { if (!R.members[id] && id !== uid) toast(`${m.avatar} ${m.name} 加入了`); });
-      if (R.ready) Object.entries(R.members).forEach(([id, m]) => { if (!next[id] && id !== uid) toast(`${m.avatar} ${m.name} 離開了`); });
+      if (R.ready) Object.entries(next).forEach(([id, m]) => { if (!R.members[id] && id !== uid) toast(t("joinedToast", { who: `${m.avatar} ${m.name}` })); });
+      if (R.ready) Object.entries(R.members).forEach(([id, m]) => { if (!next[id] && id !== uid) toast(t("leftToast", { who: `${m.avatar} ${m.name}` })); });
       R.members = next; R.ready = true;
       Object.assign(R.seen, JSON.parse(JSON.stringify(next)));
       if (!next[uid]) return checkGone();
@@ -479,7 +484,7 @@
       if (R.view === other) { addMsg(s.key, v, true); markRead(other, v.at); }
       else if (v.by !== uid && v.at > lastRead(other)) {
         R.unread[other] = (R.unread[other] || 0) + 1;
-        if (Date.now() - v.at < 60000) toast(`🔒 ${nameOf(other)} 傳了私訊給你`);
+        if (Date.now() - v.at < 60000) toast(t("dmToast", { who: nameOf(other) }));
         renderHeader();
       }
       noteNew(v, other);
@@ -488,7 +493,7 @@
   function noteNew(v, dmWith) {
     if (v.by === uid || !document.hidden || !R.ready) return;
     hiddenUnread++;
-    document.title = `(${hiddenUnread}) ${R.meta?.title || "匿名聊天室"}`;
+    document.title = `(${hiddenUnread}) ${R.meta?.title || APP}`;
     if (v.at > R.t0 && Date.now() - v.at < 60000) notify(v, dmWith); // not the history that loads on entering
   }
 
@@ -502,8 +507,8 @@
   async function notify(v, dmWith) {
     if (!notifyOn(R.code)) return;
     const a = author(v, dmWith);
-    const title = dmWith ? `🔒 ${a.name} 傳了私訊給你` : `${a.avatar} ${a.name}｜${R.meta?.title || "聊天室 " + R.code}`;
-    const opts = { body: dmWith ? "打開聊天室來看" : v.gif ? "傳了一張 GIF" : (v.text || "").slice(0, 120), tag: "room-" + R.code, renotify: true, icon: "icons/icon-192.png", data: { url: roomUrl(R.code) } };
+    const title = dmWith ? t("dmToast", { who: a.name }) : `${a.avatar} ${a.name} | ${R.meta?.title || t("roomN", { code: R.code })}`;
+    const opts = { body: dmWith ? t("openToRead") : v.gif ? t("sentGif") : (v.text || "").slice(0, 120), tag: "room-" + R.code, renotify: true, icon: "icons/icon-192.png", data: { url: roomUrl(R.code) } };
     try {
       const reg = await navigator.serviceWorker?.getRegistration();
       if (reg) return await reg.showNotification(title, opts); // phones only show notifications through the service worker
@@ -514,15 +519,15 @@
     if (!R) return;
     $("#notifyBar").hidden = true;
     store.set("chat-notify-asked", "1");
-    if (!on) { store.set(MUTE(R.code), "1"); toast("這個聊天室不會再通知你"); return; }
-    if (!CAN_NOTIFY) { toast("這個瀏覽器不支援通知。iPhone 要先「加入主畫面」，從主畫面打開才能收到通知。"); return; }
+    if (!on) { store.set(MUTE(R.code), "1"); toast(t("mutedToast")); return; }
+    if (!CAN_NOTIFY) { toast(t("noNotify")); return; }
     const p = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
-    if (p !== "granted") { toast("通知被瀏覽器擋住了，請到瀏覽器的網站設定允許通知"); return; }
-    store.set(MUTE(R.code), null); toast("🔔 有新訊息時會通知你");
+    if (p !== "granted") { toast(t("notifyBlocked")); return; }
+    store.set(MUTE(R.code), null); toast(t("notifyOnToast"));
   }
   // ask once per device, in a bar rather than a pop-up, and only where notifications could work
   const offerNotify = () => { $("#notifyBar").hidden = !(CAN_NOTIFY && Notification.permission === "default" && !store.get("chat-notify-asked")); };
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { hiddenUnread = 0; document.title = R?.meta?.title || "匿名聊天室"; } });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { hiddenUnread = 0; document.title = R?.meta?.title || APP; } });
 
   function leaveListeners() { R?.off.forEach((f) => { try { f(); } catch (e) {} }); }
   // the room went away under us: find out why
@@ -540,10 +545,10 @@
     R.gone = true; leaveListeners();
     forgetRoom(R.code); store.set(ROOMKEY(R.code), null);
     if (why === "self") return home();
-    const text = { ended: "聊天室已經結束（房主結束了，或超過 24 小時沒人說話），訊息都已刪除。", kicked: "房主把你移出了這個聊天室。", left: "你已經不在這個聊天室裡了。" }[why];
+    const text = t({ ended: "goneEnded", kicked: "goneKicked", left: "goneLeft" }[why]);
     $("#composer").classList.add("off");
     for (;;) {
-      const a = await sheet("聊天室已經結束", el("p", { class: "muted", text: text + "畫面上的記錄還在你的裝置上，關掉前可以先存起來。" }), [["save", "存到這台裝置", "primary"], ["export", "下載檔案"], ["home", "回首頁"]]);
+      const a = await sheet(t("goneTitle"), el("p", { class: "muted", text: text + t("goneKeep") }), [["save", t("saveHere"), "primary"], ["export", t("downloadFile")], ["home", t("backHome")]]);
       if (a === "save") { const id = saveRecord(archive()); if (id) return openRecord(null, id); continue; }
       if (a === "export") { await exportSheet(); continue; }
       break;
@@ -555,18 +560,18 @@
   function renderHeader() {
     if (!R) return;
     const meta = R.meta || {};
-    $("#roomTitle").textContent = meta.title || "聊天室";
-    $("#codeBtn").textContent = (meta.enc ? "🔐 " : "") + (meta.priv ? "🔒 " : "") + R.code + (meta.locked ? " · 已鎖" : "");
+    $("#roomTitle").textContent = meta.title || t("room");
+    $("#codeBtn").textContent = (meta.enc ? "🔐 " : "") + (meta.priv ? "🔒 " : "") + R.code + (meta.locked ? " · " + t("lockedTag") : "");
     const list = Object.values(R.members || {});
     $("#peopleBtn .n").textContent = list.filter((m) => m.online !== false).length;
     $("#peopleBtn .dot").hidden = !Object.values(R.unread).some((n) => n > 0);
     $("#composer").classList.toggle("off", R.gone);
-    if (R.view !== "all") $("#dmBar .dmwho").textContent = nameOf(R.view);
-    if (!document.hidden || !hiddenUnread) document.title = meta.title || "匿名聊天室";
+    if (R.view !== "all") $("#dmBar .dmwho").replaceChildren(...tEl("dmBar", { name: el("b", { text: nameOf(R.view) }) }));
+    if (!document.hidden || !hiddenUnread) document.title = meta.title || APP;
   }
   // who wrote a message, under their current name: messages keep the name they were sent with,
   // which only shows for someone who left before this device saw them
-  const author = (v, dm) => { const p = who(v.by); return p ? p : dm ? { name: "已離開的人", avatar: "👤" } : v; };
+  const author = (v, dm) => { const p = who(v.by); return p ? p : dm ? { name: t("someoneLeft"), avatar: "👤" } : v; };
   function refreshNames() {
     document.querySelectorAll("#list .msg").forEach((node) => {
       const p = who(node.dataset.by); if (!p) return;
@@ -598,18 +603,18 @@
   function replyQuote(rp, dm) {
     const o = findMsg(rp, dm);
     return el("button", { type: "button", class: "rpq", onclick: () => jumpTo(rp, dm) },
-      o ? el("b", { text: author(o, dm).name + "：" }) : null, o ? snippet(o) : "原訊息已刪除");
+      o ? el("b", { text: author(o, dm).name + t("colon") }) : null, o ? snippet(o) : t("origDeleted"));
   }
   function jumpTo(id, dm) {
     const node = document.getElementById((dm ? "d-" : "m-") + id);
-    if (!node) return toast("找不到原訊息，可能已經刪除了");
+    if (!node) return toast(t("origNotFound"));
     node.scrollIntoView({ block: "center", behavior: "smooth" });
     node.classList.remove("flash"); void node.offsetWidth; node.classList.add("flash");
   }
   function startReply(id, v, dm) {
     R.reply = { id, dm };
     const bar = $("#replyBar");
-    $(".rtxt", bar).replaceChildren("↩ 回覆 ", el("b", { text: author(v, dm).name }), "：" + snippet(v));
+    $(".rtxt", bar).replaceChildren(...tEl("replyingTo", { name: el("b", { text: author(v, dm).name }), text: snippet(v) }));
     bar.hidden = false; $("#text").focus();
   }
   function cancelReply() { if (R) R.reply = null; $("#replyBar").hidden = true; }
@@ -625,24 +630,24 @@
     if (box.hidden) return box.replaceChildren();
     // newest message first; one gone from the room still shows, so the owner can take it down
     const items = ids.map((id) => ({ id, v: R.msgs.get(id) })).sort((a, b) => (b.v?.at || 0) - (a.v?.at || 0));
-    const line = (it) => (it.v ? snippet(it.v) : "（這則訊息已刪除）");
+    const line = (it) => (it.v ? snippet(it.v) : t("pinGone"));
     box.classList.toggle("open", pinsOpen);
     box.replaceChildren(...[
       el("button", { type: "button", class: "pinhead", "aria-expanded": String(pinsOpen), onclick: () => { pinsOpen = !pinsOpen; renderPins(); } },
-        el("span", { text: "📌" }), el("span", { class: "one", text: pinsOpen ? "公告" : line(items[0]) }),
-        el("span", { class: "n", text: ids.length > 1 || pinsOpen ? `${ids.length} 則` : "" }), el("span", { class: "chev", text: "▾" })),
+        el("span", { text: "📌" }), el("span", { class: "one", text: pinsOpen ? t("pinsTitle") : line(items[0]) }),
+        el("span", { class: "n", text: ids.length > 1 || pinsOpen ? t("pinsN", { n: ids.length }) : "" }), el("span", { class: "chev", text: "▾" })),
       pinsOpen ? el("ul", {}, items.map((it) => el("li", {},
         el("button", { type: "button", class: "go", onclick: () => it.v && jumpTo(it.id) },
           it.v ? el("small", { text: `${author(it.v).avatar} ${author(it.v).name} · ${fmtTime(it.v.at)}` }) : null,
           it.v?.gif ? gifImg(it.v.gif) : line(it)),
-        isOwner() ? el("button", { type: "button", class: "btn small unpin", text: "取消置頂", onclick: () => pin(it.id, false) }) : null))) : null].filter(Boolean));
+        isOwner() ? el("button", { type: "button", class: "btn small unpin", text: t("unpin"), onclick: () => pin(it.id, false) }) : null))) : null].filter(Boolean));
   }
   function pin(id, on) {
     const pins = R.meta?.pins || {};
     const slot = on ? ["0", "1", "2"].find((k) => !pins[k]) : Object.keys(pins).find((k) => pins[k] === id);
-    if (slot === undefined) return toast(on ? "最多置頂三則，請先取消一則" : "");
+    if (slot === undefined) return toast(on ? t("pinMax") : "");
     fb.set(roomRef(R.code, "meta/pins/" + slot), on ? id : null)
-      .then(() => toast(on ? "📌 已置頂為公告" : "已取消置頂"), () => toast("沒有成功，請再試一次"));
+      .then(() => toast(t(on ? "pinnedToast" : "unpinnedToast")), () => toast(t("tryAgain")));
   }
 
   function addMsg(id, v, dm) {
@@ -661,7 +666,7 @@
     box.replaceChildren(...REACTS.map((emo, k) => {
       const who = Object.keys(v.re?.[k] || {});
       if (!who.length) return null;
-      return el("button", { type: "button", class: "chip" + (who.includes(uid) ? " on" : ""), title: who.map(nameOf).join("、"), onclick: () => react(node.dataset.id, k, !who.includes(uid)) }, `${emo} ${who.length}`);
+      return el("button", { type: "button", class: "chip" + (who.includes(uid) ? " on" : ""), title: who.map(nameOf).join(t("listSep")), onclick: () => react(node.dataset.id, k, !who.includes(uid)) }, `${emo} ${who.length}`);
     }).filter(Boolean));
   }
   function renderView() {
@@ -679,15 +684,15 @@
     $("#dmBar").hidden = R.view === "all";
     $("#chat").classList.toggle("indm", R.view !== "all");
     if (R.view === "all") {
-      if (!R.msgs.size) list.append(el("p", { class: "empty", text: "還沒有人說話。把右上角的代碼傳給大家，就可以開始聊了。" }));
+      if (!R.msgs.size) list.append(el("p", { class: "empty", text: t("emptyRoom") }));
       R.msgs.forEach((v, id) => list.append(bubble(id, v)));
-      $("#text").placeholder = "說點什麼…";
+      $("#text").placeholder = t("textPh");
     } else {
       const box = R.dms.get(R.view) || new Map();
-      if (!box.size) list.append(el("p", { class: "empty", text: "私訊有端對端加密，只有你們兩個看得到，房主和伺服器都看不到。" }));
+      if (!box.size) list.append(el("p", { class: "empty", text: t("emptyDm") }));
       box.forEach((v, id) => { list.append(bubble(id, v, true)); markRead(R.view, v.at); });
       R.unread[R.view] = 0;
-      $("#text").placeholder = `私訊給 ${nameOf(R.view)}…`;
+      $("#text").placeholder = t("dmPh", { name: nameOf(R.view) });
     }
     renderHeader();
     list.scrollTop = list.scrollHeight;
@@ -714,17 +719,17 @@
       upd[`${base}/msgs/${id}`] = R.c ? { by: uid, x: await seal(R.c.aes, { ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T() }
         : { by: uid, name: m.name, avatar: m.avatar, ...body, at: T() };
     } else {
-      if (!R.members[R.view]) { toast("對方已經離開聊天室了"); return false; }
+      if (!R.members[R.view]) { toast(t("peerLeft")); return false; }
       const key = await dmKey(R.view);
-      if (!key) { toast("對方的頁面還是舊版，請對方重新整理後再傳私訊"); return false; }
+      if (!key) { toast(t("peerOld")); return false; }
       const p = `${base}/dm/${pairKey(uid, R.view)}`;
       upd[`${p}/${fb.push(fb.ref(db, p)).key}`] = { by: uid, to: R.view, x: await seal(key, sealed, "d:" + uid), at: T() };
     }
     $("#list .empty")?.remove(); cancelReply();
-    fb.update(fb.ref(db), upd).catch((e) => { console.error(e); toast("送不出去，請檢查網路"); });
+    fb.update(fb.ref(db), upd).catch((e) => { console.error(e); toast(t("sendFail")); });
     return true;
   }
-  const react = (id, k, on) => fb.set(roomRef(R.code, `msgs/${id}/re/${k}/${uid}`), on ? true : null).catch(() => toast("沒有成功，請再試一次"));
+  const react = (id, k, on) => fb.set(roomRef(R.code, `msgs/${id}/re/${k}/${uid}`), on ? true : null).catch(() => toast(t("tryAgain")));
 
   async function msgActions(id, v, dm) {
     if (!R || R.gone) return;
@@ -733,20 +738,20 @@
       const on = !!v.re?.[k]?.[uid];
       return el("button", { type: "button", class: "chip big" + (on ? " on" : ""), "data-a": "re" + k, text: emo });
     }));
-    const btns = v.bad ? [] : [["reply", "↩ 回覆"]];
-    if (!v.gif && !v.bad) btns.push(["copy", "複製文字"]);
-    if (!dm && !v.bad && isOwner()) btns.push(pinIds().includes(id) ? ["unpin", "取消置頂"] : ["pin", "📌 置頂為公告"]);
-    if (!dm && v.by !== uid && R.members[v.by]) btns.push(["dm", "私訊 " + author(v).name]);
-    if (canDel) btns.push(["del", "刪除訊息", "danger"]);
+    const btns = v.bad ? [] : [["reply", t("reply")]];
+    if (!v.gif && !v.bad) btns.push(["copy", t("copyText")]);
+    if (!dm && !v.bad && isOwner()) btns.push(pinIds().includes(id) ? ["unpin", t("unpin")] : ["pin", t("pinAsNotice")]);
+    if (!dm && v.by !== uid && R.members[v.by]) btns.push(["dm", t("dmTo", { name: author(v).name })]);
+    if (canDel) btns.push(["del", t("delMsg"), "danger"]);
     const body = el("div", {}, v.gif ? el("div", { class: "quote gifq" }, gifImg(v.gif)) : el("blockquote", { class: "quote", text: v.text.length > 140 ? v.text.slice(0, 140) + "…" : v.text }), reacts);
     let picked = null;
     const a = await sheet("", body, btns, { onOpen: (ov) => reacts?.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { picked = +b.dataset.a.slice(2); ov.close("react"); } }) });
     if (a === "react") return react(id, picked, !v.re?.[picked]?.[uid]);
-    if (a === "copy") navigator.clipboard?.writeText(v.text).then(() => toast("已複製"), () => toast("複製不了"));
+    if (a === "copy") navigator.clipboard?.writeText(v.text).then(() => toast(t("copied")), () => toast(t("cantCopy")));
     if (a === "dm") openDm(v.by);
     if (a === "reply") startReply(id, v, dm);
     if (a === "pin" || a === "unpin") pin(id, a === "pin");
-    if (a === "del" && (await confirmSheet("刪除這則訊息？", "所有人都看不到這則訊息了。", "刪除"))) fb.remove(roomRef(R.code, "msgs/" + id)).catch(() => toast("刪不掉，請再試一次"));
+    if (a === "del" && (await confirmSheet(t("delMsgTitle"), t("delMsgBody"), t("del")))) fb.remove(roomRef(R.code, "msgs/" + id)).catch(() => toast(t("delFail")));
   }
 
   function share() {
@@ -756,14 +761,14 @@
     const qrBox = el("div", { class: "qr", "aria-label": "QR Code" }); qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
     const body = el("div", { class: "share" },
       el("div", { class: "bigcode", text: R.code }),
-      el("p", { class: "muted", text: (R.c ? "🔐 這是加密聊天室：要用這個連結或 QR code 才能加入，光輸入 4 碼進不來。" : "把 4 碼或連結傳給大家，打開就能加入。") + (R.meta?.priv ? "對方還需要輸入你設定的密碼。" : "") }),
-      el("div", { class: "linkrow" }, el("input", { class: "field", readonly: true, value: url, "aria-label": "連結", onfocus: (e) => e.target.select() })),
+      el("p", { class: "muted", text: t(R.c ? "shareEnc" : "shareOpen") + (R.meta?.priv ? t("sharePw") : "") }),
+      el("div", { class: "linkrow" }, el("input", { class: "field", readonly: true, value: url, "aria-label": t("linkAriaShort"), onfocus: (e) => e.target.select() })),
       qrBox);
-    const btns = [["copy", "複製連結", "primary"]];
-    if (navigator.share) btns.unshift(["share", "分享…"]);
-    sheet("邀請大家加入", body, btns).then((a) => {
-      if (a === "copy") navigator.clipboard?.writeText(url).then(() => toast("已複製連結"), () => toast("複製不了，請長按連結"));
-      if (a === "share") navigator.share({ title: R.meta?.title || "匿名聊天室", text: `來聊天！代碼 ${R.code}`, url }).catch(() => {});
+    const btns = [["copy", t("copyLink"), "primary"]];
+    if (navigator.share) btns.unshift(["share", t("shareDots")]);
+    sheet(t("inviteTitle"), body, btns).then((a) => {
+      if (a === "copy") navigator.clipboard?.writeText(url).then(() => toast(t("linkCopied")), () => toast(t("cantCopyLink")));
+      if (a === "share") navigator.share({ title: R.meta?.title || APP, text: t("shareText", { code: R.code }), url }).catch(() => {});
     });
   }
 
@@ -772,15 +777,15 @@
     const ids = Object.keys(R.members).sort((a, b) => (a === R.meta?.owner ? -1 : b === R.meta?.owner ? 1 : (R.members[a].joined || 0) - (R.members[b].joined || 0)));
     const list = el("ul", { class: "plist" }, ids.map((id) => {
       const m = R.members[id];
-      const tags = [id === uid ? "你" : null, id === R.meta?.owner ? "房主" : null, m.online === false ? "離線" : null].filter(Boolean).join(" · ");
+      const tags = [id === uid ? t("you") : null, id === R.meta?.owner ? t("ownerTag") : null, m.online === false ? t("offlineTag") : null].filter(Boolean).join(" · ");
       return el("li", { class: m.online === false ? "away" : "" },
         el("span", { class: "av", text: m.avatar }),
         el("span", { class: "nm" }, el("b", { text: m.name }), tags ? el("small", { text: tags }) : null),
-        id !== uid ? el("button", { type: "button", class: "btn small", "data-dm": id }, "私訊", R.unread[id] ? el("i", { class: "badge", text: R.unread[id] }) : null) : null,
-        id !== uid && isOwner() ? el("button", { type: "button", class: "btn small danger", "data-kick": id, text: "移出" }) : null);
+        id !== uid ? el("button", { type: "button", class: "btn small", "data-dm": id }, t("dm"), R.unread[id] ? el("i", { class: "badge", text: R.unread[id] }) : null) : null,
+        id !== uid && isOwner() ? el("button", { type: "button", class: "btn small danger", "data-kick": id, text: t("kick") }) : null);
     }));
     let choice = null;
-    sheet(`成員（${ids.length}）`, list, [["close", "關閉"]], {
+    sheet(t("membersN", { n: ids.length }), list, [["close", t("close")]], {
       onOpen: (ov) => list.addEventListener("click", (e) => {
         const b = e.target.closest("button"); if (!b) return;
         choice = b.dataset.dm ? ["dm", b.dataset.dm] : ["kick", b.dataset.kick]; ov.close("pick");
@@ -790,30 +795,30 @@
       const [what, id] = choice;
       if (what === "dm") return openDm(id);
       const m = R.members[id];
-      if (m && (await confirmSheet(`移出 ${m.avatar} ${m.name}？`, "對方會馬上離開，而且不能再用這個裝置回來。", "移出"))) {
+      if (m && (await confirmSheet(t("kickTitle", { who: `${m.avatar} ${m.name}` }), t("kickBody"), t("kick")))) {
         const k = myKeyIn(id), release = k && (await holderOf(R.code, k)) === id; // don't free a name someone else still uses
-        fb.update(roomRef(R.code), { [`members/${id}`]: null, ...(release ? { [`names/${k}`]: null } : {}), [`banned/${id}`]: true }).then(() => toast(`已移出 ${m.name}`), () => toast("移不出去，請再試一次"));
+        fb.update(roomRef(R.code), { [`members/${id}`]: null, ...(release ? { [`names/${k}`]: null } : {}), [`banned/${id}`]: true }).then(() => toast(t("kickedToast", { name: m.name })), () => toast(t("kickFail")));
       }
     });
   }
 
   async function menu() {
     if (!R) return;
-    const btns = [["share", "邀請大家"], ["me", "修改我的暱稱和頭像"],
-      notifyOn(R.code) ? ["mute", "🔕 關閉這個聊天室的通知"] : ["notify", "🔔 開啟新訊息通知"], ["export", "匯出聊天記錄"]];
+    const btns = [["share", t("invite")], ["me", t("editMe")],
+      notifyOn(R.code) ? ["mute", t("muteRoom")] : ["notify", t("notifyRoom")], ["export", t("exportChat")]];
     if (isOwner()) {
-      btns.splice(1, 0, ["title", "修改聊天室名稱"]);
-      btns.push(R.meta?.locked ? ["unlock", "解除鎖定，讓新的人加入"] : ["lock", "鎖住聊天室，不讓新的人加入"]);
-      btns.push(["end", "結束並刪除聊天室", "danger"]);
-    } else btns.push(["leave", "離開聊天室", "danger"]);
-    const a = await sheet(R.meta?.title || "聊天室 " + R.code, null, btns);
+      btns.splice(1, 0, ["title", t("renameRoom")]);
+      btns.push(R.meta?.locked ? ["unlock", t("unlockRoom")] : ["lock", t("lockRoom")]);
+      btns.push(["end", t("endRoom"), "danger"]);
+    } else btns.push(["leave", t("leaveRoom"), "danger"]);
+    const a = await sheet(R.meta?.title || t("roomN", { code: R.code }), null, btns);
     if (a === "share") share();
     if (a === "me") askMe(false);
     if (a === "title") renameRoom();
     if (a === "notify" || a === "mute") setNotify(a === "notify");
     if (a === "export") exportSheet();
-    if (a === "lock" || a === "unlock") fb.update(roomRef(R.code, "meta"), { locked: a === "lock" }).then(() => toast(a === "lock" ? "已鎖住，新的人進不來" : "已解除鎖定"), () => toast("沒有成功，請再試一次"));
-    if (a === "leave" && (await confirmSheet("離開聊天室？", "離開後就看不到新的訊息了。" + (R.meta?.priv ? "要回來得再輸入一次密碼。" : ""), "離開"))) {
+    if (a === "lock" || a === "unlock") fb.update(roomRef(R.code, "meta"), { locked: a === "lock" }).then(() => toast(t(a === "lock" ? "lockedDone" : "unlockedDone")), () => toast(t("tryAgain")));
+    if (a === "leave" && (await confirmSheet(t("leaveTitle"), t("leaveBody") + (R.meta?.priv ? t("leavePw") : ""), t("leave")))) {
       const code = R.code;
       R.gone = true; leaveListeners();
       const k = myKeyIn(uid), release = k && (await holderOf(code, k)) === uid; // same reason as in askMe
@@ -823,26 +828,26 @@
     if (a === "end") endRoom();
   }
   async function renameRoom() {
-    const input = el("input", { class: "field", maxlength: 40, placeholder: "例如：週三讀書會（可以不填）", id: "roomName", value: R.meta?.title || "" });
-    const body = el("div", {}, el("label", { class: "lbl", for: "roomName", text: "聊天室名稱" }), input,
-      el("p", { class: "muted small", text: R.c ? "加密聊天室的名稱也會加密，伺服器看不到。" : "所有人都會看到新的名稱。" }));
-    const a = await sheet("修改聊天室名稱", body, [["no", "取消"], ["yes", "儲存", "primary"]], { onOpen: () => input.select() });
+    const input = el("input", { class: "field", maxlength: 40, placeholder: t("titlePh"), id: "roomName", value: R.meta?.title || "" });
+    const body = el("div", {}, el("label", { class: "lbl", for: "roomName", text: t("roomName") }), input,
+      el("p", { class: "muted small", text: t(R.c ? "renameEnc" : "renameOpen") }));
+    const a = await sheet(t("renameRoom"), body, [["no", t("cancel")], ["yes", t("save"), "primary"]], { onOpen: () => input.select() });
     if (a !== "yes" || !R) return;
-    const t = input.value.trim().slice(0, 40);
-    if (t === (R.meta?.title || "")) return;
+    const title = input.value.trim().slice(0, 40);
+    if (title === (R.meta?.title || "")) return;
     try {
       // an encrypted room keeps only the sealed title (xt); a plain one only the readable one
-      await fb.update(roomRef(R.code, "meta"), R.c ? { xt: t ? await seal(R.c.aes, { t }, "t") : null } : { title: t || null });
-      toast(t ? `聊天室名稱改成「${t}」` : "已清除聊天室名稱");
+      await fb.update(roomRef(R.code, "meta"), R.c ? { xt: title ? await seal(R.c.aes, { t: title }, "t") : null } : { title: title || null });
+      toast(title ? t("renamedToast", { t: title }) : t("titleCleared"));
     } catch (e) { failed(e); }
   }
   async function endRoom() {
-    const a = await sheet("結束聊天室？", el("p", { class: "muted", text: "所有訊息和私訊都會永久刪除，所有人都會離開，代碼也會失效。想留記錄的話請先匯出。" }), [["no", "取消"], ["export", "先匯出"], ["yes", "結束並刪除", "danger"]]);
+    const a = await sheet(t("endTitle"), el("p", { class: "muted", text: t("endBody") }), [["no", t("cancel")], ["export", t("exportFirst")], ["yes", t("endDel"), "danger"]]);
     if (a === "export") { await exportSheet(); return endRoom(); }
     if (a !== "yes") return;
     const code = R.code;
     R.gone = true; leaveListeners();
-    try { await fb.update(fb.ref(db), { [`rooms/${code}`]: null, [`secrets/${code}`]: null }); toast("聊天室已結束，訊息都刪除了"); }
+    try { await fb.update(fb.ref(db), { [`rooms/${code}`]: null, [`secrets/${code}`]: null }); toast(t("endedToast")); }
     catch (e) { failed(e); }
     R = null; forgetRoom(code); store.set(ROOMKEY(code), null); home();
   }
@@ -862,11 +867,11 @@
     const one = (v, author) => ({ name: author.name, avatar: author.avatar, at: v.at, text: v.text || undefined, gif: v.gif || undefined, mine: v.by === uid || undefined });
     return {
       format: ARCHIVE, version: 1,
-      title: meta.title || "聊天室 " + R.code, code: R.code, created: meta.created, exported: Date.now(),
+      title: meta.title || t("roomN", { code: R.code }), code: R.code, created: meta.created, exported: Date.now(),
       me: { name: self.name, avatar: self.avatar },
       messages: [...R.msgs.values()].map((v) => ({ ...one(v, author(v)), owner: v.by === meta.owner || undefined, reactions: reacts(v) })),
       dms: [...R.dms.entries()].filter(([, box]) => box.size).map(([other, box]) => {
-        const them = who(other) || { name: "已離開的人", avatar: "👤" };
+        const them = who(other) || { name: t("someoneLeft"), avatar: "👤" };
         return { with: { name: them.name, avatar: them.avatar }, messages: [...box.values()].map((v) => one(v, v.by === uid ? self : them)) };
       }),
     };
@@ -887,7 +892,7 @@
     };
     const keep = (list) => (Array.isArray(list) ? list : []).slice(0, 5000).map(msg).filter((m) => m.text || m.gif);
     return {
-      format: ARCHIVE, version: 1, title: str(o.title, 60) || "聊天記錄", code: str(o.code, 4), created: num(o.created), exported: num(o.exported),
+      format: ARCHIVE, version: 1, title: str(o.title, 60) || t("recordDefault"), code: str(o.code, 4), created: num(o.created), exported: num(o.exported),
       me: { name: str(o.me?.name, 24), avatar: str(o.me?.avatar, 8) },
       messages: keep(o.messages),
       dms: (Array.isArray(o.dms) ? o.dms : []).slice(0, 200).map((d) => ({ with: { name: str(d?.with?.name, 24) || "？", avatar: str(d?.with?.avatar, 8) }, messages: keep(d?.messages) })).filter((d) => d.messages.length),
@@ -896,23 +901,23 @@
   const countOf = (a) => a.messages.length + a.dms.reduce((s, d) => s + d.messages.length, 0);
   const label = (m) => `${m.avatar} ${m.name}`;
   function toText(a) {
-    const line = (m) => `[${fmtFull(m.at)}] ${label(m)}${m.mine ? "（我）" : ""}：${m.gif ? `[GIF] ${m.gif.title || ""} ${m.gif.url}`.replace(/\s+/g, " ") : m.text.replace(/\n/g, "\n    ")}`;
-    const out = [`${a.title}（代碼 ${a.code}）`, `匯出時間：${fmtFull(a.exported)}`, "", "── 大家 ──"];
+    const line = (m) => `[${fmtFull(m.at)}] ${label(m)}${m.mine ? t("meTag") : ""}${t("colon")}${m.gif ? `[GIF] ${m.gif.title || ""} ${m.gif.url}`.replace(/\s+/g, " ") : m.text.replace(/\n/g, "\n    ")}`;
+    const out = [t("expHead", { title: a.title, code: a.code }), t("expAt", { t: fmtFull(a.exported) }), "", `── ${t("everyone")} ──`];
     a.messages.forEach((m) => out.push(line(m)));
-    if (!a.messages.length) out.push("（沒有訊息）");
-    a.dms.forEach((d) => { out.push("", `── 🔒 和 ${label(d.with)} 的私訊 ──`); d.messages.forEach((m) => out.push(line(m))); });
+    if (!a.messages.length) out.push(t("noMsgs"));
+    a.dms.forEach((d) => { out.push("", `── ${t("dmHead", { who: label(d.with) })} ──`); d.messages.forEach((m) => out.push(line(m))); });
     return out.join("\n") + "\n";
   }
   function toHtml(a) {
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const row = (m) => `<div class="m${m.mine ? " me" : ""}"><div class="h">${esc(label(m))}${m.owner ? " 👑" : ""} <time>${esc(fmtFull(m.at))}</time></div>${m.gif ? `<img class="g" src="${esc(m.gif.url)}" width="${+m.gif.w}" height="${+m.gif.h}" alt="${esc(m.gif.title || "GIF")}" loading="lazy">` : `<div class="b">${esc(m.text)}</div>`}${m.reactions ? `<div class="r">${Object.entries(m.reactions).map(([e, n]) => `${e} ${n}`).join("　")}</div>` : ""}</div>`;
-    const sec = (h, list) => `<h2>${esc(h)}</h2>${list.map(row).join("") || '<p class="e">（沒有訊息）</p>'}`;
+    const sec = (h, list) => `<h2>${esc(h)}</h2>${list.map(row).join("") || `<p class="e">${esc(t("noMsgs"))}</p>`}`;
     const data = JSON.stringify(a).replace(/</g, "\\u003c");
-    return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(a.title)}</title>
+    return `<!doctype html><html lang="${I18N.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(a.title)}</title>
 <style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#1e293b;background:#f8fafc}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e2e8f0}.sub{color:#64748b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#64748b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#4f46e5;color:#fff;border-color:#4f46e5}.g{max-width:240px;height:auto;border-radius:12px}.r{font-size:13px;margin-top:2px}.e{color:#94a3b8}@media(prefers-color-scheme:dark){body{background:#0f172a;color:#e2e8f0}.b{background:#1e293b;border-color:#334155}h2{border-color:#334155}}</style></head><body>
-<h1>${esc(a.title)}</h1><div class="sub">代碼 ${esc(a.code)} · 匯出時間 ${esc(fmtFull(a.exported))} · 這個檔案可以在匿名聊天室匯入</div>
-${sec("大家", a.messages)}
-${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join("")}
+<h1>${esc(a.title)}</h1><div class="sub">${esc(t("expSub", { code: a.code, t: fmtFull(a.exported) }))}</div>
+${sec(t("everyone"), a.messages)}
+${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join("")}
 <script type="application/json" id="${ARCHIVE}">${data}</script>
 </body></html>`;
   }
@@ -924,15 +929,15 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
     const link = el("a", { href: URL.createObjectURL(new Blob([body], { type })), download: name });
     document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 10000);
-    toast("已下載 " + name);
+    toast(t("downloaded", { name }));
   }
   async function exportSheet() {
     if (!R) return;
     const a = archive();
-    const pick = await sheet("匯出聊天記錄", el("div", {},
-      el("p", { class: "muted", text: `共 ${countOf(a)} 則訊息，包含你自己的私訊。` }),
-      el("p", { class: "muted small", text: "「存到這台裝置」之後可以在首頁的「我的聊天記錄」打開；JSON 和網頁檔都能在其他裝置匯入回來。" })),
-      [["save", "存到這台裝置", "primary"], ["json", "JSON 檔（可匯入）"], ["html", "網頁檔 .html（可匯入）"], ["txt", "文字檔 .txt"]]);
+    const pick = await sheet(t("exportChat"), el("div", {},
+      el("p", { class: "muted", text: t("exportCount", { n: countOf(a) }) }),
+      el("p", { class: "muted small", text: t("exportHint") })),
+      [["save", t("saveHere"), "primary"], ["json", t("jsonImp")], ["html", t("htmlImp")], ["txt", t("txtFile")]]);
     if (pick === "save") saveRecord(a);
     else if (pick) download(a, pick);
   }
@@ -947,8 +952,8 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
       const list = records().filter((r) => r.id !== id);
       list.unshift({ id, title: a.title, code: a.code, exported: a.exported, n: countOf(a) });
       localStorage.setItem(REC_LIST, JSON.stringify(list));
-    } catch (e) { toast("這台裝置的空間不夠，請改用下載檔案"); return null; }
-    if (!quiet) toast("已存到「我的聊天記錄」（右上角選單）");
+    } catch (e) { toast(t("noSpace")); return null; }
+    if (!quiet) toast(t("savedRec"));
     return id;
   }
   function deleteRecord(id) {
@@ -961,15 +966,19 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
     const body = el("div", { class: "hmenu" },
       el("button", { type: "button", class: "merow", "data-a": "me" },
         el("span", { class: "av", text: m ? m.avatar : "🙂" }),
-        el("span", { class: "txt" }, el("b", { text: m ? m.name : "還沒選身分" }), el("small", { text: "修改暱稱和頭像" })),
+        el("span", { class: "txt" }, el("b", { text: m ? m.name : t("noIdentity") }), el("small", { text: t("editMeShort") })),
         el("span", { class: "chev", text: "›" })),
-      el("h3", { text: "我的聊天記錄" }),
+      el("button", { type: "button", class: "merow", "data-a": "lang" },
+        el("span", { class: "av", text: "🌐" }),
+        el("span", { class: "txt" }, el("b", { text: t("language") + (I18N.lang === "en" ? "" : " · Language") }), el("small", { text: I18N.LANGS.find(([c]) => c === I18N.lang)[1] })),
+        el("span", { class: "chev", text: "›" })),
+      el("h3", { text: t("myRecords") }),
       list.length ? el("ul", { class: "reclist" }, list.map((r) => el("li", {},
         el("button", { type: "button", class: "rec", "data-open": r.id },
-          el("b", { text: r.title }), el("small", { text: `${r.code ? "代碼 " + r.code + " · " : ""}${r.n} 則 · ${new Date(r.exported).toLocaleDateString("zh-TW")}` })))))
-        : el("p", { class: "muted small", text: "聊天室結束前存下來的記錄會放在這裡，也可以匯入之前下載的 JSON 或網頁檔。記錄只會存在這台裝置上。" }),
-      el("button", { type: "button", class: "btn wide", "data-a": "import", text: "📂 匯入聊天記錄檔" }));
-    sheet("選單", body, [["close", "關閉"]], {
+          el("b", { text: r.title }), el("small", { text: [r.code ? t("recCode", { code: r.code }) : null, t("recN", { n: r.n }), new Date(r.exported).toLocaleDateString(I18N.lang)].filter(Boolean).join(" · ") })))))
+        : el("p", { class: "muted small", text: t("noRecords") }),
+      el("button", { type: "button", class: "btn wide", "data-a": "import", text: t("importRec") }));
+    sheet(t("menu"), body, [["close", t("close")]], {
       onOpen: (ov) => body.addEventListener("click", (e) => {
         const b = e.target.closest("[data-a], [data-open]"); if (!b) return;
         if (b.dataset.a === "import") $("#importFile").click(); // right inside the tap, or the file picker may not open
@@ -977,12 +986,26 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
       }),
     }).then((a) => {
       if (a === "me") askMe(false);
+      else if (a === "lang") pickLang();
       else if (a?.startsWith("open:")) openRecord(null, a.slice(5));
     });
   }
+  // the languages, each in its own name; the choice stays on this device
+  async function pickLang() {
+    let saved = null;
+    try { saved = localStorage.getItem("chat-lang"); } catch (e) {}
+    const list = el("div", { class: "langs", role: "radiogroup" },
+      [["", t("followDevice")], ...I18N.LANGS].map(([c, n]) => el("button", { type: "button", class: "btn wide", role: "radio", "data-lang": c, "aria-checked": String(c === (saved || "")), text: n })));
+    const a = await sheet(t("language") + (I18N.lang === "en" ? "" : " · Language"), list, [["close", t("close")]], {
+      onOpen: (ov) => list.addEventListener("click", (e) => { const b = e.target.closest("[data-lang]"); if (b) ov.close("lang:" + b.dataset.lang); }),
+    });
+    if (!a?.startsWith("lang:")) return;
+    I18N.set(a.slice(5) || null);
+    showMe(); home(); homeMenu();
+  }
   async function importFile(file) {
     if (!file) return;
-    if (file.size > 8e6) { toast("檔案太大了"); return; }
+    if (file.size > 8e6) { toast(t("tooBig")); return; }
     let a;
     try {
       const text = await file.text();
@@ -992,7 +1015,7 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
         raw = tag && JSON.parse(tag.textContent);
       } else raw = JSON.parse(text);
       a = readArchive(raw);
-    } catch (e) { toast("這不是匿名聊天室匯出的檔案"); return; }
+    } catch (e) { toast(t("notArchive")); return; }
     const id = saveRecord(a, true);
     openRecord(id ? null : a, id);
   }
@@ -1000,13 +1023,13 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
   /* ---------- reading a saved record (read-only) ---------- */
   let REC_VIEW = null; // { a, id, tab }
   function openRecord(a, id) {
-    if (!a) { try { a = readArchive(JSON.parse(localStorage.getItem(REC(id)))); } catch (e) { toast("這份記錄打不開了"); deleteRecord(id); return; } }
+    if (!a) { try { a = readArchive(JSON.parse(localStorage.getItem(REC(id)))); } catch (e) { toast(t("recBroken")); deleteRecord(id); return; } }
     REC_VIEW = { a, id, tab: -1 };
     $("#home").hidden = true; $("#chat").hidden = true; $("#record").hidden = false;
     $("#recTitle").textContent = a.title;
-    $("#recSub").textContent = `📁 唯讀記錄 · ${fmtFull(a.exported)} 匯出`;
+    $("#recSub").textContent = t("recSub", { t: fmtFull(a.exported) });
     const tabs = $("#recTabs");
-    tabs.replaceChildren(el("button", { type: "button", class: "tab", "data-tab": -1, text: `大家（${a.messages.length}）` }),
+    tabs.replaceChildren(el("button", { type: "button", class: "tab", "data-tab": -1, text: t("everyoneN", { n: a.messages.length }) }),
       ...a.dms.map((d, i) => el("button", { type: "button", class: "tab", "data-tab": i, text: `🔒 ${label(d.with)}` })));
     tabs.hidden = !a.dms.length;
     renderRecord();
@@ -1024,14 +1047,14 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
         cont ? null : el("div", { class: "who" }, el("span", { class: "av", text: m.avatar }), el("span", { class: "nm", text: m.name + (m.owner ? " 👑" : "") }), el("time", { text: fmtFull(m.at) })),
         m.gif ? el("div", { class: "bub gifbub ro" }, gifImg(m.gif)) : el("div", { class: "bub ro" }, linkify(m.text)),
         m.reactions ? el("div", { class: "re" }, Object.entries(m.reactions).map(([e, n]) => el("span", { class: "chip", text: `${e} ${n}` }))) : null);
-    }) : [el("p", { class: "empty", text: "沒有訊息" })]));
+    }) : [el("p", { class: "empty", text: t("empty") })]));
     box.scrollTop = 0;
   }
   async function recordMenu() {
     const { a, id } = REC_VIEW;
-    const pick = await sheet(a.title, el("p", { class: "muted", text: "這是匯入或保存的聊天記錄，只能閱讀，不能修改。" }),
-      [["json", "下載 JSON 檔"], ["html", "下載網頁檔"], ["txt", "下載文字檔"], ...(id ? [["del", "從這台裝置刪除", "danger"]] : [])]);
-    if (pick === "del" && (await confirmSheet("刪除這份記錄？", "只會從這台裝置刪除，已經下載的檔案不受影響。", "刪除"))) { deleteRecord(id); home(); }
+    const pick = await sheet(a.title, el("p", { class: "muted", text: t("recInfo") }),
+      [["json", t("dlJson")], ["html", t("dlHtml")], ["txt", t("dlTxt")], ...(id ? [["del", t("delLocal"), "danger"]] : [])]);
+    if (pick === "del" && (await confirmSheet(t("delRecTitle"), t("delRecBody"), t("del")))) { deleteRecord(id); home(); }
     else if (pick && pick !== "del") download(a, pick);
   }
 
@@ -1073,6 +1096,7 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
   }
   // KLIPY (klipy.com) GIF search; needs klipyKey in js/config.js
   const KLIPY = CFG.klipyKey;
+  const KLIPY_LOCALE = { "zh-TW": "zh_TW", "zh-CN": "zh_CN", en: "en_US", ja: "ja_JP", ko: "ko_KR", es: "es_ES", fr: "fr_FR", de: "de_DE", pt: "pt_BR" };
   // Every gif/webp rendition in a result, wherever the response nests it (file.md.gif, files.gif, ...); no video formats.
   function klipyFiles(item) {
     const out = [], seen = new Set();
@@ -1090,7 +1114,7 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
   }
   async function klipy(q, page = 1) {
     const base = `https://api.klipy.com/api/v1/${encodeURIComponent(KLIPY)}/gifs/${q ? "search" : "trending"}`;
-    const qs = new URLSearchParams({ per_page: 24, page, locale: "zh_TW", rating: "pg-13", customer_id: uid || "guest" });
+    const qs = new URLSearchParams({ per_page: 24, page, locale: KLIPY_LOCALE[I18N.lang] || "en_US", rating: "pg-13", customer_id: uid || "guest" });
     if (q) qs.set("q", q);
     const res = await fetch(`${base}?${qs}`);
     if (!res.ok) throw new Error("klipy " + res.status);
@@ -1108,18 +1132,18 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
     }).filter(Boolean);
   }
   function gifPanel(box) {
-    const input = el("input", { class: "field gifq-in", type: "search", placeholder: "搜尋 GIF，例如：好耶、無言、cat", enterkeyhint: "search", "aria-label": "搜尋 GIF" });
+    const input = el("input", { class: "field gifq-in", type: "search", placeholder: t("gifPh"), enterkeyhint: "search", "aria-label": t("gifAria") });
     const grid = el("div", { class: "gifgrid" });
     const foot = el("div", { class: "gifby", text: "Powered by KLIPY" });
     box.replaceChildren(input, grid, foot);
     let n = 0;
     const load = async () => {
       const mine = ++n;
-      grid.replaceChildren(el("p", { class: "muted small", text: "載入中…" }));
+      grid.replaceChildren(el("p", { class: "muted small", text: t("loading") }));
       try {
         const list = await klipy(input.value.trim());
         if (mine !== n) return;
-        if (!list.length) { grid.replaceChildren(el("p", { class: "muted small", text: "找不到相關的 GIF" })); return; }
+        if (!list.length) { grid.replaceChildren(el("p", { class: "muted small", text: t("noGif") })); return; }
         // two columns that scroll down; each GIF goes to the shorter column
         const cols = [el("div", { class: "gifcol" }), el("div", { class: "gifcol" })], tall = [0, 0];
         list.forEach((g) => {
@@ -1128,11 +1152,11 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
             el("img", { src: g.show.url, width: g.show.w, height: g.show.h, alt: g.send.title || "GIF", loading: "lazy", referrerpolicy: "no-referrer" })));
         });
         grid.replaceChildren(...cols); grid.scrollTop = 0;
-      } catch (e) { console.error(e); if (mine === n) grid.replaceChildren(el("p", { class: "muted small", text: "GIF 搜尋暫時無法使用" })); }
+      } catch (e) { console.error(e); if (mine === n) grid.replaceChildren(el("p", { class: "muted small", text: t("gifDown") })); }
     };
-    let t = 0;
-    input.addEventListener("input", () => { clearTimeout(t); t = setTimeout(load, 350); });
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); clearTimeout(t); load(); } });
+    let timer = 0;
+    input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 350); });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); clearTimeout(timer); load(); } });
     load();
     if (matchMedia("(pointer: fine)").matches) input.focus();
   }
@@ -1143,7 +1167,7 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
     $("#chat").hidden = true; $("#record").hidden = true; $("#home").hidden = false;
     REC_VIEW = null; closePicker();
     $("#composer").classList.remove("off");
-    document.title = "匿名聊天室｜不用加好友，輸入 4 碼就能聊";
+    document.title = t("docTitle");
     history.replaceState(null, "", location.pathname + (EMU && params.get("as") ? "?as=" + params.get("as") : ""));
     showResume();
   }
@@ -1183,12 +1207,12 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
     box.hidden = !rows.length;
     if (!rows.length) return;
     resumePage = Math.min(resumePage, pages - 1);
-    $("h2", box).textContent = rows.length === 1 ? "你還在聊天室" : `你還在 ${rows.length} 個聊天室`;
+    $("h2", box).textContent = rows.length === 1 ? t("stillIn") : t("stillInN", { n: rows.length });
     $(".roomlist", box).replaceChildren(...rows.slice(resumePage * PAGE, resumePage * PAGE + PAGE).map((r) => el("li", {},
       el("button", { type: "button", class: "roomrow", "data-code": r.code },
         // laid out like the room's own header: its name, then the code on a chip
-        el("span", { class: "txt" }, el("b", { text: r.t || "聊天室" }), el("span", { class: "codechip", text: (r.enc ? "🔐 " : "") + (r.priv ? "🔒 " : "") + r.code })),
-        el("span", { class: "go", text: "回到聊天室 ›" })))));
+        el("span", { class: "txt" }, el("b", { text: r.t || t("room") }), el("span", { class: "codechip", text: (r.enc ? "🔐 " : "") + (r.priv ? "🔒 " : "") + r.code })),
+        el("span", { class: "go", text: t("backToRoom") })))));
     $(".pager", box).hidden = pages < 2;
     $(".pager .pg", box).textContent = `${resumePage + 1} / ${pages}`;
     $(".pager [data-a=prev]", box).disabled = resumePage === 0;
@@ -1196,6 +1220,7 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
   }
 
   /* ---------- wiring ---------- */
+  I18N.apply();
   showMe();
   if (!FB?.databaseURL) { $("#setupNote").hidden = false; document.body.classList.add("nodb"); }
   $("#meBtn").addEventListener("click", homeMenu);

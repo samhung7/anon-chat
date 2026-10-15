@@ -1,8 +1,7 @@
 {
-  "name": "匿名聊天室",
-  "short_name": "匿名聊天室",
-  "description": "開房拿 4 碼，分享就能聊。不用註冊、不用加好友，聊完即刪。",
-  "lang": "zh-Hant",
+  "name": "Stoa Talk",
+  "short_name": "Stoa Talk",
+  "description": "Chat rooms you join with a 4-character code. No sign-up, gone when you're done.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
