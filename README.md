@@ -3,7 +3,7 @@
 Open a room, get a 4-character code, and share the code or link. Anyone with it joins straight from the browser: no sign-up, no LINE, FB or IG. When the talk is over the room is deleted, and anyone who wants a copy exports it first.
 Made for lecture Q&A, anonymous reading groups, online Werewolf and group-project discussions. Interface: 繁體中文.
 
-- **Rooms**: public (the code is enough) or private (code plus a password the owner sets). Join by code, by link or by QR code.
+- **Rooms**: public (the code is enough) or private, which is always end-to-end encrypted (only the full link or QR code gets in). Older password rooms can still be joined with their password, but new ones can no longer be made.
 - **End-to-end encryption**: private messages are always end-to-end encrypted. A room can also be opened as encrypted: its key travels only in the invite link and QR code (after the `#`, which browsers never send to a server), so the database holds the title, nicknames and messages only as ciphertext. People need the full link to join; the 4-character code alone isn't enough. See below.
 - **Identity**: a nickname and an animal, kept on the device. Nicknames are unique within a room (ignoring case). Behind the scenes each device gets an anonymous Firebase id.
 - **Chat**: live messages, replies that quote and jump to the original, links, an emoji picker, GIF search (KLIPY), six reactions, who's here and who's online, private messages between two people (the owner can't read those either).

@@ -68,6 +68,8 @@ code { font-size: .9em; }
 .roomlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .roomrow { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
 .roomrow .txt, .merow .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.encnote { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.encnote p { margin: 4px 0 0; }
 .roomrow .txt { align-items: flex-start; gap: 3px; }
 .roomrow .txt b { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .roomrow small, .merow small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -155,11 +157,6 @@ code { font-size: .9em; }
 .seg { display: flex; flex-direction: column; gap: 6px; }
 .seg button { text-align: left; border: 2px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
 .seg button[aria-checked="true"] { border-color: var(--accent); background: var(--accent-2); font-weight: 600; }
-.check { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--surface-2); cursor: pointer; }
-.check:has(input:checked) { border-color: var(--accent); background: var(--accent-2); }
-.check input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
-.check span { display: flex; flex-direction: column; gap: 2px; }
-.check small { font-size: 13px; color: var(--muted); line-height: 1.45; }
 .share { text-align: center; }
 .bigcode { font: 700 52px/1.1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .18em; margin: 4px 0 8px; color: var(--accent); }
 .linkrow { margin: 10px 0; }
