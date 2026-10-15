@@ -14,18 +14,6 @@
     get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} },
   };
-  // iPhone home-screen app: the layout viewport can come out shorter than the screen (by about the status bar),
-  // so fixed layers stop short of the bottom edge. Measure the shortfall and let the CSS stretch over it.
-  if (navigator.standalone || matchMedia("(display-mode: standalone)").matches) {
-    const fill = () => {
-      const long = Math.max(screen.width, screen.height), short = Math.min(screen.width, screen.height);
-      const gap = (innerWidth < innerHeight ? long : short) - innerHeight;
-      document.documentElement.style.setProperty("--fill", gap > 0 && gap < 120 ? gap + "px" : "0px");
-    };
-    fill();
-    addEventListener("resize", fill);
-    addEventListener("orientationchange", () => setTimeout(fill, 300));
-  }
   // ?emu runs against the local Firebase emulator (testing only)
   if (params.has("emu")) store.set("chat-emu", params.get("emu") === "0" ? null : "1");
   const EMU = !!store.get("chat-emu");
