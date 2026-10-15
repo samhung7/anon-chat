@@ -74,6 +74,7 @@ code { font-size: .9em; }
 .features div { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
 .features b { display: block; margin-bottom: 2px; }
 .features span { font-size: 13px; color: var(--muted); }
+.features .wide { grid-column: 1 / -1; }
 .note { border-radius: 12px; padding: 10px 12px; margin: 0 0 14px; font-size: 14px; }
 .note.warn { background: var(--warn-bg); color: var(--warn); }
 
@@ -141,6 +142,11 @@ code { font-size: .9em; }
 .seg { display: flex; flex-direction: column; gap: 6px; }
 .seg button { text-align: left; border: 2px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
 .seg button[aria-checked="true"] { border-color: var(--accent); background: var(--accent-2); font-weight: 600; }
+.check { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--surface-2); cursor: pointer; }
+.check:has(input:checked) { border-color: var(--accent); background: var(--accent-2); }
+.check input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
+.check span { display: flex; flex-direction: column; gap: 2px; }
+.check small { font-size: 13px; color: var(--muted); line-height: 1.45; }
 .share { text-align: center; }
 .bigcode { font: 700 52px/1.1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .18em; margin: 4px 0 8px; color: var(--accent); }
 .linkrow { margin: 10px 0; }

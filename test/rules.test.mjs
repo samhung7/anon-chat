@@ -125,12 +125,13 @@ test("reactions: members toggle their own", async () => {
 test("private messages: only the two people read them", async () => {
   await createRoom("alice"); await join("bob"); await join("carol");
   const pair = "alice_bob";
-  await assertSucceeds(set(push(ref(db("bob"), `rooms/${C}/dm/${pair}`)), { by: "bob", to: "alice", text: "悄悄話", at: T }));
+  await assertFails(set(push(ref(db("bob"), `rooms/${C}/dm/${pair}`)), { by: "bob", to: "alice", text: "悄悄話", at: T })); // never in the clear
+  await assertSucceeds(set(push(ref(db("bob"), `rooms/${C}/dm/${pair}`)), { by: "bob", to: "alice", x: "c2VhbGVk", at: T }));
   await assertSucceeds(get(ref(db("alice"), `rooms/${C}/dm/${pair}`)));
   await assertSucceeds(get(ref(db("bob"), `rooms/${C}/dm/${pair}`)));
   await assertFails(get(ref(db("carol"), `rooms/${C}/dm/${pair}`)));
-  await assertFails(set(push(ref(db("carol"), `rooms/${C}/dm/${pair}`)), { by: "carol", to: "alice", text: "x", at: T }));
-  await assertFails(set(push(ref(db("bob"), `rooms/${C}/dm/bob_dave`)), { by: "bob", to: "dave", text: "x", at: T })); // dave isn't here
+  await assertFails(set(push(ref(db("carol"), `rooms/${C}/dm/${pair}`)), { by: "carol", to: "alice", x: "eA", at: T }));
+  await assertFails(set(push(ref(db("bob"), `rooms/${C}/dm/bob_dave`)), { by: "bob", to: "dave", x: "eA", at: T })); // dave isn't here
   await assertFails(get(ref(db("alice"), `rooms/${C}/dm`)));
 });
 
@@ -172,5 +173,41 @@ test("GIFs: only images hosted by KLIPY", async () => {
   await assertFails(gif("https://klipy.com.evil.example/x.gif"));
   await assertFails(gif("http://static.klipy.com/x.gif"));
   await assertFails(set(push(ref(db("bob"), `rooms/${C}/msgs`)), { by: "bob", name: "x", avatar: "🦊", at: T })); // neither text nor gif
-  await assertSucceeds(set(push(ref(db("bob"), `rooms/${C}/dm/alice_bob`)), { by: "bob", to: "alice", gif: { url: "https://static.klipy.com/x.gif", w: 1, h: 1 }, at: T }));
+});
+
+// an encrypted room: the server only ever holds ciphertext (x, xt) and keyed hashes of nicknames (h)
+const H = (n) => n.repeat(24).slice(0, 24);
+const encMember = (h) => ({ x: "c2VhbGVk", h, joined: T, online: true, pk: "cGs" });
+const createEnc = (uid) => update(ref(db(uid)), {
+  [`rooms/${C}`]: { meta: { owner: uid, created: T, last: T, priv: false, enc: true, kc: "0123456789abcdef", xt: "dGl0bGU" }, members: { [uid]: encMember(H("a")) }, names: { [H("a")]: uid } },
+});
+const joinEnc = (uid, h) => update(ref(db(uid)), { [`rooms/${C}/members/${uid}`]: encMember(h), [`rooms/${C}/names/${h}`]: uid, [`rooms/${C}/meta/last`]: T });
+
+test("encrypted room: only ciphertext and hashed nicknames", async () => {
+  await assertFails(update(ref(db("alice")), { [`rooms/${C}`]: { meta: { owner: "alice", created: T, last: T, priv: false, enc: true, title: "明文" }, members: { alice: encMember(H("a")) }, names: { [H("a")]: "alice" } } }));
+  await assertFails(update(ref(db("alice")), { [`rooms/${C}`]: { meta: { owner: "alice", created: T, last: T, priv: false, enc: true }, members: { alice: member("房主") }, names: { "房主": "alice" } } }));
+  await assertSucceeds(createEnc("alice"));
+  await assertFails(joinEnc("bob", H("a"))); // that nickname is taken
+  await assertFails(update(ref(db("bob")), { [`rooms/${C}/members/bob`]: member("bob"), [`rooms/${C}/names/bob`]: "bob" })); // plain nickname
+  await assertFails(joinEnc("bob", "not-a-hash"));
+  await assertSucceeds(joinEnc("bob", H("b")));
+  const msgs = ref(db("bob"), `rooms/${C}/msgs`);
+  await assertFails(set(push(msgs), { by: "bob", name: "x", avatar: "🦊", text: "明文", at: T }));
+  await assertFails(set(push(msgs), { by: "bob", x: "c2VhbGVk", text: "明文", at: T }));
+  await assertFails(set(push(msgs), { by: "bob", x: "not base64!", at: T }));
+  await assertSucceeds(set(push(msgs), { by: "bob", x: "c2VhbGVk", at: T }));
+  // the owner can't quietly turn encryption off
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { enc: false }));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/meta/enc`), null));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/locked`), true));
+  // after 24 idle hours the code can become an ordinary room again
+  await admin((d) => update(ref(d, `rooms/${C}/meta`), { last: Date.now() - 86400000 - 60000 }));
+  await assertSucceeds(createRoom("carol"));
+});
+
+test("ciphertext only in encrypted rooms", async () => {
+  await createRoom("alice"); await join("bob");
+  await assertFails(set(push(ref(db("bob"), `rooms/${C}/msgs`)), { by: "bob", x: "c2VhbGVk", at: T }));
+  await assertFails(update(ref(db("carol")), { [`rooms/${C}/members/carol`]: encMember(H("c")), [`rooms/${C}/names/${H("c")}`]: "carol" }));
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/members/bob/pk`), "cGs")); // publishing a public key
 });

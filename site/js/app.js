@@ -3,6 +3,8 @@
    A room is public (the code is enough) or private (the code plus a password). The owner can lock the room,
    remove people, delete messages and end the room, which deletes everything. A room nobody has written in
    for 24 hours is deleted too (see tools/cleanup). Anyone can export what they can see before it goes.
+   A room can also be end-to-end encrypted: its key travels only in the invite link (after the #), so the server
+   stores the title, nicknames and messages as ciphertext. Private messages are always end-to-end encrypted.
    Backend: Firebase Realtime Database + anonymous sign-in; database.rules.json is what actually enforces all of this. */
 (() => {
   const $ = (s, el = document) => el.querySelector(s);
@@ -70,7 +72,7 @@
   const confirmSheet = (title, text, ok, cls = "danger") => sheet(title, el("p", { class: "muted", text }), [["no", "取消"], ["yes", ok, cls]]).then((a) => a === "yes");
   const fmtTime = (t) => new Date(t).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", hour12: false });
   const fmtFull = (t) => new Date(t).toLocaleString("zh-TW", { hour12: false });
-  const roomUrl = (code) => location.origin + location.pathname + "?room=" + code;
+  const roomUrl = (code) => location.origin + location.pathname + "?room=" + code + (R?.c && store.get(ROOMKEY(code)) ? "#k=" + store.get(ROOMKEY(code)) : "");
   const now = () => Date.now() + offset; // server time
   const isOwner = () => !!R?.meta && R.meta.owner === uid;
   const pairKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
@@ -97,13 +99,127 @@
     return frag;
   }
 
+  /* ---------- end-to-end encryption (Web Crypto) ----------
+     Encrypted room: a random 256-bit key K, shared only through the link (#k=...), and kept on each device under
+     chat-key:{code}. From K come an AES-GCM key for content and an HMAC key for nickname claims and the key check.
+     Private messages: each device has an ECDH P-256 key pair (chat-dh); its public key sits on the member record,
+     and two people derive the same AES-GCM key. Every sealed value is bound to who it belongs to (AES-GCM
+     additional data), so the server can't move a message or a nickname onto someone else. */
+  const SUB = crypto.subtle, TE = new TextEncoder(), TD = new TextDecoder();
+  const b64u = (buf) => { let s = ""; new Uint8Array(buf).forEach((b) => (s += String.fromCharCode(b))); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+  const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+  const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
+  const KEY_RE = /#k=([A-Za-z0-9_-]{43})/;
+  const ROOMKEY = (code) => "chat-key:" + code;
+  const hkdf = async (bits, info, alg, use) => SUB.deriveKey({ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: TE.encode(info) },
+    await SUB.importKey("raw", bits, "HKDF", false, ["deriveKey"]), alg, false, use);
+  async function roomCrypto(raw) {
+    return {
+      aes: await hkdf(raw, "anon-chat room aes", { name: "AES-GCM", length: 256 }, ["encrypt", "decrypt"]),
+      mac: await hkdf(raw, "anon-chat room mac", { name: "HMAC", hash: "SHA-256", length: 256 }, ["sign"]),
+    };
+  }
+  const mac = async (c, s) => hex(await SUB.sign("HMAC", c.mac, TE.encode(s))).slice(0, 24);
+  const keyCheck = async (c) => (await mac(c, "key-check")).slice(0, 16);
+  async function seal(key, obj, aad) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await SUB.encrypt({ name: "AES-GCM", iv, additionalData: TE.encode(aad) }, key, TE.encode(JSON.stringify(obj))));
+    const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+    return b64u(out);
+  }
+  async function unseal(key, s, aad) {
+    try { const b = unb64u(s); return JSON.parse(TD.decode(await SUB.decrypt({ name: "AES-GCM", iv: b.slice(0, 12), additionalData: TE.encode(aad) }, key, b.slice(12)))); }
+    catch (e) { return null; }
+  }
+  // this device's key pair for private messages
+  let DH = null;
+  async function myDh() {
+    if (DH) return DH;
+    const EC = { name: "ECDH", namedCurve: "P-256" };
+    try {
+      const s = JSON.parse(store.get("chat-dh"));
+      if (s?.priv && s?.pub) return (DH = { priv: await SUB.importKey("jwk", s.priv, EC, false, ["deriveBits"]), pub: s.pub });
+    } catch (e) {}
+    const kp = await SUB.generateKey(EC, true, ["deriveBits"]);
+    const pub = b64u(await SUB.exportKey("raw", kp.publicKey));
+    store.set("chat-dh", JSON.stringify({ priv: await SUB.exportKey("jwk", kp.privateKey), pub }));
+    return (DH = { priv: kp.privateKey, pub });
+  }
+  // the key two people share for their private messages in this room (null if the other has no public key yet)
+  function dmKey(other) {
+    const pk = (R.raw[other] || R.rawSeen[other])?.pk;
+    if (!pk) return Promise.resolve(null);
+    const id = other + ":" + pk, code = R.code;
+    if (!R.dk.has(id)) R.dk.set(id, (async () => {
+      const theirs = await SUB.importKey("raw", unb64u(pk), { name: "ECDH", namedCurve: "P-256" }, false, []);
+      const bits = await SUB.deriveBits({ name: "ECDH", public: theirs }, (await myDh()).priv, 256);
+      return hkdf(bits, `anon-chat dm ${code} ${pairKey(uid, other)}`, { name: "AES-GCM", length: 256 }, ["encrypt", "decrypt"]);
+    })().catch(() => null));
+    return R.dk.get(id);
+  }
+  // the room's key if this device has the right one, asking for the invite link when it doesn't; false if they give up
+  async function unlock(code, meta) {
+    if (!meta.enc) return null;
+    let note = "";
+    for (;;) {
+      const raw = store.get(ROOMKEY(code));
+      if (raw) {
+        try { const c = await roomCrypto(unb64u(raw)); if ((await keyCheck(c)) === meta.kc) return c; } catch (e) {}
+        store.set(ROOMKEY(code), null);
+        note = "這個連結打不開這個聊天室，請確認是完整的邀請連結。";
+      }
+      busy(false);
+      const k = await askLink(code, note);
+      busy(true);
+      if (!k) return false;
+      store.set(ROOMKEY(code), k);
+    }
+  }
+  function askLink(code, note) {
+    const input = el("input", { class: "field", id: "joinLink", autocomplete: "off", placeholder: "貼上完整的邀請連結", "aria-label": "邀請連結" });
+    const body = el("div", {}, el("p", { class: "note warn", hidden: !note, text: note }),
+      el("p", { class: "muted", text: `聊天室 ${code} 有端對端加密，只有拿到完整連結或掃 QR code 的人才看得到內容。請向邀請你的人要連結，貼在這裡。` }), input);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) body.closest(".overlay")?.querySelector("[data-a=yes]").click(); });
+    return sheet("🔐 需要邀請連結", body, [["no", "取消"], ["yes", "加入", "primary"]], { onOpen: () => input.focus() })
+      .then((a) => (a === "yes" ? input.value.match(KEY_RE)?.[1] || (/^[A-Za-z0-9_-]{43}$/.test(input.value.trim()) ? input.value.trim() : "") : null))
+      .then((k) => (k === "" ? askLink(code, "這不是完整的邀請連結，連結的最後應該有一段 #k=…。") : k));
+  }
+  // a member record as stored: plain, or sealed in an encrypted room (c)
+  async function memberRec(c, id, m, extra) {
+    return c ? { x: await seal(c.aes, { n: m.name, a: m.avatar }, "u:" + id), h: await nkey(c, m.name), ...extra } : { name: m.name, avatar: m.avatar, ...extra };
+  }
+  async function openMember(id, m) {
+    if (!m?.x || !R.c) return m;
+    const p = (await unseal(R.c.aes, m.x, "u:" + id)) || {};
+    return { ...m, name: String(p.n || "？").slice(0, 24), avatar: String(p.a || "👤").slice(0, 8) };
+  }
+  // a message as shown: decrypted (or marked unreadable), everything else as stored
+  async function openMsg(v, dmWith) {
+    if (!v?.x) return v;
+    let p = R.plain.get(v.x);
+    if (p === undefined) {
+      const key = dmWith ? await dmKey(dmWith) : R.c?.aes;
+      p = key ? await unseal(key, v.x, (dmWith ? "d:" : "m:") + v.by) : null;
+      if (p) R.plain.set(v.x, p);
+    }
+    const out = { ...v }; delete out.x;
+    if (!p) return { ...out, text: dmWith ? "🔒 無法解密這則私訊" : "🔒 無法解密這則訊息", bad: true };
+    if (p.g && typeof p.g.url === "string") out.gif = { url: p.g.url.slice(0, 500), w: Math.min(+p.g.w || 200, 2000), h: Math.min(+p.g.h || 200, 2000), title: String(p.g.title || "").slice(0, 120) };
+    else out.text = String(p.t || "").slice(0, 1000);
+    if (!dmWith) { out.name = String(p.n || "？").slice(0, 24); out.avatar = String(p.a || "👤").slice(0, 8); }
+    return out;
+  }
+
   /* ---------- identity: nickname + animal, kept on this device ---------- */
   const me = () => { try { const m = JSON.parse(store.get(ME_KEY)); if (m && m.name) return m; } catch (e) {} return null; };
   // nicknames are unique per room, compared without case; Firebase keys can't hold . # $ [ ] /
   const cleanName = (n) => String(n || "").replace(/[.#$[\]/]/g, "").replace(/\s+/g, " ").trim().slice(0, 12);
   const nameKey = (n) => n.toLowerCase();
-  // the uid holding a nickname in a room, or null
-  const nameHolder = (code, name) => fb.get(roomRef(code, "names/" + nameKey(name))).then((s) => s.val(), () => null);
+  // the key a nickname is claimed under: the name itself, or in an encrypted room a keyed hash of it
+  const nkey = async (c, name) => (c ? mac(c, "name:" + nameKey(name)) : nameKey(name));
+  // the uid holding a claim in a room, or null
+  const holderOf = (code, k) => fb.get(roomRef(code, "names/" + k)).then((s) => s.val(), () => null);
+  const myKeyIn = (id) => (R.c ? R.raw[id]?.h : R.members[id] && nameKey(R.members[id].name)); // the claim someone holds now
   // inRoom: also rename in the room we're in (fails, and asks again, if someone there has that name)
   async function askMe(firstTime, note = "", inRoom = !firstTime) {
     const cur = me() || (() => { const [a, n] = AVATARS[(Math.random() * AVATARS.length) | 0]; return { avatar: a, name: n, auto: true }; })();
@@ -123,14 +239,16 @@
       if (a !== "yes") return null;
       const m = { avatar: pick, name: cleanName(input.value) || AVATARS.find((x) => x[0] === pick)[1] };
       if (inRoom && R && !R.gone && R.members[uid]) {
-        const old = R.members[uid].name;
-        const upd = { [`members/${uid}/name`]: m.name, [`members/${uid}/avatar`]: m.avatar, [`names/${nameKey(m.name)}`]: uid };
+        const oldK = myKeyIn(uid), newK = await nkey(R.c, m.name);
+        const rec = await memberRec(R.c, uid, m, {});
+        const upd = { [`names/${newK}`]: uid };
+        Object.entries(rec).forEach(([k, v]) => (upd[`members/${uid}/${k}`] = v));
         // give the old name back only if it's ours: in a room from before unique names, or with a
         // duplicate left over from then, someone else may hold it, and releasing it would fail the whole rename
-        if (nameKey(old) !== nameKey(m.name) && (await nameHolder(R.code, old)) === uid) upd[`names/${nameKey(old)}`] = null;
+        if (oldK && oldK !== newK && (await holderOf(R.code, oldK)) === uid) upd[`names/${oldK}`] = null;
         try { await fb.update(roomRef(R.code), upd); }
         catch (e) {
-          const holder = await nameHolder(R.code, m.name);
+          const holder = await holderOf(R.code, newK);
           warn.textContent = holder && holder !== uid ? `「${m.name}」在這個聊天室已經有人用了，換一個吧。` : "沒有改成功，請再試一次。";
           warn.hidden = false; input.value = m.name; continue;
         }
@@ -193,7 +311,11 @@
       seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-checked", String(x === b)));
       pwWrap.hidden = !priv; if (priv) pw.focus();
     });
-    const body = el("div", {}, el("label", { class: "lbl", for: "newTitle", text: "聊天室名稱" }), title, el("label", { class: "lbl", text: "誰可以加入" }), seg, pwWrap);
+    const enc = el("input", { type: "checkbox", id: "newEnc" });
+    const encRow = el("label", { class: "check", for: "newEnc" }, enc, el("span", {},
+      el("b", { text: "🔐 端對端加密" }),
+      el("small", { text: "名稱、暱稱和訊息只有拿到連結的人看得到，伺服器也看不到。只能用連結或 QR code 加入，光輸入 4 碼進不來。" })));
+    const body = el("div", {}, el("label", { class: "lbl", for: "newTitle", text: "聊天室名稱" }), title, el("label", { class: "lbl", text: "誰可以加入" }), seg, pwWrap, encRow);
     for (;;) {
       const a = await sheet("開新聊天室", body, [["no", "取消"], ["yes", "開始", "primary"]]);
       if (a !== "yes") return;
@@ -203,17 +325,22 @@
     busy(true);
     try {
       await connect();
+      const raw = enc.checked ? crypto.getRandomValues(new Uint8Array(32)) : null;
+      const c = raw && (await roomCrypto(raw));
+      const t = title.value.trim().slice(0, 40);
       for (let i = 0; i < 30; i++) {
         const code = Array.from({ length: 4 }, () => CODE_CHARS[(Math.random() * CODE_CHARS.length) | 0]).join("");
         const meta = { owner: uid, created: T(), last: T(), priv };
-        if (title.value.trim()) meta.title = title.value.trim().slice(0, 40);
+        if (c) { meta.enc = true; meta.kc = await keyCheck(c); if (t) meta.xt = await seal(c.aes, { t }, "t"); }
+        else if (t) meta.title = t;
         try {
           await fb.update(fb.ref(db), {
-            [`rooms/${code}`]: { meta, members: { [uid]: { name: m.name, avatar: m.avatar, joined: T(), online: true } }, names: { [nameKey(m.name)]: uid } },
+            [`rooms/${code}`]: { meta, members: { [uid]: await memberRec(c, uid, m, { joined: T(), online: true, pk: (await myDh()).pub }) }, names: { [await nkey(c, m.name)]: uid } },
             [`secrets/${code}`]: priv ? await hashPw(code, pw.value.trim()) : null,
           });
         } catch (e) { if (/permission/i.test(e.message)) continue; throw e; } // code in use: draw another
-        await enter(code);
+        if (raw) store.set(ROOMKEY(code), b64u(raw));
+        await enter(code, c);
         share();
         return;
       }
@@ -222,12 +349,15 @@
   }
 
   const cleanCode = (c) => {
-    c = String(c || "").match(/[?&]room=([0-9A-Za-z]{4})/)?.[1] || c; // a pasted link works as well as the code
+    c = String(c || "");
+    c = c.match(/[?&]room=([0-9A-Za-z]{4})/)?.[1] || c.replace(/#.*/, ""); // a pasted link works as well as the code
     return c.toUpperCase().replace(/[^0-9A-Z]/g, "");
   };
   async function join(raw) {
     const code = cleanCode(raw);
     if (code.length !== 4) { toast("代碼是 4 個字"); return; }
+    const linkKey = String(raw || "").match(KEY_RE)?.[1];
+    if (linkKey) store.set(ROOMKEY(code), linkKey); // a pasted invite link of an encrypted room
     if (R?.code === code && !R.gone) { showChat(); return; }
     busy(true);
     try {
@@ -236,12 +366,15 @@
       if (!meta || meta.last < now() - DAY) {
         toast("找不到這個聊天室，可能已經結束了");
         if (meta) fb.update(fb.ref(db), { [`rooms/${code}`]: null, [`secrets/${code}`]: null }).catch(() => {}); // expired: clear it out
+        store.set(ROOMKEY(code), null);
         if (store.get(ROOM_KEY) === code) { store.set(ROOM_KEY, null); showResume(); }
         return;
       }
+      const c = await unlock(code, meta);
+      if (c === false) return;
       // already inside (coming back)?
       const mine = await fb.get(roomRef(code, "members/" + uid)).then((s) => s.val(), () => null);
-      if (mine) { await enter(code); return; }
+      if (mine) { await enter(code, c); return; }
       if (await fb.get(roomRef(code, "banned/" + uid)).then((s) => s.val(), () => null)) { toast("你已經被房主移出這個聊天室"); return; }
       if (meta.locked) { toast("房主已經鎖住聊天室，暫時不能加入"); return; }
       busy(false);
@@ -257,10 +390,11 @@
         key = await hashPw(code, pw);
       }
       for (;;) {
-        const holder = await nameHolder(code, m.name);
+        const k = await nkey(c, m.name);
+        const holder = await holderOf(code, k);
         const upd = {
-          [`rooms/${code}/members/${uid}`]: { name: m.name, avatar: m.avatar, joined: T(), online: true },
-          [`rooms/${code}/names/${nameKey(m.name)}`]: uid,
+          [`rooms/${code}/members/${uid}`]: await memberRec(c, uid, m, { joined: T(), online: true, pk: (await myDh()).pub }),
+          [`rooms/${code}/names/${k}`]: uid,
           [`rooms/${code}/meta/last`]: T(),
         };
         if (key) upd[`rooms/${code}/keys/${uid}`] = key;
@@ -277,7 +411,7 @@
           toast(meta.priv ? "密碼不對" : "加入不了這個聊天室"); return;
         }
       }
-      await enter(code);
+      await enter(code, c);
     } catch (e) { failed(e); } finally { busy(false); }
   }
   function askPassword(meta, code) {
@@ -288,9 +422,12 @@
   }
 
   /* ---------- inside a room ---------- */
-  async function enter(code) {
+  async function enter(code, c) {
     leaveListeners();
-    R = { code, meta: null, members: {}, seen: {}, msgs: new Map(), dms: new Map(), view: "all", unread: {}, off: [], gone: false, ready: false };
+    // raw/rawSeen: member records as stored; members/seen: as shown (decrypted). Everything that arrives goes
+    // through one queue (q), so decrypting never reorders messages.
+    R = { code, c, meta: null, members: {}, seen: {}, raw: {}, rawSeen: {}, msgs: new Map(), dms: new Map(), plain: new Map(), dk: new Map(),
+          view: "all", unread: {}, off: [], gone: false, ready: false, q: Promise.resolve() };
     store.set(ROOM_KEY, code);
     history.replaceState(null, "", "?room=" + code + (EMU && params.get("as") ? "&as=" + params.get("as") : ""));
     $("#list").replaceChildren();
@@ -298,15 +435,22 @@
     const r = R;
     const on = (off) => r.off.push(off);
     const lost = (e) => { if (r === R) checkGone(); else console.warn(e); };
+    const queue = (fn) => (r.q = r.q.then(() => (r === R ? fn() : null)).catch((e) => console.error(e)));
+    R.queue = queue;
 
-    on(fb.onValue(roomRef(code, "meta"), (s) => {
-      if (r !== R) return;
+    on(fb.onValue(roomRef(code, "meta"), (s) => queue(async () => {
       if (!s.exists()) return gone("ended");
-      R.meta = s.val(); renderHeader();
-    }, lost));
-    on(fb.onValue(roomRef(code, "members"), (s) => {
-      if (r !== R) return;
-      const next = s.val() || {};
+      const meta = s.val();
+      if (R.c) meta.title = meta.xt ? (await unseal(R.c.aes, meta.xt, "t"))?.t || "" : "";
+      R.meta = meta; renderHeader();
+    }), lost));
+    on(fb.onValue(roomRef(code, "members"), (s) => queue(async () => {
+      const raw = s.val() || {};
+      const next = {};
+      for (const [id, m] of Object.entries(raw)) next[id] = await openMember(id, m);
+      R.raw = raw; Object.assign(R.rawSeen, JSON.parse(JSON.stringify(raw)));
+      const dh = await myDh();
+      if (raw[uid] && raw[uid].pk !== dh.pub) fb.set(roomRef(code, `members/${uid}/pk`), dh.pub).catch(() => {}); // members from before encrypted private messages
       if (R.ready) Object.entries(next).forEach(([id, m]) => { if (!R.members[id] && id !== uid) toast(`${m.avatar} ${m.name} 加入了`); });
       if (R.ready) Object.entries(R.members).forEach(([id, m]) => { if (!next[id] && id !== uid) toast(`${m.avatar} ${m.name} 離開了`); });
       R.members = next; R.ready = true;
@@ -314,11 +458,11 @@
       if (!next[uid]) return checkGone();
       Object.keys(next).forEach((id) => id !== uid && watchDm(id));
       renderHeader(); refreshNames();
-    }, lost));
+    }), lost));
     const q = fb.query(roomRef(code, "msgs"), fb.limitToLast(MAX_LOAD));
-    on(fb.onChildAdded(q, (s) => { if (r !== R) return; R.msgs.set(s.key, s.val()); if (R.view === "all") addMsg(s.key, s.val()); noteNew(s.val(), null); }, lost));
-    on(fb.onChildChanged(q, (s) => { if (r !== R) return; R.msgs.set(s.key, s.val()); if (R.view === "all") updateMsg(s.key, s.val()); }));
-    on(fb.onChildRemoved(q, (s) => { if (r !== R) return; R.msgs.delete(s.key); if (R.view === "all") document.getElementById("m-" + s.key)?.remove(); }));
+    on(fb.onChildAdded(q, (s) => queue(async () => { const v = await openMsg(s.val()); R.msgs.set(s.key, v); if (R.view === "all") addMsg(s.key, v); noteNew(v, null); }), lost));
+    on(fb.onChildChanged(q, (s) => queue(async () => { const v = await openMsg(s.val()); R.msgs.set(s.key, v); if (R.view === "all") updateMsg(s.key, v); })));
+    on(fb.onChildRemoved(q, (s) => queue(() => { R.msgs.delete(s.key); if (R.view === "all") document.getElementById("m-" + s.key)?.remove(); })));
 
     // online / offline
     const mine = roomRef(code, "members/" + uid + "/online");
@@ -337,9 +481,8 @@
     if (R.dms.has(other)) return;
     const box = new Map(); R.dms.set(other, box);
     const r = R;
-    R.off.push(fb.onChildAdded(fb.ref(db, `rooms/${R.code}/dm/${pairKey(uid, other)}`), (s) => {
-      if (r !== R) return;
-      const v = s.val(); box.set(s.key, v);
+    R.off.push(fb.onChildAdded(fb.ref(db, `rooms/${R.code}/dm/${pairKey(uid, other)}`), (s) => r.queue(async () => {
+      const v = await openMsg(s.val(), other); box.set(s.key, v);
       if (R.view === other) { addMsg(s.key, v, true); markRead(other, v.at); }
       else if (v.by !== uid && v.at > lastRead(other)) {
         R.unread[other] = (R.unread[other] || 0) + 1;
@@ -347,7 +490,7 @@
         renderHeader();
       }
       noteNew(v, other);
-    }, () => {}));
+    }), () => {}));
   }
   function noteNew(v, dmWith) {
     if (v.by === uid || !document.hidden || !R.ready) return;
@@ -370,7 +513,7 @@
   async function gone(why) {
     if (!R || R.gone) return;
     R.gone = true; leaveListeners();
-    store.set(ROOM_KEY, null);
+    store.set(ROOM_KEY, null); store.set(ROOMKEY(R.code), null);
     if (why === "self") return home();
     const text = { ended: "聊天室已經結束（房主結束了，或超過 24 小時沒人說話），訊息都已刪除。", kicked: "房主把你移出了這個聊天室。", left: "你已經不在這個聊天室裡了。" }[why];
     $("#composer").classList.add("off");
@@ -388,7 +531,7 @@
     if (!R) return;
     const meta = R.meta || {};
     $("#roomTitle").textContent = meta.title || "聊天室";
-    $("#codeBtn").textContent = (meta.priv ? "🔒 " : "") + R.code + (meta.locked ? " · 已鎖" : "");
+    $("#codeBtn").textContent = (meta.enc ? "🔐 " : "") + (meta.priv ? "🔒 " : "") + R.code + (meta.locked ? " · 已鎖" : "");
     const list = Object.values(R.members || {});
     $("#peopleBtn .n").textContent = list.filter((m) => m.online !== false).length;
     $("#peopleBtn .dot").hidden = !Object.values(R.unread).some((n) => n > 0);
@@ -453,7 +596,7 @@
       $("#text").placeholder = "說點什麼…";
     } else {
       const box = R.dms.get(R.view) || new Map();
-      if (!box.size) list.append(el("p", { class: "empty", text: "私訊只有你們兩個看得到，房主也看不到。" }));
+      if (!box.size) list.append(el("p", { class: "empty", text: "私訊有端對端加密，只有你們兩個看得到，房主和伺服器都看不到。" }));
       box.forEach((v, id) => { list.append(bubble(id, v, true)); markRead(R.view, v.at); });
       R.unread[R.view] = 0;
       $("#text").placeholder = `私訊給 ${nameOf(R.view)}…`;
@@ -472,16 +615,20 @@
     text = (text || "").trim().slice(0, 1000);
     if ((!text && !gif) || !R || R.gone) return false;
     const body = gif ? { gif } : { text };
+    const sealed = gif ? { g: gif } : { t: text };
     const m = R.members[uid] || me(); // the name this room knows me by
     const base = `rooms/${R.code}`;
     const upd = { [`${base}/meta/last`]: T() };
     if (R.view === "all") {
       const id = fb.push(fb.ref(db, base + "/msgs")).key;
-      upd[`${base}/msgs/${id}`] = { by: uid, name: m.name, avatar: m.avatar, ...body, at: T() };
+      upd[`${base}/msgs/${id}`] = R.c ? { by: uid, x: await seal(R.c.aes, { ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T() }
+        : { by: uid, name: m.name, avatar: m.avatar, ...body, at: T() };
     } else {
       if (!R.members[R.view]) { toast("對方已經離開聊天室了"); return false; }
+      const key = await dmKey(R.view);
+      if (!key) { toast("對方的頁面還是舊版，請對方重新整理後再傳私訊"); return false; }
       const p = `${base}/dm/${pairKey(uid, R.view)}`;
-      upd[`${p}/${fb.push(fb.ref(db, p)).key}`] = { by: uid, to: R.view, ...body, at: T() };
+      upd[`${p}/${fb.push(fb.ref(db, p)).key}`] = { by: uid, to: R.view, x: await seal(key, sealed, "d:" + uid), at: T() };
     }
     $("#list .empty")?.remove();
     fb.update(fb.ref(db), upd).catch((e) => { console.error(e); toast("送不出去，請檢查網路"); });
@@ -496,7 +643,7 @@
       const on = !!v.re?.[k]?.[uid];
       return el("button", { type: "button", class: "chip big" + (on ? " on" : ""), "data-a": "re" + k, text: emo });
     }));
-    const btns = v.gif ? [] : [["copy", "複製文字"]];
+    const btns = v.gif || v.bad ? [] : [["copy", "複製文字"]];
     if (!dm && v.by !== uid && R.members[v.by]) btns.push(["dm", "私訊 " + author(v).name]);
     if (canDel) btns.push(["del", "刪除訊息", "danger"]);
     const body = el("div", {}, v.gif ? el("div", { class: "quote gifq" }, gifImg(v.gif)) : el("blockquote", { class: "quote", text: v.text.length > 140 ? v.text.slice(0, 140) + "…" : v.text }), reacts);
@@ -515,7 +662,7 @@
     const qrBox = el("div", { class: "qr", "aria-label": "QR Code" }); qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
     const body = el("div", { class: "share" },
       el("div", { class: "bigcode", text: R.code }),
-      el("p", { class: "muted", text: R.meta?.priv ? "這是私人聊天室：對方輸入 4 碼後還需要你設定的密碼。" : "把 4 碼或連結傳給大家，打開就能加入。" }),
+      el("p", { class: "muted", text: (R.c ? "🔐 這是加密聊天室：要用這個連結或 QR code 才能加入，光輸入 4 碼進不來。" : "把 4 碼或連結傳給大家，打開就能加入。") + (R.meta?.priv ? "對方還需要輸入你設定的密碼。" : "") }),
       el("div", { class: "linkrow" }, el("input", { class: "field", readonly: true, value: url, "aria-label": "連結", onfocus: (e) => e.target.select() })),
       qrBox);
     const btns = [["copy", "複製連結", "primary"]];
@@ -550,8 +697,8 @@
       if (what === "dm") return openDm(id);
       const m = R.members[id];
       if (m && (await confirmSheet(`移出 ${m.avatar} ${m.name}？`, "對方會馬上離開，而且不能再用這個裝置回來。", "移出"))) {
-        const release = (await nameHolder(R.code, m.name)) === id; // don't free a name someone else still uses
-        fb.update(roomRef(R.code), { [`members/${id}`]: null, ...(release ? { [`names/${nameKey(m.name)}`]: null } : {}), [`banned/${id}`]: true }).then(() => toast(`已移出 ${m.name}`), () => toast("移不出去，請再試一次"));
+        const k = myKeyIn(id), release = k && (await holderOf(R.code, k)) === id; // don't free a name someone else still uses
+        fb.update(roomRef(R.code), { [`members/${id}`]: null, ...(release ? { [`names/${k}`]: null } : {}), [`banned/${id}`]: true }).then(() => toast(`已移出 ${m.name}`), () => toast("移不出去，請再試一次"));
       }
     });
   }
@@ -571,10 +718,9 @@
     if (a === "leave" && (await confirmSheet("離開聊天室？", "離開後就看不到新的訊息了。" + (R.meta?.priv ? "要回來得再輸入一次密碼。" : ""), "離開"))) {
       const code = R.code;
       R.gone = true; leaveListeners();
-      const mine = R.members[uid];
-      const release = mine && (await nameHolder(code, mine.name)) === uid; // same reason as in askMe
-      await fb.update(fb.ref(db), { [`rooms/${code}/members/${uid}`]: null, [`rooms/${code}/keys/${uid}`]: null, ...(release ? { [`rooms/${code}/names/${nameKey(mine.name)}`]: null } : {}) }).catch(() => {});
-      R = null; store.set(ROOM_KEY, null); home();
+      const k = myKeyIn(uid), release = k && (await holderOf(code, k)) === uid; // same reason as in askMe
+      await fb.update(fb.ref(db), { [`rooms/${code}/members/${uid}`]: null, [`rooms/${code}/keys/${uid}`]: null, ...(release ? { [`rooms/${code}/names/${k}`]: null } : {}) }).catch(() => {});
+      R = null; store.set(ROOM_KEY, null); store.set(ROOMKEY(code), null); home();
     }
     if (a === "end") endRoom();
   }
@@ -586,7 +732,7 @@
     R.gone = true; leaveListeners();
     try { await fb.update(fb.ref(db), { [`rooms/${code}`]: null, [`secrets/${code}`]: null }); toast("聊天室已結束，訊息都刪除了"); }
     catch (e) { failed(e); }
-    R = null; store.set(ROOM_KEY, null); home();
+    R = null; store.set(ROOM_KEY, null); store.set(ROOMKEY(code), null); home();
   }
 
   /* ---------- export, and saved records ----------
@@ -874,8 +1020,10 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
       await connect();
       const meta = (await fb.get(roomRef(code, "meta"))).val();
       if (!meta || meta.last < now() - DAY) { store.set(ROOM_KEY, null); return; }
-      $(".code", box).textContent = code;
-      $(".sub", box).textContent = meta.title ? "「" + meta.title + "」" : "";
+      let t = meta.title || "";
+      if (meta.enc) { try { t = (await unseal((await roomCrypto(unb64u(store.get(ROOMKEY(code))))).aes, meta.xt, "t"))?.t || ""; } catch (e) { t = ""; } }
+      $(".code", box).textContent = (meta.enc ? "🔐 " : "") + code;
+      $(".sub", box).textContent = t ? "「" + t + "」" : "";
       box.hidden = false;
     } catch (e) {}
   }
@@ -925,5 +1073,5 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
   });
 
   const start = params.get("room");
-  if (start && FB?.databaseURL) join(start); else home();
+  if (start && FB?.databaseURL) join(start + location.hash); else home(); // an encrypted room's key rides after the #
 })();

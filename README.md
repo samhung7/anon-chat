@@ -4,6 +4,7 @@ Open a room, get a 4-character code, and share the code or link. Anyone with it 
 Made for lecture Q&A, anonymous reading groups, online Werewolf and group-project discussions. Interface: 繁體中文.
 
 - **Rooms**: public (the code is enough) or private (code plus a password the owner sets). Join by code, by link or by QR code.
+- **End-to-end encryption**: private messages are always end-to-end encrypted. A room can also be opened as encrypted: its key travels only in the invite link and QR code (after the `#`, which browsers never send to a server), so the database holds the title, nicknames and messages only as ciphertext. People need the full link to join; the 4-character code alone isn't enough. See below.
 - **Identity**: a nickname and an animal, kept on the device. Nicknames are unique within a room (ignoring case). Behind the scenes each device gets an anonymous Firebase id.
 - **Chat**: live messages, links, an emoji picker, GIF search (KLIPY), six reactions, who's here and who's online, private messages between two people (the owner can't read those either).
 - **Owner**: lock the room to newcomers, remove someone (they can't come back from that device), end the room. People delete only their own messages.
@@ -29,14 +30,26 @@ Data in the Realtime Database:
 
 ```
 rooms/{code}/meta           owner, title, created, last (last activity), priv, locked   readable by any signed-in device
-rooms/{code}/members/{uid}  name, avatar, joined, online                               members only
-rooms/{code}/names/{name}   uid holding that nickname (lowercased)                       any signed-in device
+                            encrypted room: enc, kc (key check), xt (sealed title) instead of title
+rooms/{code}/members/{uid}  name, avatar, joined, online, pk (public key for private messages)   members only
+                            encrypted room: x (sealed name and avatar), h (keyed hash of the name) instead of name, avatar
+rooms/{code}/names/{key}    uid holding that nickname: the lowercased name, or h in an encrypted room   any signed-in device
 rooms/{code}/msgs/{id}      by, name, avatar, text or gif{url,w,h,title}, at, re/{0-5}/{uid}  members only
-rooms/{code}/dm/{uidA_uidB}/{id}  by, to, text, at                                     those two only
+                            encrypted room: by, x (sealed text or gif, name, avatar), at, re
+rooms/{code}/dm/{uidA_uidB}/{id}  by, to, x (sealed text or gif), at                    those two only
 rooms/{code}/keys/{uid}     the password hash a member joined with                     nobody reads it
 rooms/{code}/banned/{uid}   people the owner removed
 secrets/{code}              a private room's password hash                             nobody reads it; the rules compare against it
 ```
+
+## Encryption
+
+All of it uses the browser's Web Crypto API; nothing extra is loaded.
+
+- **Encrypted room**: the creator's browser makes a random 256-bit key and puts it in the invite link as `#k=…`. From it come an AES-GCM key (title, nicknames, messages) and an HMAC key (nickname claims, and `kc`, which lets a joiner tell a wrong link from a right one). Each device keeps the key under `chat-key:{code}` until it leaves or the room ends.
+- **Private messages**: each device has an ECDH P-256 key pair (`chat-dh`); the public half is on its member record, and two people derive the same AES-GCM key for their conversation in that room.
+- Every sealed value is bound to its author (AES-GCM additional data), so the server can't move a message or a nickname onto someone else. The rules refuse plaintext in an encrypted room, refuse private messages without ciphertext, and don't let the owner switch encryption off.
+- What the server still sees: who is in a room, when they write, how long a message is, who has private messages with whom, and reactions. There is no safety-number check yet, so a compromised server could swap public keys; and like any web app, whoever controls the page's code could read keys.
 
 ## Develop
 
