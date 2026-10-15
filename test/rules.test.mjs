@@ -89,6 +89,14 @@ test("locked room lets nobody new in, but members stay", async () => {
   await assertSucceeds(update(ref(db("bob"), `rooms/${C}/members/bob`), { online: false }));
 });
 
+test("only the owner renames the room", async () => {
+  await createRoom("alice"); await join("bob");
+  await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { title: "bob 的房間" }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { title: "週三讀書會" }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { title: "x".repeat(41) }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { title: null }));
+});
+
 test("owner removes someone, who can't come back", async () => {
   await createRoom("alice"); await join("bob"); await join("carol");
   await assertFails(update(ref(db("carol"), `rooms/${C}`), { "members/bob": null, "banned/bob": true }));
@@ -200,6 +208,11 @@ test("encrypted room: only ciphertext and hashed nicknames", async () => {
   await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { enc: false }));
   await assertFails(set(ref(db("alice"), `rooms/${C}/meta/enc`), null));
   await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/locked`), true));
+  // renaming keeps the title sealed
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { title: "明文" }));
+  await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { xt: "bmV3" }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { xt: "bmV3" }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { xt: null }));
   // after 24 idle hours the code can become an ordinary room again
   await admin((d) => update(ref(d, `rooms/${C}/meta`), { last: Date.now() - 86400000 - 60000 }));
   await assertSucceeds(createRoom("carol"));

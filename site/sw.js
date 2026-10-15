@@ -14,3 +14,12 @@ self.addEventListener("fetch", (e) => {
     return res;
   }).catch(() => caches.match(req, { ignoreSearch: true })));
 });
+// tapping a new-message notification opens (or brings back) the chat
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = e.notification.data?.url || "./";
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    const open = list.find((c) => c.url.split("#")[0].split("?")[0] === url.split("#")[0].split("?")[0]);
+    return open ? open.focus() : self.clients.openWindow(url);
+  }));
+});
