@@ -53,8 +53,16 @@ names_write = j("auth != null", o(
     j("newData.val() === auth.uid", o("!data.exists()", "data.val() === auth.uid", holder_gone)),
     j("!newData.exists()", o("data.val() === auth.uid", holder_gone, f"{ROOM}.child('meta/owner').val() === auth.uid")),
 ))
-name_rule = {".validate": j(S(24), "newData.val().length > 0", r"!newData.val().matches(/[.#$\[\]\/]/)",
+# An encrypted room (meta/enc) keeps its title, nicknames and messages as ciphertext ("x", "xt") sealed with a key
+# that only travels in the invite link; the server can check sizes and who wrote what, never the content.
+ENC = lambda room: f"({room}.child('meta/enc').val() === true)"
+MEMBER_ROOM = "newData.parent().parent().parent()"   # from rooms/$code/members/$uid/<field>
+name_rule = {".validate": j(S(24), "newData.val().length > 0", r"!newData.val().matches(/[.#$\[\]\/]/)", "!" + ENC(MEMBER_ROOM),
                             "newData.parent().parent().parent().child('names/' + newData.val().toLowerCase()).val() === $uid")}
+# in an encrypted room the nickname's claim is a keyed hash of it (h), so names stay unique without the server seeing them
+hash_rule = {".validate": j(S(24), r"newData.val().matches(/^[0-9a-f]{24}$/)", ENC(MEMBER_ROOM),
+                            f"{MEMBER_ROOM}.child('names/' + newData.val()).val() === $uid")}
+SEALED = lambda n: S(n) + r" && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
 # a GIF picked from the KLIPY search; only images hosted by KLIPY, so nobody can post an arbitrary tracking image
 GIF = {
     ".validate": "newData.hasChildren(['url', 'w', 'h'])",
@@ -74,23 +82,31 @@ rules = {"rules": {
             "meta": {
                 ".read": "auth != null",
                 ".write": "auth != null && data.child('owner').val() === auth.uid",
-                ".validate": "newData.hasChildren(['owner', 'created', 'last', 'priv'])",
+                # once encrypted, a room stays encrypted (until its code is reused after 24 idle hours)
+                ".validate": j("newData.hasChildren(['owner', 'created', 'last', 'priv'])",
+                               o("!data.child('enc').exists()", "newData.child('enc').val() === data.child('enc').val()", f"data.child('last').val() < now - {DAY}")),
                 "owner": {".validate": "newData.isString() && (newData.val() === auth.uid || newData.val() === data.val())"},
                 "created": {".validate": "newData.isNumber()"},
                 "last": {".write": f"auth != null && newData.parent().parent().child('members/' + auth.uid).exists()",
                          ".validate": "newData.val() === now"},
                 "priv": {".validate": "newData.isBoolean()"},
                 "locked": {".validate": "newData.isBoolean()"},
-                "title": {".validate": S(40)},
+                "title": {".validate": S(40) + " && newData.parent().child('enc').val() !== true"},
+                "enc": {".validate": "newData.isBoolean()"},
+                "kc": {".validate": S(32)},   # lets a joiner tell a wrong key from a right one
+                "xt": {".validate": SEALED(400) + " && newData.parent().child('enc').val() === true"},
                 "$other": NO,
             },
             "members": {
                 ".read": "auth != null && data.child(auth.uid).exists()",
                 "$uid": {
                     ".write": j("auth != null", member_write),
-                    ".validate": "newData.hasChildren(['name', 'avatar', 'joined'])",
+                    ".validate": "newData.hasChild('joined') && (newData.hasChildren(['name', 'avatar']) || newData.hasChildren(['x', 'h']))",
                     "name": name_rule,
-                    "avatar": {".validate": S(8)},
+                    "avatar": {".validate": S(8) + " && !" + ENC(MEMBER_ROOM)},
+                    "x": {".validate": SEALED(600) + " && " + ENC(MEMBER_ROOM)},
+                    "h": hash_rule,
+                    "pk": {".validate": SEALED(120)},   # public key for end-to-end encrypted private messages
                     "joined": {".validate": "newData.isNumber()"},
                     "online": {".validate": "newData.isBoolean()"},
                     "$other": NO,
@@ -109,12 +125,15 @@ rules = {"rules": {
                 ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
                 "$id": {
                     ".write": msg_write,
-                    ".validate": "newData.hasChildren(['by', 'name', 'avatar', 'at']) && (newData.hasChild('text') || newData.hasChild('gif'))",
+                    ".validate": j("newData.hasChildren(['by', 'at'])", o(
+                        j(ENC("newData.parent().parent()"), "newData.hasChild('x')"),
+                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", "newData.hasChild('text') || newData.hasChild('gif')"))),
                     "by": {".validate": "newData.isString()"},
-                    "name": {".validate": S(24)},
-                    "avatar": {".validate": S(8)},
-                    "text": {".validate": S(1000) + " && newData.val().length > 0"},
-                    "gif": GIF,
+                    "name": {".validate": S(24) + " && !" + ENC(MEMBER_ROOM)},
+                    "avatar": {".validate": S(8) + " && !" + ENC(MEMBER_ROOM)},
+                    "text": {".validate": S(1000) + " && newData.val().length > 0 && !" + ENC(MEMBER_ROOM)},
+                    "gif": dict(GIF, **{".validate": GIF[".validate"] + " && !" + ENC(MEMBER_ROOM)}),
+                    "x": {".validate": SEALED(4000)},
                     "at": {".validate": "newData.val() === now || newData.val() === data.val()"},
                     "re": {"$k": {
                         ".validate": "$k.matches(/^[0-5]$/)",
@@ -127,11 +146,11 @@ rules = {"rules": {
                 ".read": "auth != null && ($pair.beginsWith(auth.uid + '_') || $pair.endsWith('_' + auth.uid)) && " + is_member("data.parent().parent()"),
                 "$id": {
                     ".write": dm_write,
-                    ".validate": "newData.hasChildren(['by', 'to', 'at']) && (newData.hasChild('text') || newData.hasChild('gif'))",
+                    # private messages are always end-to-end encrypted (a key the two derive from each other's pk)
+                    ".validate": "newData.hasChildren(['by', 'to', 'at', 'x'])",
                     "by": {".validate": "newData.isString()"},
                     "to": {".validate": "newData.isString()"},
-                    "text": {".validate": S(1000) + " && newData.val().length > 0"},
-                    "gif": GIF,
+                    "x": {".validate": SEALED(4000)},
                     "at": {".validate": "newData.val() === now"},
                     "$other": NO,
                 }}},
