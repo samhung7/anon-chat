@@ -595,7 +595,8 @@
       v.gif ? el("div", { class: "bub gifbub" }, gifImg(v.gif)) : el("div", { class: "bub" }, linkify(v.text || "")),
       dm ? null : el("div", { class: "re" }));
     if (!dm) fillReacts(node, v);
-    node.addEventListener("click", (e) => { if (!e.target.closest("a, .re, .rpq")) msgActions(id, v, dm); });
+    // only the bubble itself opens the actions; the name line and the empty space beside it do nothing
+    node.addEventListener("click", (e) => { if (e.target.closest(".bub") && !e.target.closest("a")) msgActions(id, v, dm); });
     return node;
   }
   // one line naming a message: who, and the start of what they said
