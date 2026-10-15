@@ -19,7 +19,7 @@
   const EMU = !!store.get("chat-emu");
   const FB = EMU ? { apiKey: "demo-key", projectId: "demo-anon-chat", databaseURL: `http://${location.hostname}:9000?ns=demo-anon-chat` } : CFG.firebase;
   const SDK = new URL("js/vendor/firebase.js", location.href).href;
-  const ME_KEY = "chat-me", ROOM_KEY = "chat-room";
+  const ME_KEY = "chat-me", ROOMS_KEY = "chat-rooms";
   const AVATARS = [["🐻", "小熊"], ["🦊", "狐狸"], ["🐼", "熊貓"], ["🐯", "老虎"], ["🦁", "獅子"], ["🐸", "青蛙"], ["🐵", "猴子"], ["🐧", "企鵝"], ["🦉", "貓頭鷹"], ["🐙", "章魚"], ["🦄", "獨角獸"], ["🐶", "小狗"], ["🐱", "小貓"], ["🐰", "兔子"], ["🐨", "無尾熊"], ["🐲", "小龍"]];
   const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // no 0/O, 1/I/L
   const REACTS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
@@ -262,7 +262,6 @@
   function showMe() {
     const m = me();
     $("#meBtn .av").textContent = m ? m.avatar : "🙂";
-    $("#meBtn .nm").textContent = m ? m.name : "選身分";
   }
 
   /* ---------- Firebase ---------- */
@@ -367,7 +366,7 @@
         toast("找不到這個聊天室，可能已經結束了");
         if (meta) fb.update(fb.ref(db), { [`rooms/${code}`]: null, [`secrets/${code}`]: null }).catch(() => {}); // expired: clear it out
         store.set(ROOMKEY(code), null);
-        if (store.get(ROOM_KEY) === code) { store.set(ROOM_KEY, null); showResume(); }
+        forgetRoom(code); if (!$("#home").hidden) showResume();
         return;
       }
       const c = await unlock(code, meta);
@@ -428,7 +427,7 @@
     // through one queue (q), so decrypting never reorders messages.
     R = { code, c, meta: null, members: {}, seen: {}, raw: {}, rawSeen: {}, msgs: new Map(), dms: new Map(), plain: new Map(), dk: new Map(),
           view: "all", unread: {}, off: [], gone: false, ready: false, q: Promise.resolve() };
-    store.set(ROOM_KEY, code);
+    rememberRoom(code);
     history.replaceState(null, "", "?room=" + code + (EMU && params.get("as") ? "&as=" + params.get("as") : ""));
     $("#list").replaceChildren();
     showChat();
@@ -513,7 +512,7 @@
   async function gone(why) {
     if (!R || R.gone) return;
     R.gone = true; leaveListeners();
-    store.set(ROOM_KEY, null); store.set(ROOMKEY(R.code), null);
+    forgetRoom(R.code); store.set(ROOMKEY(R.code), null);
     if (why === "self") return home();
     const text = { ended: "聊天室已經結束（房主結束了，或超過 24 小時沒人說話），訊息都已刪除。", kicked: "房主把你移出了這個聊天室。", left: "你已經不在這個聊天室裡了。" }[why];
     $("#composer").classList.add("off");
@@ -720,7 +719,7 @@
       R.gone = true; leaveListeners();
       const k = myKeyIn(uid), release = k && (await holderOf(code, k)) === uid; // same reason as in askMe
       await fb.update(fb.ref(db), { [`rooms/${code}/members/${uid}`]: null, [`rooms/${code}/keys/${uid}`]: null, ...(release ? { [`rooms/${code}/names/${k}`]: null } : {}) }).catch(() => {});
-      R = null; store.set(ROOM_KEY, null); store.set(ROOMKEY(code), null); home();
+      R = null; forgetRoom(code); store.set(ROOMKEY(code), null); home();
     }
     if (a === "end") endRoom();
   }
@@ -732,7 +731,7 @@
     R.gone = true; leaveListeners();
     try { await fb.update(fb.ref(db), { [`rooms/${code}`]: null, [`secrets/${code}`]: null }); toast("聊天室已結束，訊息都刪除了"); }
     catch (e) { failed(e); }
-    R = null; store.set(ROOM_KEY, null); store.set(ROOMKEY(code), null); home();
+    R = null; forgetRoom(code); store.set(ROOMKEY(code), null); home();
   }
 
   /* ---------- export, and saved records ----------
@@ -836,21 +835,37 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
       list.unshift({ id, title: a.title, code: a.code, exported: a.exported, n: countOf(a) });
       localStorage.setItem(REC_LIST, JSON.stringify(list));
     } catch (e) { toast("這台裝置的空間不夠，請改用下載檔案"); return null; }
-    if (!quiet) toast("已存到「我的聊天記錄」");
-    showRecords();
+    if (!quiet) toast("已存到「我的聊天記錄」（右上角選單）");
     return id;
   }
   function deleteRecord(id) {
     store.set(REC(id), null);
     try { localStorage.setItem(REC_LIST, JSON.stringify(records().filter((r) => r.id !== id))); } catch (e) {}
-    showRecords();
   }
-  function showRecords() {
-    const list = records(), box = $("#records .reclist");
-    box.replaceChildren(...list.map((r) => el("li", {},
-      el("button", { type: "button", class: "rec", "data-open": r.id },
-        el("b", { text: r.title }), el("small", { text: `${r.code ? "代碼 " + r.code + " · " : ""}${r.n} 則 · ${new Date(r.exported).toLocaleDateString("zh-TW")}` })))));
-    $("#records .none").hidden = list.length > 0;
+  // the menu behind the ☰ button on the home screen: who I am, and my saved records
+  function homeMenu() {
+    const m = me(), list = records();
+    const body = el("div", { class: "hmenu" },
+      el("button", { type: "button", class: "merow", "data-a": "me" },
+        el("span", { class: "av", text: m ? m.avatar : "🙂" }),
+        el("span", { class: "txt" }, el("b", { text: m ? m.name : "還沒選身分" }), el("small", { text: "修改暱稱和頭像" })),
+        el("span", { class: "chev", text: "›" })),
+      el("h3", { text: "我的聊天記錄" }),
+      list.length ? el("ul", { class: "reclist" }, list.map((r) => el("li", {},
+        el("button", { type: "button", class: "rec", "data-open": r.id },
+          el("b", { text: r.title }), el("small", { text: `${r.code ? "代碼 " + r.code + " · " : ""}${r.n} 則 · ${new Date(r.exported).toLocaleDateString("zh-TW")}` })))))
+        : el("p", { class: "muted small", text: "聊天室結束前存下來的記錄會放在這裡，也可以匯入之前下載的 JSON 或網頁檔。記錄只會存在這台裝置上。" }),
+      el("button", { type: "button", class: "btn wide", "data-a": "import", text: "📂 匯入聊天記錄檔" }));
+    sheet("選單", body, [["close", "關閉"]], {
+      onOpen: (ov) => body.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-a], [data-open]"); if (!b) return;
+        if (b.dataset.a === "import") $("#importFile").click(); // right inside the tap, or the file picker may not open
+        ov.close(b.dataset.open ? "open:" + b.dataset.open : b.dataset.a);
+      }),
+    }).then((a) => {
+      if (a === "me") askMe(false);
+      else if (a?.startsWith("open:")) openRecord(null, a.slice(5));
+    });
   }
   async function importFile(file) {
     if (!file) return;
@@ -991,8 +1006,15 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
       try {
         const list = await klipy(input.value.trim());
         if (mine !== n) return;
-        grid.replaceChildren(...(list.length ? list.map((g) => el("button", { type: "button", class: "gifpick", title: g.send.title, onclick: () => { send("", g.send); closePicker(); } },
-          el("img", { src: g.show.url, alt: g.send.title || "GIF", loading: "lazy", referrerpolicy: "no-referrer" }))) : [el("p", { class: "muted small", text: "找不到相關的 GIF" })]));
+        if (!list.length) { grid.replaceChildren(el("p", { class: "muted small", text: "找不到相關的 GIF" })); return; }
+        // two columns that scroll down; each GIF goes to the shorter column
+        const cols = [el("div", { class: "gifcol" }), el("div", { class: "gifcol" })], tall = [0, 0];
+        list.forEach((g) => {
+          const i = tall[0] <= tall[1] ? 0 : 1; tall[i] += g.show.h / g.show.w;
+          cols[i].append(el("button", { type: "button", class: "gifpick", title: g.send.title, onclick: () => { send("", g.send); closePicker(); } },
+            el("img", { src: g.show.url, width: g.show.w, height: g.show.h, alt: g.send.title || "GIF", loading: "lazy", referrerpolicy: "no-referrer" })));
+        });
+        grid.replaceChildren(...cols); grid.scrollTop = 0;
       } catch (e) { console.error(e); if (mine === n) grid.replaceChildren(el("p", { class: "muted small", text: "GIF 搜尋暫時無法使用" })); }
     };
     let t = 0;
@@ -1012,37 +1034,60 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
     history.replaceState(null, "", location.pathname + (EMU && params.get("as") ? "?as=" + params.get("as") : ""));
     showResume();
   }
+  // rooms this device is in, most recently entered first
+  const myRooms = () => { try { const l = JSON.parse(store.get(ROOMS_KEY)); return Array.isArray(l) ? l.filter((c) => /^[2-9A-HJKMNP-Z]{4}$/.test(c)) : []; } catch (e) { return []; } };
+  const rememberRoom = (code) => store.set(ROOMS_KEY, JSON.stringify([code, ...myRooms().filter((c) => c !== code)].slice(0, 30)));
+  const forgetRoom = (code) => store.set(ROOMS_KEY, JSON.stringify(myRooms().filter((c) => c !== code)));
+  { const old = store.get("chat-room"); if (old) { if (!myRooms().includes(old)) store.set(ROOMS_KEY, JSON.stringify([old, ...myRooms()])); store.set("chat-room", null); } } // before the list
+  const PAGE = 5;
+  let resumePage = 0, resumeRows = [], resumeSeq = 0;
   async function showResume() {
-    const code = store.get(ROOM_KEY), box = $("#resume");
-    box.hidden = true;
-    if (!code || !FB?.databaseURL) return;
-    try {
-      await connect();
-      const meta = (await fb.get(roomRef(code, "meta"))).val();
-      if (!meta || meta.last < now() - DAY) { store.set(ROOM_KEY, null); return; }
+    const seq = ++resumeSeq, codes = myRooms();
+    if (!codes.length || !FB?.databaseURL) { $("#resume").hidden = true; return; }
+    try { await connect(); } catch (e) { return; }
+    const rows = (await Promise.all(codes.map(async (code) => {
+      const meta = await fb.get(roomRef(code, "meta")).then((s) => s.val(), () => undefined);
+      if (meta === undefined) return null; // offline: leave it for next time
+      if (!meta || meta.last < now() - DAY) { forgetRoom(code); return null; }
+      const inside = await fb.get(roomRef(code, "members/" + uid)).then((s) => s.exists(), () => false);
+      if (!inside) { forgetRoom(code); return null; }
       let t = meta.title || "";
       if (meta.enc) { try { t = (await unseal((await roomCrypto(unb64u(store.get(ROOMKEY(code))))).aes, meta.xt, "t"))?.t || ""; } catch (e) { t = ""; } }
-      $(".code", box).textContent = (meta.enc ? "🔐 " : "") + code;
-      $(".sub", box).textContent = t ? "「" + t + "」" : "";
-      box.hidden = false;
-    } catch (e) {}
+      return { code, t, enc: !!meta.enc, priv: !!meta.priv };
+    }))).filter(Boolean);
+    if (seq !== resumeSeq) return;
+    resumeRows = rows;
+    renderResume();
+  }
+  function renderResume() {
+    const box = $("#resume"), rows = resumeRows, pages = Math.ceil(rows.length / PAGE);
+    box.hidden = !rows.length;
+    if (!rows.length) return;
+    resumePage = Math.min(resumePage, pages - 1);
+    $("h2", box).textContent = rows.length === 1 ? "你還在聊天室" : `你還在 ${rows.length} 個聊天室`;
+    $(".roomlist", box).replaceChildren(...rows.slice(resumePage * PAGE, resumePage * PAGE + PAGE).map((r) => el("li", {},
+      el("button", { type: "button", class: "roomrow", "data-code": r.code },
+        el("span", { class: "txt" }, el("b", { text: (r.enc ? "🔐 " : r.priv ? "🔒 " : "") + r.code }), el("small", { text: r.t ? "「" + r.t + "」" : "未命名" })),
+        el("span", { class: "go", text: "回到聊天室 ›" })))));
+    $(".pager", box).hidden = pages < 2;
+    $(".pager .pg", box).textContent = `${resumePage + 1} / ${pages}`;
+    $(".pager [data-a=prev]", box).disabled = resumePage === 0;
+    $(".pager [data-a=next]", box).disabled = resumePage >= pages - 1;
   }
 
   /* ---------- wiring ---------- */
   showMe();
   if (!FB?.databaseURL) { $("#setupNote").hidden = false; document.body.classList.add("nodb"); }
-  $("#meBtn").addEventListener("click", () => askMe(false));
+  $("#meBtn").addEventListener("click", homeMenu);
   $("#createBtn").addEventListener("click", create);
   $("#joinForm").addEventListener("submit", (e) => { e.preventDefault(); join($("#joinCode").value); });
   $("#joinCode").addEventListener("input", (e) => { const v = e.target.value; if (!/[/?]/.test(v)) e.target.value = v.toUpperCase(); });
-  $("#resume").addEventListener("click", (e) => { if (e.target.closest("[data-a=resume]")) join(store.get(ROOM_KEY)); });
-  $("#codeBtn").addEventListener("click", share);
-  showRecords();
-  $("#records").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-open]");
-    if (b) openRecord(null, b.dataset.open);
-    if (e.target.closest("[data-a=import]")) $("#importFile").click();
+  $("#resume").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-code], [data-a]"); if (!b) return;
+    if (b.dataset.code) join(b.dataset.code);
+    else { resumePage += b.dataset.a === "next" ? 1 : -1; renderResume(); }
   });
+  $("#codeBtn").addEventListener("click", share);
   $("#importFile").addEventListener("change", (e) => { importFile(e.target.files[0]); e.target.value = ""; });
   $("#record").addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]")?.dataset.a, t = e.target.closest("[data-tab]");

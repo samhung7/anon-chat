@@ -29,14 +29,19 @@
       <h1>匿名聊天室</h1>
       <p class="tag">不用加好友，開了就聊，聊完就刪</p>
     </div>
-    <button id="meBtn" class="me" type="button" aria-label="修改暱稱和頭像"><span class="av"></span><span class="nm"></span></button>
+    <button id="meBtn" class="me" type="button" aria-label="選單：身分和聊天記錄"><span class="av"></span><span class="burger" aria-hidden="true">☰</span></button>
   </header>
 
   <p id="setupNote" class="note warn" hidden>這個網站還沒有連上資料庫，請在 <code>js/config.js</code> 填入 Firebase 設定。</p>
 
   <section id="resume" class="card resume" hidden>
-    <div><b>你還在聊天室 <span class="code"></span></b><span class="sub"></span></div>
-    <button class="btn primary" type="button" data-a="resume">回到聊天室</button>
+    <h2>你還在聊天室</h2>
+    <ul class="roomlist"></ul>
+    <div class="pager" hidden>
+      <button class="btn small" type="button" data-a="prev">‹ 上一頁</button>
+      <span class="pg"></span>
+      <button class="btn small" type="button" data-a="next">下一頁 ›</button>
+    </div>
   </section>
 
   <section class="card">
@@ -53,13 +58,7 @@
     <button id="createBtn" class="btn primary wide" type="button">開新聊天室</button>
   </section>
 
-  <section id="records" class="card">
-    <h2>我的聊天記錄</h2>
-    <p class="muted none">聊天室結束前存下來的記錄會放在這裡，也可以匯入之前下載的 JSON 或網頁檔。記錄只會存在這台裝置上。</p>
-    <ul class="reclist"></ul>
-    <button class="btn wide" type="button" data-a="import">📂 匯入聊天記錄檔</button>
-    <input id="importFile" type="file" accept=".json,.html,.htm,application/json,text/html" hidden>
-  </section>
+  <input id="importFile" type="file" accept=".json,.html,.htm,application/json,text/html" hidden>
 
   <section class="features">
     <div><b>🙈 不用註冊</b><span>取個暱稱、選個動物就好，不需要 LINE、FB 或 IG。</span></div>
