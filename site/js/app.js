@@ -329,6 +329,10 @@
     }));
     on(() => fb.onDisconnect(mine).cancel().catch(() => {}));
   }
+  // when this device last read each private chat, so a reload doesn't count old messages as new
+  const readKey = (other) => `chat-dmread:${R.code}:${other}`;
+  const lastRead = (other) => +store.get(readKey(other)) || 0;
+  const markRead = (other, at) => { if (typeof at === "number" && at > lastRead(other)) store.set(readKey(other), String(at)); };
   function watchDm(other) {
     if (R.dms.has(other)) return;
     const box = new Map(); R.dms.set(other, box);
@@ -336,8 +340,12 @@
     R.off.push(fb.onChildAdded(fb.ref(db, `rooms/${R.code}/dm/${pairKey(uid, other)}`), (s) => {
       if (r !== R) return;
       const v = s.val(); box.set(s.key, v);
-      if (R.view === other) addMsg(s.key, v, true);
-      else if (v.by !== uid) { R.unread[other] = (R.unread[other] || 0) + 1; toast(`🔒 ${nameOf(other)} 傳了私訊給你`); renderHeader(); }
+      if (R.view === other) { addMsg(s.key, v, true); markRead(other, v.at); }
+      else if (v.by !== uid && v.at > lastRead(other)) {
+        R.unread[other] = (R.unread[other] || 0) + 1;
+        if (Date.now() - v.at < 60000) toast(`🔒 ${nameOf(other)} 傳了私訊給你`);
+        renderHeader();
+      }
       noteNew(v, other);
     }, () => {}));
   }
@@ -436,7 +444,7 @@
     } else {
       const box = R.dms.get(R.view) || new Map();
       if (!box.size) list.append(el("p", { class: "empty", text: "私訊只有你們兩個看得到，房主也看不到。" }));
-      box.forEach((v, id) => list.append(bubble(id, v, true)));
+      box.forEach((v, id) => { list.append(bubble(id, v, true)); markRead(R.view, v.at); });
       R.unread[R.view] = 0;
       $("#text").placeholder = `私訊給 ${nameOf(R.view)}…`;
     }
