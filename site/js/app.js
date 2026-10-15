@@ -313,7 +313,7 @@
       Object.assign(R.seen, JSON.parse(JSON.stringify(next)));
       if (!next[uid]) return checkGone();
       Object.keys(next).forEach((id) => id !== uid && watchDm(id));
-      renderHeader();
+      renderHeader(); refreshNames();
     }, lost));
     const q = fb.query(roomRef(code, "msgs"), fb.limitToLast(MAX_LOAD));
     on(fb.onChildAdded(q, (s) => { if (r !== R) return; R.msgs.set(s.key, s.val()); if (R.view === "all") addMsg(s.key, s.val()); noteNew(s.val(), null); }, lost));
@@ -329,6 +329,10 @@
     }));
     on(() => fb.onDisconnect(mine).cancel().catch(() => {}));
   }
+  // when this device last read each private chat, so a reload doesn't count old messages as new
+  const readKey = (other) => `chat-dmread:${R.code}:${other}`;
+  const lastRead = (other) => +store.get(readKey(other)) || 0;
+  const markRead = (other, at) => { if (typeof at === "number" && at > lastRead(other)) store.set(readKey(other), String(at)); };
   function watchDm(other) {
     if (R.dms.has(other)) return;
     const box = new Map(); R.dms.set(other, box);
@@ -336,8 +340,12 @@
     R.off.push(fb.onChildAdded(fb.ref(db, `rooms/${R.code}/dm/${pairKey(uid, other)}`), (s) => {
       if (r !== R) return;
       const v = s.val(); box.set(s.key, v);
-      if (R.view === other) addMsg(s.key, v, true);
-      else if (v.by !== uid) { R.unread[other] = (R.unread[other] || 0) + 1; toast(`🔒 ${nameOf(other)} 傳了私訊給你`); renderHeader(); }
+      if (R.view === other) { addMsg(s.key, v, true); markRead(other, v.at); }
+      else if (v.by !== uid && v.at > lastRead(other)) {
+        R.unread[other] = (R.unread[other] || 0) + 1;
+        if (Date.now() - v.at < 60000) toast(`🔒 ${nameOf(other)} 傳了私訊給你`);
+        renderHeader();
+      }
       noteNew(v, other);
     }, () => {}));
   }
@@ -388,6 +396,16 @@
     if (R.view !== "all") $("#dmBar .dmwho").textContent = nameOf(R.view);
     if (!document.hidden || !hiddenUnread) document.title = meta.title || "匿名聊天室";
   }
+  // who wrote a message, under their current name: messages keep the name they were sent with,
+  // which only shows for someone who left before this device saw them
+  const author = (v, dm) => { const p = who(v.by); return p ? p : dm ? { name: "已離開的人", avatar: "👤" } : v; };
+  function refreshNames() {
+    document.querySelectorAll("#list .msg").forEach((node) => {
+      const p = who(node.dataset.by); if (!p) return;
+      const av = $(".who .av", node), nm = $(".who .nm", node); if (!nm) return;
+      av.textContent = p.avatar; nm.textContent = p.name + (R.meta?.owner === node.dataset.by ? " 👑" : "");
+    });
+  }
   function bubble(id, v, dm) {
     const mine = v.by === uid;
     const owner = R.meta?.owner === v.by;
@@ -395,8 +413,8 @@
     const cont = prev && prev.dataset.by === v.by && v.at - Number(prev.dataset.at) < 180000;
     const node = el("div", { class: "msg" + (mine ? " mine" : "") + (cont ? " cont" : ""), id: (dm ? "d-" : "m-") + id, "data-by": v.by, "data-at": v.at, "data-id": id },
       cont ? null : el("div", { class: "who" },
-        el("span", { class: "av", text: dm ? who(v.by)?.avatar || "👤" : v.avatar }),
-        el("span", { class: "nm", text: (dm ? who(v.by)?.name || "已離開的人" : v.name) + (owner ? " 👑" : "") }),
+        el("span", { class: "av", text: author(v, dm).avatar }),
+        el("span", { class: "nm", text: author(v, dm).name + (owner ? " 👑" : "") }),
         el("time", { text: fmtTime(v.at) })),
       v.gif ? el("div", { class: "bub gifbub" }, gifImg(v.gif)) : el("div", { class: "bub" }, linkify(v.text || "")),
       dm ? null : el("div", { class: "re" }));
@@ -436,7 +454,7 @@
     } else {
       const box = R.dms.get(R.view) || new Map();
       if (!box.size) list.append(el("p", { class: "empty", text: "私訊只有你們兩個看得到，房主也看不到。" }));
-      box.forEach((v, id) => list.append(bubble(id, v, true)));
+      box.forEach((v, id) => { list.append(bubble(id, v, true)); markRead(R.view, v.at); });
       R.unread[R.view] = 0;
       $("#text").placeholder = `私訊給 ${nameOf(R.view)}…`;
     }
@@ -479,7 +497,7 @@
       return el("button", { type: "button", class: "chip big" + (on ? " on" : ""), "data-a": "re" + k, text: emo });
     }));
     const btns = v.gif ? [] : [["copy", "複製文字"]];
-    if (!dm && v.by !== uid && R.members[v.by]) btns.push(["dm", "私訊 " + v.name]);
+    if (!dm && v.by !== uid && R.members[v.by]) btns.push(["dm", "私訊 " + author(v).name]);
     if (canDel) btns.push(["del", "刪除訊息", "danger"]);
     const body = el("div", {}, v.gif ? el("div", { class: "quote gifq" }, gifImg(v.gif)) : el("blockquote", { class: "quote", text: v.text.length > 140 ? v.text.slice(0, 140) + "…" : v.text }), reacts);
     let picked = null;
@@ -588,7 +606,7 @@
       format: ARCHIVE, version: 1,
       title: meta.title || "聊天室 " + R.code, code: R.code, created: meta.created, exported: Date.now(),
       me: { name: self.name, avatar: self.avatar },
-      messages: [...R.msgs.values()].map((v) => ({ ...one(v, v), owner: v.by === meta.owner || undefined, reactions: reacts(v) })),
+      messages: [...R.msgs.values()].map((v) => ({ ...one(v, author(v)), owner: v.by === meta.owner || undefined, reactions: reacts(v) })),
       dms: [...R.dms.entries()].filter(([, box]) => box.size).map(([other, box]) => {
         const them = who(other) || { name: "已離開的人", avatar: "👤" };
         return { with: { name: them.name, avatar: them.avatar }, messages: [...box.values()].map((v) => one(v, v.by === uid ? self : them)) };
