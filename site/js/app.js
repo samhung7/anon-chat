@@ -1193,7 +1193,8 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
     $("h2", box).textContent = rows.length === 1 ? "你還在聊天室" : `你還在 ${rows.length} 個聊天室`;
     $(".roomlist", box).replaceChildren(...rows.slice(resumePage * PAGE, resumePage * PAGE + PAGE).map((r) => el("li", {},
       el("button", { type: "button", class: "roomrow", "data-code": r.code },
-        el("span", { class: "txt" }, el("b", { text: (r.enc ? "🔐 " : r.priv ? "🔒 " : "") + r.code }), el("small", { text: r.t ? "「" + r.t + "」" : "未命名" })),
+        // laid out like the room's own header: its name, then the code on a chip
+        el("span", { class: "txt" }, el("b", { text: r.t || "聊天室" }), el("span", { class: "codechip", text: (r.enc ? "🔐 " : "") + (r.priv ? "🔒 " : "") + r.code })),
         el("span", { class: "go", text: "回到聊天室 ›" })))));
     $(".pager", box).hidden = pages < 2;
     $(".pager .pg", box).textContent = `${resumePage + 1} / ${pages}`;
