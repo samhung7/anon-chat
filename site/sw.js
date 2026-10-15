@@ -3,7 +3,7 @@
    The deploy stamps "dev" below and the ?v=dev on index.html's files with the commit, so a phone never
    runs a new page with an old script it still had in its HTTP cache. */
 const CACHE = "anon-chat-dev";
-const SHELL = ["./", "css/app.css", "js/app.js", "js/config.js", "js/i18n.js", "js/i18n/zh-TW.js", "js/i18n/zh-CN.js", "js/i18n/en.js", "js/i18n/ja.js", "js/i18n/ko.js", "js/i18n/es.js", "js/i18n/fr.js", "js/i18n/de.js", "js/i18n/pt.js", "js/vendor/firebase.js", "js/vendor/qrcode.js", "manifest.webmanifest", "icons/stoa-192.png"];
+const SHELL = ["./", "css/app.css", "js/app.js", "js/config.js", "js/i18n.js", "js/i18n/zh-TW.js", "js/i18n/zh-CN.js", "js/i18n/en.js", "js/i18n/ja.js", "js/i18n/ko.js", "js/i18n/es.js", "js/i18n/fr.js", "js/i18n/de.js", "js/i18n/pt.js", "js/vendor/firebase.js", "js/vendor/qrcode.js", "manifest.webmanifest", "icons/stoa2-192.png"];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", (e) => {

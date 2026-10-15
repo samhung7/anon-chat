@@ -508,7 +508,7 @@
     if (!notifyOn(R.code)) return;
     const a = author(v, dmWith);
     const title = dmWith ? t("dmToast", { who: a.name }) : `${a.avatar} ${a.name} | ${R.meta?.title || t("roomN", { code: R.code })}`;
-    const opts = { body: dmWith ? t("openToRead") : v.gif ? t("sentGif") : (v.text || "").slice(0, 120), tag: "room-" + R.code, renotify: true, icon: "icons/stoa-192.png", data: { url: roomUrl(R.code) } };
+    const opts = { body: dmWith ? t("openToRead") : v.gif ? t("sentGif") : (v.text || "").slice(0, 120), tag: "room-" + R.code, renotify: true, icon: "icons/stoa2-192.png", data: { url: roomUrl(R.code) } };
     try {
       const reg = await navigator.serviceWorker?.getRegistration();
       if (reg) return await reg.showNotification(title, opts); // phones only show notifications through the service worker
@@ -914,7 +914,7 @@
     const sec = (h, list) => `<h2>${esc(h)}</h2>${list.map(row).join("") || `<p class="e">${esc(t("noMsgs"))}</p>`}`;
     const data = JSON.stringify(a).replace(/</g, "\\u003c");
     return `<!doctype html><html lang="${I18N.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(a.title)}</title>
-<style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#3d2b23;background:#efe5dc}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e4d5ca}.sub{color:#8a766b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#8a766b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e4d5ca;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#d0b8ac;color:#3d2b23;border-color:#d0b8ac}.g{max-width:240px;height:auto;border-radius:12px}.r{font-size:13px;margin-top:2px}.e{color:#b8a59a}@media(prefers-color-scheme:dark){body{background:#1e1815;color:#efe5dc}.b{background:#29211d;border-color:#45372f}.me .b{color:#2a1f1a}h2{border-color:#45372f}}</style></head><body>
+<style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#3a3128;background:#f4efe6}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e4dccc}.sub{color:#857a6b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#857a6b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e4dccc;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#d9cdb6;color:#3a3128;border-color:#d9cdb6}.g{max-width:240px;height:auto;border-radius:12px}.r{font-size:13px;margin-top:2px}.e{color:#b3aa9b}@media(prefers-color-scheme:dark){body{background:#1b1916;color:#f4efe6}.b{background:#25221e;border-color:#3e3a33}.me .b{background:#e7decd;border-color:#e7decd;color:#2a251f}h2{border-color:#3e3a33}}</style></head><body>
 <h1>${esc(a.title)}</h1><div class="sub">${esc(t("expSub", { code: a.code, t: fmtFull(a.exported) }))}</div>
 ${sec(t("everyone"), a.messages)}
 ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join("")}

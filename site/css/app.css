@@ -1,23 +1,23 @@
 :root {
-  /* milk-tea neutrals: coolors.co/palette/d0b8ac-f3d8c7-efe5dc-fbfefb-ffffff, with a deeper brown for text */
-  --bg: #efe5dc; --surface: #ffffff; --surface-2: #fbfefb; --line: #e4d5ca;
-  --text: #3d2b23; --muted: #8a766b; --accent: #d0b8ac; --accent-2: #f3d8c7; --on-accent: #3d2b23; --accent-ink: #8a6352;
+  /* warm paper neutrals: coolors.co/palette/e7decd-efe8db-f4efe6-faf7f0-fbfaf8, buttons a step deeper so they stand out */
+  --bg: #f4efe6; --surface: #fbfaf8; --surface-2: #faf7f0; --line: #e4dccc;
+  --text: #3a3128; --muted: #857a6b; --accent: #d9cdb6; --accent-2: #efe8db; --on-accent: #3a3128; --accent-ink: #7d6b52;
   --danger: #b42318; --warn-bg: #fbecc8; --warn: #7a4a0e; --ok: #3f7d3a;
-  --shadow: 0 10px 30px rgba(61, 43, 35, .12);
+  --shadow: 0 10px 30px rgba(58, 49, 40, .1);
   color-scheme: light dark;
 }
 /* dark: the device's choice unless the home menu picked one (data-theme on <html>, set by js/i18n.js) */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1e1815; --surface: #29211d; --surface-2: #322924; --line: #45372f;
-    --text: #efe5dc; --muted: #b8a59a; --accent: #d0b8ac; --accent-2: #4a3a31; --on-accent: #2a1f1a; --accent-ink: #e6c9b8;
+    --bg: #1b1916; --surface: #25221e; --surface-2: #2d2a25; --line: #3e3a33;
+    --text: #f4efe6; --muted: #b3aa9b; --accent: #e7decd; --accent-2: #3f3a31; --on-accent: #2a251f; --accent-ink: #e7decd;
     --danger: #f08a7e; --warn-bg: #3b2c12; --warn: #f3c969; --ok: #8fc98a;
     --shadow: 0 10px 30px rgba(0, 0, 0, .5);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #1e1815; --surface: #29211d; --surface-2: #322924; --line: #45372f;
-  --text: #efe5dc; --muted: #b8a59a; --accent: #d0b8ac; --accent-2: #4a3a31; --on-accent: #2a1f1a; --accent-ink: #e6c9b8;
+  --bg: #1b1916; --surface: #25221e; --surface-2: #2d2a25; --line: #3e3a33;
+  --text: #f4efe6; --muted: #b3aa9b; --accent: #e7decd; --accent-2: #3f3a31; --on-accent: #2a251f; --accent-ink: #e7decd;
   --danger: #f08a7e; --warn-bg: #3b2c12; --warn: #f3c969; --ok: #8fc98a;
   --shadow: 0 10px 30px rgba(0, 0, 0, .5);
   color-scheme: dark;
