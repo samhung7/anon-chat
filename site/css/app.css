@@ -263,10 +263,3 @@ ul.plist small { color: var(--muted); }
   .sheet { padding-bottom: max(32px, calc(16px + env(safe-area-inset-bottom))); }
 }
 
-/* portrait only on phones: iOS won't let a page lock rotation, so a phone turned sideways gets a note to turn it back */
-.rotate { display: none; }
-@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-  .rotate { display: flex; position: fixed; inset: 0; z-index: 100; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-    background: var(--bg); color: var(--text); font-size: 17px; text-align: center; padding: 24px; }
-  .rotate b { font-size: 44px; }
-}

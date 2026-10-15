@@ -1161,13 +1161,18 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
   { const old = store.get("chat-room"); if (old) { if (!myRooms().includes(old)) store.set(ROOMS_KEY, JSON.stringify([old, ...myRooms()])); store.set("chat-room", null); } } // before the list
   const PAGE = 5;
   let resumePage = 0, resumeRows = [], resumeSeq = 0;
+  // the list as last checked, so the home page shows it at once instead of after signing in and asking the server
+  const RESUME_KEY = "chat-rooms-seen";
+  const seenRows = () => { try { const l = JSON.parse(store.get(RESUME_KEY)); return Array.isArray(l) ? l : []; } catch (e) { return []; } };
   async function showResume() {
     const seq = ++resumeSeq, codes = myRooms();
     if (!codes.length || !FB?.databaseURL) { $("#resume").hidden = true; return; }
+    const seen = seenRows().filter((r) => r && codes.includes(r.code));
+    if (seen.length) { resumeRows = codes.map((c) => seen.find((r) => r.code === c)).filter(Boolean); renderResume(); }
     try { await connect(); } catch (e) { return; }
     const rows = (await Promise.all(codes.map(async (code) => {
       const meta = await fb.get(roomRef(code, "meta")).then((s) => s.val(), () => undefined);
-      if (meta === undefined) return null; // offline: leave it for next time
+      if (meta === undefined) return seen.find((r) => r.code === code) || null; // offline: keep what we last saw
       if (!meta || meta.last < now() - DAY) { forgetRoom(code); return null; }
       const inside = await fb.get(roomRef(code, "members/" + uid)).then((s) => s.exists(), () => false);
       if (!inside) { forgetRoom(code); return null; }
@@ -1177,6 +1182,7 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
     }))).filter(Boolean);
     if (seq !== resumeSeq) return;
     resumeRows = rows;
+    store.set(RESUME_KEY, JSON.stringify(rows));
     renderResume();
   }
   function renderResume() {
