@@ -426,11 +426,11 @@
     // raw/rawSeen: member records as stored; members/seen: as shown (decrypted). Everything that arrives goes
     // through one queue (q), so decrypting never reorders messages.
     R = { code, c, meta: null, members: {}, seen: {}, raw: {}, rawSeen: {}, msgs: new Map(), dms: new Map(), plain: new Map(), dk: new Map(),
-          view: "all", unread: {}, off: [], gone: false, ready: false, q: Promise.resolve() };
+          view: "all", unread: {}, off: [], gone: false, ready: false, q: Promise.resolve(), t0: Date.now() + offset };
     rememberRoom(code);
     history.replaceState(null, "", "?room=" + code + (EMU && params.get("as") ? "&as=" + params.get("as") : ""));
     $("#list").replaceChildren();
-    showChat();
+    showChat(); offerNotify();
     const r = R;
     const on = (off) => r.off.push(off);
     const lost = (e) => { if (r === R) checkGone(); else console.warn(e); };
@@ -495,7 +495,39 @@
     if (v.by === uid || !document.hidden || !R.ready) return;
     hiddenUnread++;
     document.title = `(${hiddenUnread}) ${R.meta?.title || "匿名聊天室"}`;
+    if (v.at > R.t0 && Date.now() - v.at < 60000) notify(v, dmWith); // not the history that loads on entering
   }
+
+  /* ---------- notifications ----------
+     A system notification for each new message while the page is in the background. Each room can be muted on
+     this device (chat-mute:{code}). It works while the page is open in a tab or an installed app, even hidden;
+     a closed page would need a push server, which this app doesn't have. */
+  const CAN_NOTIFY = "Notification" in window;
+  const MUTE = (code) => "chat-mute:" + code;
+  const notifyOn = (code) => CAN_NOTIFY && Notification.permission === "granted" && !store.get(MUTE(code));
+  async function notify(v, dmWith) {
+    if (!notifyOn(R.code)) return;
+    const a = author(v, dmWith);
+    const title = dmWith ? `🔒 ${a.name} 傳了私訊給你` : `${a.avatar} ${a.name}｜${R.meta?.title || "聊天室 " + R.code}`;
+    const opts = { body: dmWith ? "打開聊天室來看" : v.gif ? "傳了一張 GIF" : (v.text || "").slice(0, 120), tag: "room-" + R.code, renotify: true, icon: "icons/icon-192.png", data: { url: roomUrl(R.code) } };
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      if (reg) return await reg.showNotification(title, opts); // phones only show notifications through the service worker
+      const n = new Notification(title, opts); n.onclick = () => { window.focus(); n.close(); };
+    } catch (e) { console.warn(e); }
+  }
+  async function setNotify(on) {
+    if (!R) return;
+    $("#notifyBar").hidden = true;
+    store.set("chat-notify-asked", "1");
+    if (!on) { store.set(MUTE(R.code), "1"); toast("這個聊天室不會再通知你"); return; }
+    if (!CAN_NOTIFY) { toast("這個瀏覽器不支援通知。iPhone 要先「加入主畫面」，從主畫面打開才能收到通知。"); return; }
+    const p = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
+    if (p !== "granted") { toast("通知被瀏覽器擋住了，請到瀏覽器的網站設定允許通知"); return; }
+    store.set(MUTE(R.code), null); toast("🔔 有新訊息時會通知你");
+  }
+  // ask once per device, in a bar rather than a pop-up, and only where notifications could work
+  const offerNotify = () => { $("#notifyBar").hidden = !(CAN_NOTIFY && Notification.permission === "default" && !store.get("chat-notify-asked")); };
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { hiddenUnread = 0; document.title = R?.meta?.title || "匿名聊天室"; } });
 
   function leaveListeners() { R?.off.forEach((f) => { try { f(); } catch (e) {} }); }
@@ -704,14 +736,18 @@
 
   async function menu() {
     if (!R) return;
-    const btns = [["share", "邀請大家"], ["me", "修改我的暱稱和頭像"], ["export", "匯出聊天記錄"]];
+    const btns = [["share", "邀請大家"], ["me", "修改我的暱稱和頭像"],
+      notifyOn(R.code) ? ["mute", "🔕 關閉這個聊天室的通知"] : ["notify", "🔔 開啟新訊息通知"], ["export", "匯出聊天記錄"]];
     if (isOwner()) {
+      btns.splice(1, 0, ["title", "修改聊天室名稱"]);
       btns.push(R.meta?.locked ? ["unlock", "解除鎖定，讓新的人加入"] : ["lock", "鎖住聊天室，不讓新的人加入"]);
       btns.push(["end", "結束並刪除聊天室", "danger"]);
     } else btns.push(["leave", "離開聊天室", "danger"]);
     const a = await sheet(R.meta?.title || "聊天室 " + R.code, null, btns);
     if (a === "share") share();
     if (a === "me") askMe(false);
+    if (a === "title") renameRoom();
+    if (a === "notify" || a === "mute") setNotify(a === "notify");
     if (a === "export") exportSheet();
     if (a === "lock" || a === "unlock") fb.update(roomRef(R.code, "meta"), { locked: a === "lock" }).then(() => toast(a === "lock" ? "已鎖住，新的人進不來" : "已解除鎖定"), () => toast("沒有成功，請再試一次"));
     if (a === "leave" && (await confirmSheet("離開聊天室？", "離開後就看不到新的訊息了。" + (R.meta?.priv ? "要回來得再輸入一次密碼。" : ""), "離開"))) {
@@ -722,6 +758,20 @@
       R = null; forgetRoom(code); store.set(ROOMKEY(code), null); home();
     }
     if (a === "end") endRoom();
+  }
+  async function renameRoom() {
+    const input = el("input", { class: "field", maxlength: 40, placeholder: "例如：週三讀書會（可以不填）", id: "roomName", value: R.meta?.title || "" });
+    const body = el("div", {}, el("label", { class: "lbl", for: "roomName", text: "聊天室名稱" }), input,
+      el("p", { class: "muted small", text: R.c ? "加密聊天室的名稱也會加密，伺服器看不到。" : "所有人都會看到新的名稱。" }));
+    const a = await sheet("修改聊天室名稱", body, [["no", "取消"], ["yes", "儲存", "primary"]], { onOpen: () => input.select() });
+    if (a !== "yes" || !R) return;
+    const t = input.value.trim().slice(0, 40);
+    if (t === (R.meta?.title || "")) return;
+    try {
+      // an encrypted room keeps only the sealed title (xt); a plain one only the readable one
+      await fb.update(roomRef(R.code, "meta"), R.c ? { xt: t ? await seal(R.c.aes, { t }, "t") : null } : { title: t || null });
+      toast(t ? `聊天室名稱改成「${t}」` : "已清除聊天室名稱");
+    } catch (e) { failed(e); }
   }
   async function endRoom() {
     const a = await sheet("結束聊天室？", el("p", { class: "muted", text: "所有訊息和私訊都會永久刪除，所有人都會離開，代碼也會失效。想留記錄的話請先匯出。" }), [["no", "取消"], ["export", "先匯出"], ["yes", "結束並刪除", "danger"]]);
@@ -1103,6 +1153,7 @@ ${a.dms.map((d) => sec(`🔒 和 ${label(d.with)} 的私訊`, d.messages)).join(
     if (a === "home") { if (R?.view !== "all") { R.view = "all"; renderView(); } else home(); }
     if (a === "menu") menu();
     if (a === "all") { R.view = "all"; renderView(); }
+    if (a === "notifyYes" || a === "notifyNo") setNotify(a === "notifyYes");
   });
   const ta = $("#text");
   const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };
