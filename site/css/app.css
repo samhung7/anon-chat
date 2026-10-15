@@ -258,6 +258,7 @@ ul.plist small { color: var(--muted); }
   .toasts { top: calc(76px + env(safe-area-inset-top)); }
   /* iOS reports no bottom inset here, so leave room for the home indicator ourselves, like Messenger does */
   .composer { padding-bottom: max(28px, calc(8px + env(safe-area-inset-bottom))); }
+  body.typing .composer { padding-bottom: 8px; }
   .rofoot { padding-bottom: max(28px, calc(10px + env(safe-area-inset-bottom))); }
   .sheet { padding-bottom: max(32px, calc(16px + env(safe-area-inset-bottom))); }
 }
