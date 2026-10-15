@@ -16,6 +16,8 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
+/* no double-tap zoom (taps respond at once); pinch zoom still works */
+html { touch-action: manipulation; }
 body {
   background: var(--bg); color: var(--text);
   font: 16px/1.5 system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
@@ -157,7 +159,7 @@ code { font-size: .9em; }
 .share { text-align: center; }
 .bigcode { font: 700 52px/1.1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .18em; margin: 4px 0 8px; color: var(--accent); }
 .linkrow { margin: 10px 0; }
-.linkrow .field { font-size: 14px; text-align: center; }
+.linkrow .field { font-size: 16px; text-align: center; } /* under 16px, iPhone zooms in when it gets focus */
 .qr { width: 200px; height: 200px; margin: 6px auto 0; background: #fff; border-radius: 12px; padding: 6px; }
 .qr svg { width: 100%; height: 100%; display: block; }
 .plist { list-style: none; margin: 0; padding: 0; }
