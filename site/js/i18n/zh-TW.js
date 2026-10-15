@@ -252,4 +252,8 @@ I18N.add("zh-TW", {
   backToRoom: "回到聊天室 ›",
   language: "語言",
   followDevice: "跟隨裝置語言",
+  theme: "外觀",
+  themeSystem: "跟隨系統",
+  themeLight: "淺色",
+  themeDark: "深色",
 });

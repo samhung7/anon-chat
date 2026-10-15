@@ -252,4 +252,8 @@ I18N.add("ko", {
   backToRoom: "채팅방으로 돌아가기 ›",
   language: "언어",
   followDevice: "기기 설정과 같게",
+  theme: "화면 모드",
+  themeSystem: "기기 설정에 맞춤",
+  themeLight: "라이트",
+  themeDark: "다크",
 });

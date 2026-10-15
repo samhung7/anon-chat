@@ -252,4 +252,8 @@ I18N.add("ja", {
   backToRoom: "ルームに戻る ›",
   language: "言語",
   followDevice: "端末の設定に合わせる",
+  theme: "表示モード",
+  themeSystem: "端末の設定に合わせる",
+  themeLight: "ライト",
+  themeDark: "ダーク",
 });
