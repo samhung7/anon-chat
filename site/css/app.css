@@ -55,14 +55,21 @@ code { font-size: .9em; }
 .brand .logo { font-size: 30px; width: 52px; height: 52px; display: grid; place-items: center; background: var(--accent-2); border-radius: 16px; flex: none; }
 .brand h1 { font-size: 22px; }
 .brand .tag { margin: 0; color: var(--muted); font-size: 14px; }
-.me { margin-left: auto; display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px 4px 6px; max-width: 40%; min-height: 40px; }
+.me { margin-left: auto; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 14px 4px 6px; min-height: 44px; flex: none; }
 .me .av { font-size: 22px; }
-.me .nm { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.me .burger { font-size: 18px; line-height: 1; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 14px; }
 .card h2 { font-size: 17px; margin-bottom: 10px; }
 .card p { margin: 0 0 12px; }
-.resume { display: flex; align-items: center; gap: 12px; justify-content: space-between; border-color: var(--accent); }
-.resume .sub { display: block; color: var(--muted); font-size: 14px; }
+.resume { border-color: var(--accent); }
+.roomlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.roomrow { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+.roomrow .txt, .merow .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.roomrow small, .merow small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roomrow .go { flex: none; color: var(--accent); font-weight: 600; font-size: 14px; }
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.pager .pg { color: var(--muted); font-size: 14px; }
+.pager button:disabled { opacity: .4; }
 .joinrow { display: flex; gap: 10px; }
 .codein {
   flex: 1; min-width: 0; font: 600 24px/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .25em; text-align: center;
@@ -184,9 +191,10 @@ ul.plist small { color: var(--muted); }
 .emo { border: 0; background: none; font-size: 26px; height: 42px; border-radius: 10px; padding: 0; }
 .emo:active, .emo:hover { background: var(--surface-2); }
 .gifq-in { min-height: 40px; }
-.gifgrid { flex: 1; overflow-y: auto; columns: 2 140px; column-gap: 6px; padding: 8px 0; }
-.gifgrid p { column-span: all; text-align: center; }
-.gifpick { display: block; width: 100%; border: 0; padding: 0; margin: 0 0 6px; background: var(--surface-2); border-radius: 10px; overflow: hidden; break-inside: avoid; }
+.gifgrid { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; display: flex; align-items: flex-start; gap: 6px; padding: 8px 0; }
+.gifgrid p { flex: 1; text-align: center; }
+.gifcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.gifpick { display: block; width: 100%; border: 0; padding: 0; margin: 0; background: var(--surface-2); border-radius: 10px; overflow: hidden; }
 .gifpick img { display: block; width: 100%; height: auto; }
 .gifby { font-size: 11px; color: var(--muted); text-align: right; padding: 2px 2px 6px; }
 .bub.gifbub { padding: 0; background: none; border: 0; overflow: hidden; border-radius: 14px; }
@@ -198,7 +206,11 @@ ul.plist small { color: var(--muted); }
 .reclist { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .rec { width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; }
 .rec small { color: var(--muted); }
-#records .none { margin-bottom: 12px; }
+.hmenu h3 { font-size: 15px; margin: 18px 0 8px; }
+.hmenu .reclist { max-height: 40dvh; overflow-y: auto; }
+.merow { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+.merow .av { font-size: 28px; }
+.merow .chev { color: var(--muted); font-size: 20px; }
 .ttl small { font-size: 12px; }
 .tabs { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .tab { flex: none; border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 4px 12px; font-size: 14px; }
