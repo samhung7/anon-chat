@@ -297,4 +297,5 @@ I18N.add("ja", {
   drawCountBad: "当選人数は 1〜{n} 人にしてください",
   drawFrom: "{n} 人から {k} 人を抽選",
   drawWhoIn: "参加した人",
+  msgMenu: "メッセージのメニュー",
 });

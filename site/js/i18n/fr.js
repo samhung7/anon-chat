@@ -297,4 +297,5 @@ I18N.add("fr", {
   drawCountBad: "Tirez entre 1 et {n}",
   drawFrom: "{k} tiré(s) parmi {n} personnes",
   drawWhoIn: "Qui a participé",
+  msgMenu: "Options du message",
 });

@@ -130,10 +130,15 @@ code { font-size: .9em; }
 .mine .who .av, .mine .who .nm { display: none; }
 .bub {
   background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 8px 13px;
-  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; cursor: pointer; user-select: text;
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; user-select: text; min-width: 0;
 }
 .mine .bub { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .bub a { color: inherit; text-decoration: underline; }
+/* a bubble and its ⋯ menu button, the button on the outer side */
+.brow { display: flex; align-items: center; gap: 2px; max-width: 100%; }
+.mine .brow { flex-direction: row-reverse; }
+.more { flex: none; width: 30px; height: 30px; border: 0; background: none; color: var(--muted); border-radius: 50%; font-size: 18px; line-height: 1; padding: 0; cursor: pointer; }
+.more:hover, .more:active { background: var(--surface-2); color: var(--text); }
 .re { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
 .re:empty { display: none; }
 .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 1px 8px; font-size: 13px; min-height: 26px; }
@@ -285,15 +290,15 @@ html.opening #home { display: none; }
 
 /* ---------- photos, polls, draws ---------- */
 .picker.short { height: auto; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
-.more { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 4px 0; }
+.morepanel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 4px 0; }
 .morebtn { display: flex; flex-direction: column; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); border-radius: 14px; padding: 12px 6px; font: inherit; font-size: 14px; }
 .morebtn .i { font-size: 26px; line-height: 1; }
 .morebtn:active, .morebtn:hover { background: var(--accent-2); }
-.bub.imgbub { padding: 0; background: none; border: 0; overflow: hidden; border-radius: 14px; }
-.mine .bub.imgbub { background: none; }
-.photo { display: block; max-width: min(260px, 64vw); max-height: 360px; width: auto; height: auto; object-fit: cover; background: var(--surface-2); border-radius: 14px; }
-.quote.gifq .photo { max-width: 160px; max-height: 200px; border-radius: 10px; }
-.pins li .go .photo { max-width: 100%; max-height: 120px; border-radius: 8px; }
+.bub.imgbub { padding: 4px; border-radius: 18px; font: inherit; cursor: zoom-in; }
+/* in the chat every photo is a 4:3 window onto the picture; tapping shows all of it */
+.photo { display: block; width: min(240px, 60vw); height: auto; aspect-ratio: 4 / 3; object-fit: cover; background: var(--surface-2); border-radius: 14px; }
+.quote.gifq .photo { width: 160px; border-radius: 10px; }
+.pins li .go .photo { width: 120px; max-width: 100%; border-radius: 8px; }
 .lightbox { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .92); display: flex; align-items: center; justify-content: center; animation: fade .15s; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
 .lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .lightbox .icon { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 10px; color: #fff; background: rgba(255, 255, 255, .15); }

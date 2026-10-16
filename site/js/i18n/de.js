@@ -297,4 +297,5 @@ I18N.add("de", {
   drawCountBad: "Lose zwischen 1 und {n} aus",
   drawFrom: "{k} aus {n} Personen ausgelost",
   drawWhoIn: "Wer mitgemacht hat",
+  msgMenu: "Nachrichtenoptionen",
 });

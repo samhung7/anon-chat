@@ -297,4 +297,5 @@ I18N.add("en", {
   drawCountBad: "Draw between 1 and {n}",
   drawFrom: "{k} drawn from {n} people",
   drawWhoIn: "Who took part",
+  msgMenu: "Message options",
 });

@@ -297,4 +297,5 @@ I18N.add("ko", {
   drawCountBad: "뽑을 인원은 1~{n}명이어야 해요",
   drawFrom: "{n}명 중 {k}명 추첨",
   drawWhoIn: "참가한 사람",
+  msgMenu: "메시지 메뉴",
 });

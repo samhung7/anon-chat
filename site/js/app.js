@@ -629,16 +629,17 @@
         el("span", { class: "nm", text: author(v, dm).name + (owner ? " 👑" : "") }),
         el("time", { text: fmtTime(v.at) })),
       v.rp ? replyQuote(v.rp, dm) : null,
-      v.gif ? el("div", { class: "bub gifbub" }, gifImg(v.gif))
-        : v.img ? el("div", { class: "bub imgbub" }, photoImg(v))
-        : v.poll ? el("div", { class: "bub pollbub" }, pollView(livePoll(v), (k) => vote(id, k)))
-        : v.draw ? el("div", { class: "bub drawbub" }, drawView(liveDraw(v)))
-        : el("div", { class: "bub" }, linkify(v.text || "")),
+      // the ⋯ beside the bubble opens what can be done with a message; the bubble itself is for reading
+      // (and selecting text), a photo opens full size, a poll's options vote
+      el("div", { class: "brow" },
+        v.gif ? el("div", { class: "bub gifbub" }, gifImg(v.gif))
+          : v.img ? el("button", { type: "button", class: "bub imgbub", "aria-label": t("viewPhoto"), onclick: () => photoUrl(v.img.f, v.by).then((u) => (u ? viewPhoto(u) : toast(t("photoGone")))) }, photoImg(v))
+          : v.poll ? el("div", { class: "bub pollbub" }, pollView(livePoll(v), (k) => vote(id, k)))
+          : v.draw ? el("div", { class: "bub drawbub" }, drawView(liveDraw(v)))
+          : el("div", { class: "bub" }, linkify(v.text || "")),
+        el("button", { type: "button", class: "more", "aria-label": t("msgMenu"), text: "⋯", onclick: () => msgActions(id, (dm ? null : R.msgs.get(id)) || v, dm) })),
       dm ? null : el("div", { class: "re" }));
     if (!dm) fillReacts(node, v);
-    // only the bubble itself opens the actions; the name line and the empty space beside it do nothing,
-    // nor do a link, a poll's options or a draw's list of who took part
-    node.addEventListener("click", (e) => { if (e.target.closest(".bub") && !e.target.closest("a, .opt, details")) msgActions(id, (dm ? null : R.msgs.get(id)) || v, dm); });
     return node;
   }
   // one line naming a message: who, and the start of what they said
@@ -792,7 +793,7 @@
     }));
     const btns = v.bad ? [] : [["reply", t("reply")]];
     if (v.text && !v.bad) btns.push(["copy", t("copyText")]);
-    if (v.img) btns.push(["view", t("viewPhoto")], ["save", t("savePhoto")]);
+    if (v.img) btns.push(["save", t("savePhoto")]);
     if (v.poll) btns.push(["voters", t("pollWho")]);
     if (v.poll && !v.closed && v.by === uid) btns.push(["close", t("pollClose")]);
     if (!dm && !v.bad && isOwner()) btns.push(pinIds().includes(id) ? ["unpin", t("unpin")] : ["pin", t("pinAsNotice")]);
@@ -808,7 +809,6 @@
     if (a === "dm") openDm(v.by);
     if (a === "reply") startReply(id, v, dm);
     if (a === "pin" || a === "unpin") pin(id, a === "pin");
-    if (a === "view") photoUrl(v.img.f, v.by).then((u) => (u ? viewPhoto(u) : toast(t("photoGone"))));
     if (a === "save") photoUrl(v.img.f, v.by).then((u) => (u ? saveFile(u, `photo-${R.code}-${id}.jpg`) : toast(t("photoGone"))));
     if (a === "voters") pollVoters(v);
     if (a === "close" && (await confirmSheet(t("pollClose"), t("pollCloseBody"), t("pollClose"), "primary"))) fb.set(roomRef(R.code, `msgs/${id}/closed`), true).catch(() => toast(t("tryAgain")));
@@ -1399,7 +1399,7 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
     if (kind === "more") {
       const item = (icon, label, fn) => el("button", { type: "button", class: "morebtn", onclick: () => { fn(); closePicker(); } }, el("span", { class: "i", text: icon }), el("span", { text: label }));
       // the file picker opens right inside the tap, or a phone may refuse to open it
-      box.replaceChildren(el("div", { class: "more" },
+      box.replaceChildren(el("div", { class: "morepanel" },
         item("📷", t("photo"), () => $("#photoFile").click()), item("📊", t("poll"), newPoll), item("🎲", t("draw"), newDraw)));
     } else if (kind === "emoji") {
       const grid = el("div", { class: "emojigrid" });

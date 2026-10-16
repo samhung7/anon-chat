@@ -297,4 +297,5 @@ I18N.add("zh-TW", {
   drawCountBad: "抽出人數要在 1 到 {n} 之間",
   drawFrom: "從 {n} 人中抽出 {k} 人",
   drawWhoIn: "參加的人",
+  msgMenu: "訊息選項",
 });
