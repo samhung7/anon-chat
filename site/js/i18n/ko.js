@@ -1,6 +1,6 @@
 I18N.add("ko", {
   // page
-  docTitle: "Stoa Talk | 가입 없이 4자리 코드로 채팅하기",
+  docTitle: "StoaTalk | 가입 없이 4자리 코드로 채팅하기",
   tagline: "친구 추가는 필요 없어요. 방을 열고, 대화하고, 끝나면 사라져요",
   menuAria: "메뉴: 프로필, 채팅 기록, 언어",
   setupNote: "이 사이트는 아직 데이터베이스에 연결되지 않았어요. js/config.js에 Firebase 설정을 입력해 주세요.",
@@ -212,7 +212,7 @@ I18N.add("ko", {
   noMsgs: "(메시지 없음)",
   empty: "메시지 없음",
   dmHead: "🔒 {who}님과의 개인 메시지",
-  expSub: "코드 {code} · {t}에 내보냄 · 이 파일은 Stoa Talk로 가져올 수 있어요",
+  expSub: "코드 {code} · {t}에 내보냄 · 이 파일은 StoaTalk로 가져올 수 있어요",
   downloaded: "{name}을(를) 다운로드했어요",
   exportCount: "내 개인 메시지를 포함해 총 {n}개의 메시지예요.",
   exportHint: "“이 기기에 저장”하면 홈 화면의 “내 채팅 기록”에서 볼 수 있어요. JSON과 웹 페이지 파일은 다른 기기에서도 가져올 수 있어요.",
@@ -230,7 +230,7 @@ I18N.add("ko", {
   importRec: "📂 채팅 기록 파일 가져오기",
   menu: "메뉴",
   tooBig: "파일이 너무 커요",
-  notArchive: "Stoa Talk에서 내보낸 파일이 아니에요",
+  notArchive: "StoaTalk에서 내보낸 파일이 아니에요",
   recBroken: "이 기록은 더 이상 열 수 없어요",
   recSub: "📁 읽기 전용 기록 · {t}에 내보냄",
   recInfo: "가져오거나 저장한 채팅 기록이에요. 읽을 수만 있고 수정할 수는 없어요.",

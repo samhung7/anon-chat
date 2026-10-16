@@ -1,6 +1,6 @@
 I18N.add("de", {
   // page
-  docTitle: "Stoa Talk | Chatten mit 4-stelligem Code, ohne Anmeldung",
+  docTitle: "StoaTalk | Chatten mit 4-stelligem Code, ohne Anmeldung",
   tagline: "Keine Freundschaftsanfragen. Raum öffnen, reden – und danach ist er wieder weg",
   menuAria: "Menü: Identität, Chatverläufe und Sprache",
   setupNote: "Diese Seite ist noch nicht mit einer Datenbank verbunden. Trag die Firebase-Einstellungen in js/config.js ein.",
@@ -212,7 +212,7 @@ I18N.add("de", {
   noMsgs: "(Keine Nachrichten)",
   empty: "Keine Nachrichten",
   dmHead: "🔒 Privatnachrichten mit {who}",
-  expSub: "Code {code} · Exportiert {t} · Diese Datei kann in Stoa Talk importiert werden",
+  expSub: "Code {code} · Exportiert {t} · Diese Datei kann in StoaTalk importiert werden",
   downloaded: "{name} heruntergeladen",
   exportCount: "Insgesamt {n} Nachrichten, einschließlich deiner eigenen Privatnachrichten.",
   exportHint: "Nach „Auf diesem Gerät speichern“ findest du den Verlauf auf der Startseite unter „Meine Chatverläufe“. JSON- und Webseiten-Dateien lassen sich auf anderen Geräten importieren.",
@@ -230,7 +230,7 @@ I18N.add("de", {
   importRec: "📂 Chatverlauf-Datei importieren",
   menu: "Menü",
   tooBig: "Die Datei ist zu groß",
-  notArchive: "Das ist keine aus Stoa Talk exportierte Datei",
+  notArchive: "Das ist keine aus StoaTalk exportierte Datei",
   recBroken: "Dieser Verlauf lässt sich nicht mehr öffnen",
   recSub: "📁 Schreibgeschützter Verlauf · exportiert {t}",
   recInfo: "Das ist ein importierter oder gespeicherter Chatverlauf. Er kann gelesen, aber nicht geändert werden.",

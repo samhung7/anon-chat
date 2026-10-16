@@ -1,6 +1,6 @@
 I18N.add("es", {
   // page
-  docTitle: "Stoa Talk | Chatea con un código de 4 caracteres, sin registro",
+  docTitle: "StoaTalk | Chatea con un código de 4 caracteres, sin registro",
   tagline: "Sin solicitudes de amistad. Abre una sala, conversa y desaparece cuando termines",
   menuAria: "Menú: identidad, historial de chats e idioma",
   setupNote: "Este sitio aún no está conectado a una base de datos. Añade la configuración de Firebase en js/config.js.",
@@ -212,7 +212,7 @@ I18N.add("es", {
   noMsgs: "(Sin mensajes)",
   empty: "Sin mensajes",
   dmHead: "🔒 Mensajes privados con {who}",
-  expSub: "Código {code} · Exportado {t} · Puedes importar este archivo en Stoa Talk",
+  expSub: "Código {code} · Exportado {t} · Puedes importar este archivo en StoaTalk",
   downloaded: "Se descargó {name}",
   exportCount: "{n} mensajes en total, incluidos tus mensajes privados.",
   exportHint: "Después de “Guardar en este dispositivo”, lo encontrarás en “Mis chats guardados” en la página de inicio. Los archivos JSON y de página web se pueden importar en otros dispositivos.",
@@ -230,7 +230,7 @@ I18N.add("es", {
   importRec: "📂 Importar un archivo de chat",
   menu: "Menú",
   tooBig: "El archivo es demasiado grande",
-  notArchive: "Este no es un archivo exportado de Stoa Talk",
+  notArchive: "Este no es un archivo exportado de StoaTalk",
   recBroken: "Ya no se puede abrir este chat guardado",
   recSub: "📁 Chat de solo lectura · exportado {t}",
   recInfo: "Este es un chat importado o guardado. Se puede leer, pero no modificar.",

@@ -1,6 +1,6 @@
 I18N.add("ja", {
   // page
-  docTitle: "Stoa Talk｜登録不要、4文字のコードでチャット",
+  docTitle: "StoaTalk｜登録不要、4文字のコードでチャット",
   tagline: "友だち登録は不要。ルームを開いて話し、終わったら消える",
   menuAria: "メニュー：プロフィール、チャット記録、言語",
   setupNote: "このサイトはまだデータベースに接続されていません。js/config.js に Firebase の設定を入力してください。",
@@ -212,7 +212,7 @@ I18N.add("ja", {
   noMsgs: "（メッセージなし）",
   empty: "メッセージはありません",
   dmHead: "🔒 {who} さんとの個別メッセージ",
-  expSub: "コード {code} · {t} にエクスポート · このファイルは Stoa Talk にインポートできます",
+  expSub: "コード {code} · {t} にエクスポート · このファイルは StoaTalk にインポートできます",
   downloaded: "{name} をダウンロードしました",
   exportCount: "あなた自身の個別メッセージを含む、全 {n} 件のメッセージです。",
   exportHint: "「この端末に保存」すると、ホーム画面の「チャット記録」から開けます。JSON と Web ページのファイルはほかの端末にもインポートできます。",
@@ -230,7 +230,7 @@ I18N.add("ja", {
   importRec: "📂 チャット記録ファイルをインポート",
   menu: "メニュー",
   tooBig: "ファイルが大きすぎます",
-  notArchive: "Stoa Talk からエクスポートしたファイルではありません",
+  notArchive: "StoaTalk からエクスポートしたファイルではありません",
   recBroken: "この記録は開けなくなっています",
   recSub: "📁 閲覧専用の記録 · {t} にエクスポート",
   recInfo: "インポートまたは保存したチャット記録です。閲覧はできますが、変更はできません。",
