@@ -411,4 +411,12 @@ I18N.add("en", {
   showQs: "Questions ({n})",
   showNoQs: "No questions yet. Scan the QR Code to ask, anonymously if you like.",
   showHint: "Scan the QR Code to join the discussion",
+  // written answers to questions
+  qAnsWrite: "Write answer",
+  qAnsEdit: "Edit answer",
+  qAnsTitle: "Answer this question",
+  qAnsDel: "Delete answer",
+  qAnsPh: "Write the answer. It shows under the question and is included in exports.",
+  qAnsLabel: "Answer",
+  qAnsSaved: "Answer saved; question marked answered",
 });

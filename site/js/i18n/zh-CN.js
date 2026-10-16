@@ -411,4 +411,12 @@ I18N.add("zh-CN", {
   showQs: "提问（{n}）",
   showNoQs: "还没有人提问，扫描二维码就能匿名提问。",
   showHint: "扫描二维码加入讨论",
+  // written answers to questions
+  qAnsWrite: "写回答",
+  qAnsEdit: "修改回答",
+  qAnsTitle: "回答这个提问",
+  qAnsDel: "删除回答",
+  qAnsPh: "写下回答，会显示在提问下方，导出时也会一起附上。",
+  qAnsLabel: "回答",
+  qAnsSaved: "回答已保存，提问标为已回答",
 });

@@ -411,4 +411,12 @@ I18N.add("zh-TW", {
   showQs: "提問（{n}）",
   showNoQs: "還沒有人提問，掃描 QR Code 就能匿名提問。",
   showHint: "掃描 QR Code 加入討論",
+  // written answers to questions
+  qAnsWrite: "寫回答",
+  qAnsEdit: "修改回答",
+  qAnsTitle: "回答這個提問",
+  qAnsDel: "刪除回答",
+  qAnsPh: "寫下回答，會顯示在提問下方，匯出時也會一起附上。",
+  qAnsLabel: "回答",
+  qAnsSaved: "回答已儲存，提問標為已回答",
 });

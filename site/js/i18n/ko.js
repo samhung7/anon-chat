@@ -411,4 +411,12 @@ I18N.add("ko", {
   showQs: "질문 ({n})",
   showNoQs: "아직 질문이 없습니다. QR 코드를 스캔하면 익명으로 질문할 수 있습니다.",
   showHint: "QR 코드를 스캔해 토론에 참여하세요",
+  // written answers to questions
+  qAnsWrite: "답변 쓰기",
+  qAnsEdit: "답변 수정",
+  qAnsTitle: "이 질문에 답변",
+  qAnsDel: "답변 삭제",
+  qAnsPh: "답변을 입력하세요. 질문 아래에 표시되고 내보내기에도 포함됩니다.",
+  qAnsLabel: "답변",
+  qAnsSaved: "답변을 저장하고 질문을 답변 완료로 표시했어요",
 });

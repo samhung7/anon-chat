@@ -308,6 +308,18 @@ rules = {"rules": {
                                     ".validate": "newData.val() === true"}},
                     # answered, marked by the owner or a co-host
                     "done": {".write": j("auth != null", is_staff(QROOM), "data.parent().exists()"), ".validate": "newData.val() === now"},
+                    # a written answer, by the owner or a co-host (who wrote it, under their room name); sealed in an encrypted room
+                    "ans": {
+                        ".write": j("auth != null", is_staff(QROOM), "data.parent().exists()"),
+                        ".validate": j("newData.hasChildren(['by', 'at'])", o(j(Q_ENC, "newData.hasChild('x')", "!newData.hasChild('text')"),
+                                                                           j("!" + Q_ENC, "newData.hasChildren(['text', 'name', 'avatar'])"))),
+                        "by": {".validate": "newData.val() === auth.uid"},
+                        "at": {".validate": "newData.val() === now"},
+                        "text": {".validate": NONEMPTY(2000) + " && !" + Q_ENC},
+                        "name": {".validate": S(24) + " && !" + Q_ENC}, "avatar": {".validate": S(8) + " && !" + Q_ENC},
+                        "x": {".validate": SEALED(6000) + " && " + Q_ENC},   # {t, n, a} sealed to the question's id
+                        "$other": NO,
+                    },
                 }),
             },
             "qq": {
