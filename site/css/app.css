@@ -275,6 +275,7 @@ ul.plist small { color: var(--muted); }
 
 /* language: the page is written in Traditional Chinese, so other languages stay hidden until js/i18n.js fills them in */
 html.l10n body { visibility: hidden; }
+html.opening #home { display: none; }
 .hmenu .merow + .merow { margin-top: 8px; }
 .langs { display: flex; flex-direction: column; gap: 6px; }
 .langs .btn[aria-checked="true"] { border-color: var(--accent); background: var(--accent-2); font-weight: 600; }

@@ -173,7 +173,7 @@
         store.set(ROOMKEY(code), null);
         note = t("badLink");
       }
-      busy(false);
+      busy(false); backdrop();
       const k = await askLink(code, note);
       busy(true);
       if (!k) return false;
@@ -356,7 +356,7 @@
     if (code.length !== 4) { toast(t("code4")); return; }
     const linkKey = String(raw || "").match(KEY_RE)?.[1];
     if (linkKey) store.set(ROOMKEY(code), linkKey); // a pasted invite link of an encrypted room
-    if (R?.code === code && !R.gone) { showChat(); return; }
+    if (R?.code === code && !R.gone) { roomPath(code); showChat(); return; }
     busy(true);
     try {
       await connect();
@@ -376,12 +376,13 @@
       if (await fb.get(roomRef(code, "banned/" + uid)).then((s) => s.val(), () => null)) { toast(t("bannedToast")); return; }
       if (meta.locked) { toast(t("lockedToast")); return; }
       busy(false);
+      if (!me()) backdrop();
       let m = await ensureMe();
       busy(true);
       if (!m) return;
       let key = null;
       if (meta.priv) {
-        busy(false);
+        busy(false); backdrop();
         const pw = await askPassword(meta, code);
         busy(true);
         if (pw == null) return;
@@ -400,7 +401,7 @@
         catch (e) {
           if (!/permission/i.test(e.message)) throw e;
           if (holder && holder !== uid) { // someone here already goes by this name
-            busy(false);
+            busy(false); backdrop();
             m = await askMe(false, t("nameTakenJoin", { name: m.name }), false);
             busy(true);
             if (!m) return;
@@ -427,7 +428,7 @@
     R = { code, c, meta: null, members: {}, seen: {}, raw: {}, rawSeen: {}, msgs: new Map(), dms: new Map(), plain: new Map(), dk: new Map(),
           view: "all", unread: {}, drafts: {}, reply: null, off: [], gone: false, ready: false, q: Promise.resolve(), t0: Date.now() + offset };
     rememberRoom(code);
-    history.replaceState(null, "", "?room=" + code + (EMU && params.get("as") ? "&as=" + params.get("as") : ""));
+    roomPath(code);
     $("#list").replaceChildren();
     showChat(); offerNotify();
     const r = R;
@@ -1180,6 +1181,10 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
   }
 
   /* ---------- screens ---------- */
+  // the address names the room, so reloading the page comes back to it
+  const roomPath = (code) => history.replaceState(null, "", "?room=" + code + (EMU && params.get("as") ? "&as=" + params.get("as") : ""));
+  // opening a room's link starts with no screen showing; a question on the way in (nickname, link, password) shows the home page behind it
+  function backdrop() { if ($("#home").hidden && $("#chat").hidden && $("#record").hidden) { $("#home").hidden = false; showResume(); } }
   function showChat() { $("#home").hidden = true; $("#record").hidden = true; $("#chat").hidden = false; renderView(); }
   function home() {
     $("#chat").hidden = true; $("#record").hidden = true; $("#home").hidden = false;
@@ -1289,5 +1294,9 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
   });
 
   const start = params.get("room");
-  if (start && FB?.databaseURL) join(start + location.hash); else home(); // an encrypted room's key rides after the #
+  if (start && FB?.databaseURL) { // an encrypted room's key rides after the #
+    $("#home").hidden = true; // straight into the room, without the home page showing first
+    document.documentElement.classList.remove("opening");
+    join(start + location.hash).finally(() => { if (!R || R.gone) home(); else if ($("#chat").hidden) backdrop(); });
+  } else { document.documentElement.classList.remove("opening"); home(); }
 })();
