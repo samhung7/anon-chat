@@ -1,4 +1,4 @@
-# Stoa Talk
+# StoaTalk
 
 Open a room, get a 4-character code, and share the code or link. Anyone with it joins straight from the browser: no sign-up, no LINE, FB or IG. When the talk is over the room is deleted, and anyone who wants a copy exports it first.
 Made for lecture Q&A, anonymous reading groups, workshops and team projects. Interface: 繁體中文, 简体中文, English, 日本語, 한국어, Español, Français, Deutsch, Português. It follows the device's language (English when the site doesn't have it), and the ☰ menu on the home page can change it. Text lives in `site/js/i18n/<lang>.js`; add a key to every file when you add text.

@@ -1,6 +1,6 @@
 I18N.add("zh-CN", {
   // page
-  docTitle: "Stoa Talk｜无需加好友，输入 4 位代码就能聊",
+  docTitle: "StoaTalk｜无需加好友，输入 4 位代码就能聊",
   tagline: "无需加好友，开房就聊，聊完就删",
   menuAria: "菜单：身份、聊天记录和语言",
   setupNote: "这个网站还没有连接数据库，请在 js/config.js 中填写 Firebase 配置。",
@@ -212,7 +212,7 @@ I18N.add("zh-CN", {
   noMsgs: "（没有消息）",
   empty: "没有消息",
   dmHead: "🔒 与 {who} 的私信",
-  expSub: "代码 {code} · 导出时间 {t} · 此文件可导入 Stoa Talk",
+  expSub: "代码 {code} · 导出时间 {t} · 此文件可导入 StoaTalk",
   downloaded: "已下载 {name}",
   exportCount: "共 {n} 条消息，包括你自己的私信。",
   exportHint: "“保存到本设备”后，可以在首页的“我的聊天记录”中打开；JSON 和网页文件都能在其他设备上导入。",
@@ -230,7 +230,7 @@ I18N.add("zh-CN", {
   importRec: "📂 导入聊天记录文件",
   menu: "菜单",
   tooBig: "文件太大了",
-  notArchive: "这不是 Stoa Talk 导出的文件",
+  notArchive: "这不是 StoaTalk 导出的文件",
   recBroken: "这份记录无法打开了",
   recSub: "📁 只读记录 · {t} 导出",
   recInfo: "这是导入或保存的聊天记录，只能查看，不能修改。",

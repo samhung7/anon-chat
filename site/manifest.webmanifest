@@ -1,6 +1,6 @@
 {
-  "name": "Stoa Talk",
-  "short_name": "Stoa Talk",
+  "name": "StoaTalk",
+  "short_name": "StoaTalk",
   "description": "Chat rooms you join with a 4-character code. No sign-up, gone when you're done.",
   "start_url": "./",
   "scope": "./",

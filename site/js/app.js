@@ -22,7 +22,7 @@
   const SDK = new URL("js/vendor/firebase.js", location.href).href;
   const ME_KEY = "chat-me", ROOMS_KEY = "chat-rooms";
   // interface text in the chosen language (js/i18n.js)
-  const t = I18N.t, APP = "Stoa Talk";
+  const t = I18N.t, APP = "StoaTalk";
   // each animal with its name in the current language, which is also the default nickname
   // the same, with elements in the slots: a list to append
   const tEl = (key, nodes) => t(key).split(/(\{\w+\})/).map((part) => nodes[part.slice(1, -1)] ?? part).filter((x) => x !== "");

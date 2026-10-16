@@ -15,5 +15,5 @@ const table = [`| day | ${COLS.join(" | ")} |`, `|---|${COLS.map(() => "---:").j
   `| **30 days** | ${COLS.map((k) => `**${sum[k]}**`).join(" | ")} |`,
   ...rows.map(([day, d]) => `| ${day} | ${COLS.map((k) => +d[k] || 0).join(" | ")} |`)].join("\n");
 console.log(table);
-if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, "## Stoa Talk usage, last 30 days\n\n" + table + "\n");
+if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, "## StoaTalk usage, last 30 days\n\n" + table + "\n");
 await app.delete();

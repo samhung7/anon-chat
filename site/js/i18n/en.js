@@ -1,6 +1,6 @@
 I18N.add("en", {
   // page
-  docTitle: "Stoa Talk | Chat with a 4-character code, no sign-up",
+  docTitle: "StoaTalk | Chat with a 4-character code, no sign-up",
   tagline: "No friend requests. Open a room, talk, and it's gone when you're done",
   menuAria: "Menu: identity, chat records and language",
   setupNote: "This site isn't connected to a database yet. Add the Firebase settings in js/config.js.",
@@ -212,7 +212,7 @@ I18N.add("en", {
   noMsgs: "(No messages)",
   empty: "No messages",
   dmHead: "🔒 Private messages with {who}",
-  expSub: "Code {code} · Exported {t} · You can import this file into Stoa Talk",
+  expSub: "Code {code} · Exported {t} · You can import this file into StoaTalk",
   downloaded: "Downloaded {name}",
   exportCount: "{n} messages in all, including your own private messages.",
   exportHint: "After “Save on this device” you'll find it under “My chat records” on the home page. JSON and web page files can be imported on other devices.",
@@ -230,7 +230,7 @@ I18N.add("en", {
   importRec: "📂 Import a chat record file",
   menu: "Menu",
   tooBig: "That file is too big",
-  notArchive: "This isn't a file exported from Stoa Talk",
+  notArchive: "This isn't a file exported from StoaTalk",
   recBroken: "This record can't be opened any more",
   recSub: "📁 Read-only record · exported {t}",
   recInfo: "This is an imported or saved chat record. It can be read but not changed.",

@@ -1,6 +1,6 @@
 I18N.add("pt", {
   // page
-  docTitle: "Stoa Talk | Converse com um código de 4 caracteres, sem cadastro",
+  docTitle: "StoaTalk | Converse com um código de 4 caracteres, sem cadastro",
   tagline: "Sem pedidos de amizade. Abra uma sala, converse e, quando terminar, ela some",
   menuAria: "Menu: identidade, registros de conversa e idioma",
   setupNote: "Este site ainda não está conectado a um banco de dados. Adicione as configurações do Firebase em js/config.js.",
@@ -212,7 +212,7 @@ I18N.add("pt", {
   noMsgs: "(Nenhuma mensagem)",
   empty: "Nenhuma mensagem",
   dmHead: "🔒 Mensagens privadas com {who}",
-  expSub: "Código {code} · Exportado em {t} · Você pode importar este arquivo no Stoa Talk",
+  expSub: "Código {code} · Exportado em {t} · Você pode importar este arquivo no StoaTalk",
   downloaded: "{name} baixado",
   exportCount: "{n} mensagens no total, incluindo suas mensagens privadas.",
   exportHint: "Depois de “Salvar neste dispositivo”, você encontra em “Meus registros de conversa” na página inicial. Arquivos JSON e de página web podem ser importados em outros dispositivos.",
@@ -230,7 +230,7 @@ I18N.add("pt", {
   importRec: "📂 Importar um arquivo de registro de conversa",
   menu: "Menu",
   tooBig: "Esse arquivo é grande demais",
-  notArchive: "Este não é um arquivo exportado do Stoa Talk",
+  notArchive: "Este não é um arquivo exportado do StoaTalk",
   recBroken: "Este registro não pode mais ser aberto",
   recSub: "📁 Registro somente leitura · exportado em {t}",
   recInfo: "Este é um registro de conversa importado ou salvo. Pode ser lido, mas não alterado.",

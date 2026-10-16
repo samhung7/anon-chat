@@ -1,6 +1,6 @@
 I18N.add("fr", {
   // page
-  docTitle: "Stoa Talk | Discutez avec un code à 4 caractères, sans inscription",
+  docTitle: "StoaTalk | Discutez avec un code à 4 caractères, sans inscription",
   tagline: "Pas de demandes d’ami. Ouvrez un salon, discutez, et tout disparaît à la fin",
   menuAria: "Menu : identité, historiques de discussion et langue",
   setupNote: "Ce site n’est pas encore relié à une base de données. Ajoutez la configuration Firebase dans js/config.js.",
@@ -212,7 +212,7 @@ I18N.add("fr", {
   noMsgs: "(Aucun message)",
   empty: "Aucun message",
   dmHead: "🔒 Messages privés avec {who}",
-  expSub: "Code {code} · Exporté le {t} · Ce fichier peut être importé dans Stoa Talk",
+  expSub: "Code {code} · Exporté le {t} · Ce fichier peut être importé dans StoaTalk",
   downloaded: "{name} téléchargé",
   exportCount: "{n} messages au total, y compris vos propres messages privés.",
   exportHint: "Après « Enregistrer sur cet appareil », vous le retrouverez dans « Mes historiques » sur la page d’accueil. Les fichiers JSON et page web peuvent être importés sur d’autres appareils.",
@@ -230,7 +230,7 @@ I18N.add("fr", {
   importRec: "📂 Importer un fichier d’historique",
   menu: "Menu",
   tooBig: "Ce fichier est trop volumineux",
-  notArchive: "Ce fichier n’a pas été exporté depuis Stoa Talk",
+  notArchive: "Ce fichier n’a pas été exporté depuis StoaTalk",
   recBroken: "Cet historique ne peut plus être ouvert",
   recSub: "📁 Historique en lecture seule · exporté le {t}",
   recInfo: "Ceci est un historique importé ou enregistré. Il peut être lu mais pas modifié.",
