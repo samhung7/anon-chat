@@ -1,0 +1,28 @@
+/* What the app is made of: fixed lists, limits and timings. The database rules (tools/rules.py) enforce the
+   same limits on the server; change both together. */
+export const APP = "StoaTalk";
+export const CFG = window.CHAT_CONFIG || {};
+export const params = new URLSearchParams(location.search);
+
+export const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // no 0/O, 1/I/L
+export const CODE_RE = /^[2-9A-HJKMNP-Z]{4}$/;
+export const REACTS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
+// each animal; its name in the current language (text.js avatars()) is also the default nickname
+export const ANIMALS = ["🐻", "🦊", "🐼", "🐯", "🦁", "🐸", "🐵", "🐧", "🦉", "🐙", "🦄", "🐶", "🐱", "🐰", "🐨", "🐲"];
+
+// longest texts, in characters (the rules check the same)
+export const LIMITS = {
+  text: 1000, question: 300, answer: 2000,
+  name: 12, shownName: 24, avatar: 8, roomTitle: 40, recordTitle: 60,
+  pollQ: 200, pollOpt: 80, pollOpts: 10, drawTitle: 60, gifUrl: 500, gifTitle: 120,
+  cap: 1000,
+};
+export const DAY = 864e5;          // a room nobody wrote in for this long is gone
+export const MAX_LOAD = 2000;      // the most messages loaded on entering a room
+export const GROUP_MS = 180000;    // messages from one person this close together share one header
+export const FRESH_MS = 60000;     // a message this new still notifies (older ones are history loading)
+export const POST_GAP_MS = 1000;   // posts from this device go out at least this far apart (the rules allow 800 ms)
+
+// GIFs come from the KLIPY search and only from KLIPY's servers (database.rules.json checks the same)
+export const KLIPY_KEY = CFG.klipyKey;
+export const GIF_HOST = /^https:\/\/([a-z0-9-]+\.)*klipy\.com\//;

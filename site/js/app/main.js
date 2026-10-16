@@ -1,0 +1,121 @@
+/* StoaTalk: anonymous chat rooms. Someone opens a room and gets a 4-character code; others join with the code or
+   link. Nobody signs up: each device picks a nickname and an animal, and gets an anonymous Firebase id behind the
+   scenes. A room is an Open Stoa (the code is enough) or a Private Salon, which is end-to-end encrypted: its key
+   travels only in the invite link (after the #), so the server stores the title, nicknames and messages as
+   ciphertext. Private messages are always end-to-end encrypted. The owner can lock the room, cap its size, name
+   co-hosts, hand the room over and end it, which deletes everything; the owner and co-hosts remove messages and
+   people, and see what people report. A room nobody has written in for 24 hours is deleted too (tools/cleanup).
+   Anyone can export what they can see before it goes.
+   Backend: Firebase Realtime Database + anonymous sign-in; database.rules.json is what actually enforces all of this.
+
+   This file only connects the page's fixed buttons to the modules beside it:
+     session.js   the room on screen          room.js     a Room: its data, kept live; api.js its writes
+     crypto.js    end-to-end encryption        backend.js  the Firebase connection
+     kinds.js     text, GIF, photo, poll, draw (photos.js, polls.js, draws.js)
+     chat.js      the chat screen              composer.js the message box    actions.js a message's ⋯ menu
+     menu.js      the room's ⋯ menu            people.js   members and owner tools
+     qa.js        lecture Q&A                  show.js     the projector screen
+     lobby.js     opening and joining          home.js     screens and the home page
+     records.js   export, import, saved records (archive.js: the record format)
+     identity.js  nickname and animal          notify.js   notifications    pickers.js emoji, GIF, ＋ */
+import { KLIPY_KEY, params } from "./constants.js?v=dev";
+import { $ } from "./dom.js?v=dev";
+import { store, KEYS } from "./storage.js?v=dev";
+import { backend, asParam } from "./backend.js?v=dev";
+import { room } from "./session.js?v=dev";
+import { showMe } from "./identity.js?v=dev";
+import { create, join } from "./lobby.js?v=dev";
+import { LIST, setView, markSeen, showJump } from "./chat.js?v=dev";
+import { send, cancelReply, typing, renderTyping, mentionBar, box } from "./composer.js?v=dev";
+import { ask } from "./qa.js?v=dev";
+import { sendPhotos } from "./photos.js?v=dev";
+import { menu, share } from "./menu.js?v=dev";
+import { people } from "./people.js?v=dev";
+import { setNotify, watchVisibility } from "./notify.js?v=dev";
+import { openPicker, closePicker, pickerOpen } from "./pickers.js?v=dev";
+import { importFile, recordMenu, showRecordTab } from "./records.js?v=dev";
+import { home, homeMenu, backdrop, adoptOldRoom, turnResumePage } from "./home.js?v=dev";
+
+I18N.apply();
+adoptOldRoom();
+showMe();
+watchVisibility();
+if (!backend.configured) { $("#setupNote").hidden = false; document.body.classList.add("nodb"); }
+
+/* ---------- home ---------- */
+$("#meBtn").addEventListener("click", homeMenu);
+$("#createBtn").addEventListener("click", create);
+$("#logoBtn").addEventListener("click", create);
+$("#joinForm").addEventListener("submit", (e) => { e.preventDefault(); join($("#joinCode").value); });
+$("#joinCode").addEventListener("input", (e) => { const v = e.target.value; if (!/[/?]/.test(v)) e.target.value = v.toUpperCase(); });
+$("#resume").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-code], [data-a]"); if (!b) return;
+  if (b.dataset.code) join(b.dataset.code);
+  else turnResumePage(b.dataset.a === "next" ? 1 : -1);
+});
+$("#importFile").addEventListener("change", (e) => { importFile(e.target.files[0]); e.target.value = ""; });
+$("#record").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-a]")?.dataset.a, tab = e.target.closest("[data-tab]");
+  if (a === "home") home();
+  if (a === "menu") recordMenu();
+  if (tab) showRecordTab(+tab.dataset.tab);
+});
+
+/* ---------- the chat screen ---------- */
+$("#codeBtn").addEventListener("click", share);
+$("#photoFile").addEventListener("change", (e) => { const files = [...e.target.files]; e.target.value = ""; sendPhotos(files); });
+if (!KLIPY_KEY) $("#composer [data-a=gif]").hidden = true;
+$("#composer").addEventListener("click", (e) => { const b = e.target.closest(".tool"); if (b) openPicker(b.dataset.a); });
+$("#peopleBtn").addEventListener("click", () => people());
+$("#askAnon").checked = store.get(KEYS.askAnon) !== "0";
+$("#askAnon").addEventListener("change", (e) => store.set(KEYS.askAnon, e.target.checked ? null : "0"));
+$("#show").addEventListener("click", (e) => { if (e.target.closest("[data-a=exitShow]") && room) location.href = "?room=" + room.code + asParam("&"); });
+// tapping the conversation while the emoji / GIF panel is open just closes the panel
+["#list", "#pins"].forEach((s) => $(s).addEventListener("click", (e) => { if (pickerOpen()) { closePicker(); e.stopPropagation(); e.preventDefault(); } }, true));
+$("#chat").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-a]")?.dataset.a;
+  if (a === "home") { if (room?.ui.view !== "all") setView("all"); else home(); }
+  if (a === "menu") menu();
+  if (a === "all" || a === "qa") setView(a);
+  if (a === "notifyYes" || a === "notifyNo") setNotify(a === "notifyYes");
+  if (a === "noreply") cancelReply();
+});
+setInterval(() => room && !room.gone && renderTyping(), 2000);
+const ta = box();
+const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };
+ta.addEventListener("input", grow);
+ta.addEventListener("input", () => { typing.ping(); mentionBar(); });
+$("#mentionBar").addEventListener("mousedown", (e) => e.preventDefault()); // keep the keyboard up while picking a name
+LIST().addEventListener("scroll", () => { if (room) { markSeen(); showJump(); } }, { passive: true });
+["touchstart", "wheel"].forEach((ev) => LIST().addEventListener(ev, () => { if (room) room.ui.touched = true; }, { passive: true }));
+$("#jumpBtn").addEventListener("click", () => { if (room) room.ui.touched = true; const l = LIST(); l.scrollTo({ top: l.scrollHeight, behavior: "smooth" }); });
+// a picture pasted into the box is sent as a photo
+ta.addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+  if (files.length && room && room.ui.view === "all") { e.preventDefault(); sendPhotos(files); }
+});
+// the keyboard covers the home indicator, so the home-screen app's extra space under the box goes while typing
+ta.addEventListener("focus", () => document.body.classList.add("typing"));
+ta.addEventListener("blur", () => { document.body.classList.remove("typing"); typing.stop(); });
+// Enter sends on a keyboard; on phones Enter is a new line and the button sends. Never while an IME is composing.
+ta.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && matchMedia("(pointer: fine)").matches) { e.preventDefault(); $("#composer").requestSubmit(); }
+});
+// the box empties at once, so the next message can be typed while this one goes out
+$("#composer").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = ta.value;
+  if (!text.trim()) return;
+  ta.value = ""; grow(); mentionBar();
+  if (!(await (room?.ui.view === "qa" ? ask(text) : send(text))) && !ta.value) { ta.value = text; grow(); } // not sent: give the text back
+  else if (pickerOpen() === "emoji") closePicker();
+  ta.focus();
+});
+
+/* ---------- start ---------- */
+const start = params.get("room");
+if (start && backend.configured) { // an encrypted room's key rides after the #
+  $("#home").hidden = true; // straight into the room, without the home page showing first
+  document.documentElement.classList.remove("opening");
+  join(start + location.hash).finally(() => { if (!room || room.gone) home(); else if ($("#chat").hidden) backdrop(); });
+} else { document.documentElement.classList.remove("opening"); home(); }
