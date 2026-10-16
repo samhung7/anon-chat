@@ -370,6 +370,31 @@
             "done": {
               ".write": "(auth != null) && ((root.child('rooms/' + $code).child('meta/owner').val() === auth.uid) || (root.child('rooms/' + $code).child('meta/mods/' + auth.uid).val() === true)) && (data.parent().exists())",
               ".validate": "newData.val() === now"
+            },
+            "ans": {
+              ".write": "(auth != null) && ((root.child('rooms/' + $code).child('meta/owner').val() === auth.uid) || (root.child('rooms/' + $code).child('meta/mods/' + auth.uid).val() === true)) && (data.parent().exists())",
+              ".validate": "(newData.hasChildren(['by', 'at'])) && ((((root.child('rooms/' + $code).child('meta/enc').val() === true)) && (newData.hasChild('x')) && (!newData.hasChild('text'))) || ((!(root.child('rooms/' + $code).child('meta/enc').val() === true)) && (newData.hasChildren(['text', 'name', 'avatar']))))",
+              "by": {
+                ".validate": "newData.val() === auth.uid"
+              },
+              "at": {
+                ".validate": "newData.val() === now"
+              },
+              "text": {
+                ".validate": "newData.isString() && newData.val().length <= 2000 && newData.val().length > 0 && !(root.child('rooms/' + $code).child('meta/enc').val() === true)"
+              },
+              "name": {
+                ".validate": "newData.isString() && newData.val().length <= 24 && !(root.child('rooms/' + $code).child('meta/enc').val() === true)"
+              },
+              "avatar": {
+                ".validate": "newData.isString() && newData.val().length <= 8 && !(root.child('rooms/' + $code).child('meta/enc').val() === true)"
+              },
+              "x": {
+                ".validate": "newData.isString() && newData.val().length <= 6000 && newData.val().matches(/^[A-Za-z0-9_-]+$/) && (root.child('rooms/' + $code).child('meta/enc').val() === true)"
+              },
+              "$other": {
+                ".validate": false
+              }
             }
           }
         },

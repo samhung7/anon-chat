@@ -411,4 +411,12 @@ I18N.add("ja", {
   showQs: "質問（{n}）",
   showNoQs: "まだ質問はありません。QR コードから匿名で質問できます。",
   showHint: "QR コードを読み取って議論に参加",
+  // written answers to questions
+  qAnsWrite: "回答を書く",
+  qAnsEdit: "回答を編集",
+  qAnsTitle: "この質問に回答",
+  qAnsDel: "回答を削除",
+  qAnsPh: "回答を入力してください。質問の下に表示され、書き出しにも含まれます。",
+  qAnsLabel: "回答",
+  qAnsSaved: "回答を保存し、質問を回答済みにしました",
 });

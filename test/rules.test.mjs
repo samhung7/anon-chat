@@ -422,6 +422,15 @@ test("Q&A: members ask (anonymously too) once the owner turns it on; others upvo
   await assertSucceeds(set(ref(db("carol"), `rooms/${C}/meta/qnow`), "q1"));
   await assertFails(set(ref(db("bob"), `rooms/${C}/meta/qnow`), "q2"));
   await assertFails(set(ref(db("carol"), `rooms/${C}/qs/q1/text`), "改字"));
+  // a written answer: the owner and co-hosts only, in their own name
+  const ans = (by, extra = {}) => ({ by, name: "x", avatar: "🦊", text: "回答", at: T, ...extra });
+  await assertFails(set(ref(db("bob"), `rooms/${C}/qs/q1/ans`), ans("bob")));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/qs/q1/ans`), ans("carol")));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/qs/q1/ans`), ans("alice", { text: "a".repeat(2001) })));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/qs/nope/ans`), ans("alice")));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/qs/q1/ans`), ans("alice")));
+  await assertSucceeds(set(ref(db("carol"), `rooms/${C}/qs/q1/ans`), ans("carol", { text: "改寫" })));
+  await assertSucceeds(set(ref(db("carol"), `rooms/${C}/qs/q1/ans`), null));
   // taking a question down: the asker or staff
   await assertFails(remove(ref(db("bob"), `rooms/${C}/qs/q2`)));
   await assertSucceeds(remove(ref(db("bob"), `rooms/${C}/qs/q1`)));
@@ -462,6 +471,8 @@ test("Q&A in an encrypted room is sealed", async () => {
   await assertFails(ask("bob", "q1", { text: "明文" }));
   await assertFails(ask("bob", "q1", { x: "c2VhbGVk", name: "bob" }));
   await assertSucceeds(ask("bob", "q1", { x: "c2VhbGVk" }));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/qs/q1/ans`), { by: "alice", name: "x", avatar: "🦊", text: "明文", at: T }));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/qs/q1/ans`), { by: "alice", x: "c2VhbGVk", at: T }));
 });
 
 test("usage stats: anonymous daily counts that only go up by one", async () => {

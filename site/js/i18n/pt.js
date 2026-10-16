@@ -411,4 +411,12 @@ I18N.add("pt", {
   showQs: "Perguntas ({n})",
   showNoQs: "Ainda não há perguntas. Escaneie o QR Code para perguntar, até anonimamente.",
   showHint: "Escaneie o QR Code para entrar na conversa",
+  // written answers to questions
+  qAnsWrite: "Escrever resposta",
+  qAnsEdit: "Editar resposta",
+  qAnsTitle: "Responder a esta pergunta",
+  qAnsDel: "Excluir resposta",
+  qAnsPh: "Escreva a resposta. Ela aparece abaixo da pergunta e entra na exportação.",
+  qAnsLabel: "Resposta",
+  qAnsSaved: "Resposta salva; pergunta marcada como respondida",
 });

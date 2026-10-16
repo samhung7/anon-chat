@@ -1100,10 +1100,21 @@
       p = R.plain.get(v.x);
       if (p === undefined) { p = R.c ? await unseal(R.c.aes, v.x, "q:" + id) : null; if (p) R.plain.set(v.x, p); }
     }
-    const base = { id, at: +v.at || 0, up: Object.keys(v.up || {}), done: +v.done || 0 };
+    const base = { id, at: +v.at || 0, up: Object.keys(v.up || {}), done: +v.done || 0, ans: v.ans && typeof v.ans === "object" ? await openAns(id, v.ans) : null };
     if (!p) return { ...base, text: t("cantDecrypt"), name: "", avatar: "", bad: true };
     const named = typeof p.n === "string" && !!p.n;
     return { ...base, text: String(p.t || "").slice(0, 300), name: named ? p.n.slice(0, 24) : "", avatar: named ? String(p.a || "👤").slice(0, 8) : "" };
+  }
+  // the owner's or a co-host's written answer, under their room name; sealed like the question, bound to its id
+  async function openAns(id, v) {
+    let p = { t: v.text, n: v.name, a: v.avatar };
+    if (v.x) {
+      p = R.plain.get(v.x);
+      if (p === undefined) { p = R.c ? await unseal(R.c.aes, v.x, "a:" + id) : null; if (p) R.plain.set(v.x, p); }
+    }
+    const base = { by: String(v.by || ""), at: +v.at || 0 };
+    if (!p) return { ...base, text: t("cantDecrypt"), name: "", avatar: "", bad: true };
+    return { ...base, text: String(p.t || "").slice(0, 2000), name: String(p.n || "").slice(0, 24), avatar: String(p.a || "👤").slice(0, 8) };
   }
   async function openQs(raw) {
     const out = new Map();
@@ -1157,6 +1168,23 @@
     if (on && R.meta?.qnow === id) upd["meta/qnow"] = null;
     fb.update(roomRef(R.code), upd).catch(() => toast(t("tryAgain")));
   }
+  // write, rewrite or take down the answer; saving one also marks the question answered (and keeps it on the projector if it's the live one)
+  async function answerQ(q) {
+    const input = el("textarea", { class: "field", maxlength: 2000, rows: 6, id: "ansText", placeholder: t("qAnsPh"), "aria-label": t("qAnsTitle") });
+    input.value = q.ans && !q.ans.bad ? q.ans.text : "";
+    const a = await sheet(t("qAnsTitle"), el("div", {}, el("p", { class: "muted qansq", text: q.text }), input),
+      [["no", t("cancel")], ...(q.ans ? [["del", t("qAnsDel"), "danger"]] : []), ["yes", t("save"), "primary"]], { onOpen: () => input.focus() });
+    if (!a || a === "no" || !R || R.gone) return;
+    if (a === "del") return fb.set(roomRef(R.code, `qs/${q.id}/ans`), null).catch(() => toast(t("tryAgain")));
+    const text = input.value.trim().slice(0, 2000);
+    if (!text) return;
+    if (q.ans && !q.ans.bad && text === q.ans.text) return;
+    const m = R.members[uid] || me();
+    const ans = R.c ? { by: uid, at: T(), x: await seal(R.c.aes, { t: text, n: m.name, a: m.avatar }, "a:" + q.id) } : { by: uid, at: T(), text, name: m.name, avatar: m.avatar };
+    const upd = { [`qs/${q.id}/ans`]: ans };
+    if (!q.done) upd[`qs/${q.id}/done`] = T();
+    fb.update(roomRef(R.code), upd).then(() => !q.done && toast(t("qAnsSaved")), () => toast(t("tryAgain")));
+  }
   const setQNow = (id) => fb.set(roomRef(R.code, "meta/qnow"), id).catch(() => toast(t("tryAgain")));
   function setQa(on) {
     fb.update(roomRef(R.code, "meta"), { qa: on }).then(() => {
@@ -1191,12 +1219,13 @@
     if (changed) renderQa();
   }
   function qCard(q, waiting) {
-    const staff = isStaff(), mine = isMyQ(q.id), live = !waiting && R.meta?.qnow === q.id && !q.done, voted = q.up.includes(uid);
+    const staff = isStaff(), mine = isMyQ(q.id), live = !waiting && R.meta?.qnow === q.id && (!q.done || !!q.ans), voted = q.up.includes(uid);
     const btn = (label, fn, cls = "") => el("button", { type: "button", class: "btn small " + cls, text: label, onclick: fn });
     const tools = [];
     if (waiting) tools.push(btn(t("qApprove"), () => approveQ(q.id), "primary"), btn(t("qReject"), () => removeQ(q.id, true), "danger"));
     else if (!R.gone) {
-      if (staff && !q.done) tools.push(btn(t(live ? "qNowOff" : "qNowOn"), () => setQNow(live ? null : q.id)));
+      if (staff && !q.bad) tools.push(btn(t(q.ans ? "qAnsEdit" : "qAnsWrite"), () => answerQ(q), q.ans ? "" : "primary"));
+      if (staff && (!q.done || live)) tools.push(btn(t(live ? "qNowOff" : "qNowOn"), () => setQNow(live ? null : q.id)));
       if (staff) tools.push(btn(t(q.done ? "qUndone" : "qDone"), () => markDone(q.id, !q.done)));
       if (staff || mine) tools.push(btn(t(mine && !staff ? "qTakeBack" : "qRemove"), () => removeQ(q.id, false), "danger"));
     }
@@ -1209,13 +1238,18 @@
         el("div", { class: "qwho" }, el("span", { text: q.name ? `${q.avatar} ${q.name}` : t("anonAsker") }),
           mine ? el("small", { class: "qmine", text: t("qMine") }) : null, el("time", { text: fmtTime(q.at) })),
         el("p", { class: "qtext" }, linkify(q.text)),
+        q.ans ? ansBox(q.ans, fmtTime) : null,
         tools.length ? el("div", { class: "qtools" }, tools) : null));
   }
+  const ansBox = (a, when) => el("div", { class: "qans" },
+    el("div", { class: "qwho" }, el("span", { text: a.name ? `💬 ${a.avatar || ""} ${a.name}`.replace(/\s+/g, " ") : "💬" }), el("small", { text: t("qAnsLabel") }), a.at ? el("time", { text: when(a.at) }) : null),
+    el("p", { class: "qtext" }, linkify(a.text)));
   function renderQa() {
     if (!R || R.view !== "qa" || $("#chat").hidden) return;
     const list = LIST(), keep = list.scrollTop, staff = isStaff();
     const all = [...R.qs.values()];
-    const open = all.filter((q) => !q.done).sort(byVotes), done = all.filter((q) => q.done).sort((a, b) => b.done - a.done);
+    const now = (q) => R.meta?.qnow === q.id && !!q.ans; // an answered question stays up top while it's on the projector
+    const open = all.filter((q) => !q.done || now(q)).sort(byVotes), done = all.filter((q) => q.done && !now(q)).sort((a, b) => b.done - a.done);
     const parts = [];
     if (!R.meta?.qa) parts.push(el("p", { class: "note", text: t("qaClosedNote") }));
     else if (R.meta.qmod) parts.push(el("p", { class: "note qnote", text: t(staff ? "qModStaffNote" : "qModNote") }));
@@ -1259,15 +1293,16 @@
     $(".sppl", box).textContent = t("showPeople", { n: Object.values(R.members).filter((m) => m.online !== false).length });
     const poll = [...R.msgs.values()].reverse().find((v) => v.poll);
     const pollBox = poll ? el("div", { class: "spollbox" }, pollView(livePoll(poll), null)) : null;
-    const live = meta.qnow && R.qs.get(meta.qnow);
-    const open = [...R.qs.values()].filter((q) => !q.done && q !== live).sort(byVotes).slice(0, live ? 4 : 6);
+    const live = meta.qnow && R.qs.get(meta.qnow), showLive = live && (!live.done || live.ans);
+    const open = [...R.qs.values()].filter((q) => !q.done && q !== live).sort(byVotes).slice(0, showLive ? (live.ans ? 3 : 4) : 6);
     const who = (q) => (q.name ? `${q.avatar} ${q.name}` : t("anonAsker"));
     const main = [];
     if (meta.qa || R.qs.size) {
-      if (live && !live.done) main.push(el("div", { class: "snow" }, el("span", { class: "qlive", text: t("qLive") }), el("p", { text: live.text }), el("small", { text: `${who(live)} · ▲ ${live.up.length}` })));
+      if (showLive) main.push(el("div", { class: "snow" }, el("span", { class: "qlive", text: t("qLive") }), el("p", { text: live.text }), el("small", { text: `${who(live)} · ▲ ${live.up.length}` }),
+        live.ans && !live.ans.bad ? el("div", { class: "sans" }, el("small", { text: `💬 ${live.ans.name || t("qAnsLabel")}` }), el("p", { text: live.ans.text })) : null));
       main.push(el("h2", { text: t("showQs", { n: [...R.qs.values()].filter((q) => !q.done).length }) }));
       main.push(open.length ? el("ol", { class: "slist" }, open.map((q) => el("li", {}, el("span", { class: "sv", text: "▲ " + q.up.length }), el("span", { class: "st" }, q.text, el("small", { text: who(q) })))))
-        : el("p", { class: "shint", text: live ? "" : t("showNoQs") }));
+        : el("p", { class: "shint", text: showLive ? "" : t("showNoQs") }));
     } else main.push(pollBox || el("p", { class: "shint big", text: t("showHint") }));
     $(".smain", box).replaceChildren(...main);
     $(".spoll", box).replaceChildren(...(meta.qa || R.qs.size) && pollBox ? [pollBox] : []);
@@ -1668,7 +1703,8 @@
     };
     // the lecture's questions, most upvoted first: the record a host takes away
     const qs = [...R.qs.values()].filter((q) => !q.bad).sort(byVotes)
-      .map((q) => ({ text: q.text, name: q.name || undefined, avatar: q.avatar || undefined, at: q.at, votes: q.up.length, done: !!q.done || undefined }));
+      .map((q) => ({ text: q.text, name: q.name || undefined, avatar: q.avatar || undefined, at: q.at, votes: q.up.length, done: !!q.done || undefined,
+        answer: q.ans && !q.ans.bad ? { text: q.ans.text, name: q.ans.name || undefined, avatar: q.ans.avatar || undefined, at: q.ans.at } : undefined }));
     if (qs.length) a.questions = qs;
     Object.defineProperty(a, "pics", { value: pics });
     return a;
@@ -1703,13 +1739,15 @@
       dms: (Array.isArray(o.dms) ? o.dms : []).slice(0, 200).map((d) => ({ with: { name: str(d?.with?.name, 24) || "？", avatar: str(d?.with?.avatar, 8) }, messages: keep(d?.messages) })).filter((d) => d.messages.length),
       ...(() => {
         const qs = arr(o.questions).slice(0, 2000).map((q) => ({ text: str(q?.text, 300), name: str(q?.name, 24) || undefined, avatar: str(q?.avatar, 8) || undefined,
-          at: num(q?.at), votes: Math.min(Math.max(num(q?.votes), 0), 9999), done: q?.done === true || undefined })).filter((q) => q.text);
+          at: num(q?.at), votes: Math.min(Math.max(num(q?.votes), 0), 9999), done: q?.done === true || undefined,
+          answer: q?.answer && typeof q.answer === "object" && str(q.answer.text, 2000) ? { text: str(q.answer.text, 2000), name: str(q.answer.name, 24) || undefined, avatar: str(q.answer.avatar, 8) || undefined, at: num(q.answer.at) } : undefined })).filter((q) => q.text);
         return qs.length ? { questions: qs } : {};
       })(),
     };
   }
   const countOf = (a) => a.messages.length + a.dms.reduce((s, d) => s + d.messages.length, 0) + (a.questions?.length || 0);
   const qLine = (q) => `▲ ${q.votes} · ${q.name ? `${q.avatar || ""} ${q.name}`.trim() : t("anonAsker")} · ${fmtFull(q.at)}${q.done ? " · " + t("qAnswered") : ""}`;
+  const ansLine = (a) => `💬 ${t("qAnsLabel")}${a.name ? ` · ${`${a.avatar || ""} ${a.name}`.trim()}` : ""}${a.at ? " · " + fmtFull(a.at) : ""}`;
   const label = (m) => `${m.avatar} ${m.name}`;
   // a photo, poll or draw in words, for the .txt file (and the .html one)
   const pollText = (p) => `📊 ${p.q} (${t(p.m ? "pollMultiTag" : "pollSingleTag")}${p.closed ? " · " + t("pollClosed") : ""})\n` +
@@ -1722,7 +1760,10 @@
     a.messages.forEach((m) => out.push(line(m)));
     if (!a.messages.length) out.push(t("noMsgs"));
     a.dms.forEach((d) => { out.push("", `── ${t("dmHead", { who: label(d.with) })} ──`); d.messages.forEach((m) => out.push(line(m))); });
-    if (a.questions) { out.push("", `── ${t("qaTab")} ──`); a.questions.forEach((q) => out.push(`[${qLine(q)}]`, "    " + q.text.replace(/\n/g, "\n    "))); }
+    if (a.questions) { out.push("", `── ${t("qaTab")} ──`); a.questions.forEach((q) => {
+      out.push(`[${qLine(q)}]`, "    " + q.text.replace(/\n/g, "\n    "));
+      if (q.answer) out.push(`    [${ansLine(q.answer)}]`, "        " + q.answer.text.replace(/\n/g, "\n        "));
+    }); }
     return out.join("\n") + "\n";
   }
   function toHtml(a, srcs = new Map()) {
@@ -1731,11 +1772,11 @@
     const sec = (h, list) => `<h2>${esc(h)}</h2>${list.map(row).join("") || `<p class="e">${esc(t("noMsgs"))}</p>`}`;
     const data = JSON.stringify(a).replace(/</g, "\\u003c");
     return `<!doctype html><html lang="${I18N.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(a.title)}</title>
-<style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#3a3128;background:#f4efe6}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e4dccc}.sub{color:#857a6b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#857a6b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e4dccc;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#d9cdb6;color:#3a3128;border-color:#d9cdb6}.g{max-width:240px;height:auto;border-radius:12px}.p{max-width:min(360px,100%);height:auto;border-radius:12px}.r{font-size:13px;margin-top:2px}.e{color:#b3aa9b}@media(prefers-color-scheme:dark){body{background:#1b1916;color:#f4efe6}.b{background:#25221e;border-color:#3e3a33}.me .b{background:#e7decd;border-color:#e7decd;color:#2a251f}h2{border-color:#3e3a33}}</style></head><body>
+<style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#3a3128;background:#f4efe6}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e4dccc}.sub{color:#857a6b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#857a6b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e4dccc;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#d9cdb6;color:#3a3128;border-color:#d9cdb6}.g{max-width:240px;height:auto;border-radius:12px}.p{max-width:min(360px,100%);height:auto;border-radius:12px}.r{font-size:13px;margin-top:2px}.a{margin:6px 0 0 24px;padding-left:10px;border-left:3px solid #d9cdb6}.e{color:#b3aa9b}@media(prefers-color-scheme:dark){body{background:#1b1916;color:#f4efe6}.b{background:#25221e;border-color:#3e3a33}.me .b{background:#e7decd;border-color:#e7decd;color:#2a251f}h2{border-color:#3e3a33}}</style></head><body>
 <h1>${esc(a.title)}</h1><div class="sub">${esc(t("expSub", { code: a.code, t: fmtFull(a.exported) }))}</div>
 ${sec(t("everyone"), a.messages)}
 ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join("")}
-${a.questions ? `<h2>${esc(t("qaTab"))}</h2>${a.questions.map((q) => `<div class="m"><div class="h">${esc(qLine(q))}</div><div class="b">${esc(q.text)}</div></div>`).join("")}` : ""}
+${a.questions ? `<h2>${esc(t("qaTab"))}</h2>${a.questions.map((q) => `<div class="m"><div class="h">${esc(qLine(q))}</div><div class="b">${esc(q.text)}</div>${q.answer ? `<div class="a"><div class="h">${esc(ansLine(q.answer))}</div><div class="b">${esc(q.answer.text)}</div></div>` : ""}</div>`).join("")}` : ""}
 <script type="application/json" id="${ARCHIVE}">${data}</script>
 </body></html>`;
   }
@@ -1891,7 +1932,7 @@ ${a.questions ? `<h2>${esc(t("qaTab"))}</h2>${a.questions.map((q) => `<div class
       box.replaceChildren(...a.questions.map((q) => el("div", { class: "qcard" + (q.done ? " done" : "") },
         el("div", { class: "upvote", "aria-hidden": "true" }, el("span", { text: "▲" }), el("b", { text: q.votes })),
         el("div", { class: "qbody" }, el("div", { class: "qwho" }, el("span", { text: q.name ? `${q.avatar || ""} ${q.name}` : t("anonAsker") }), el("time", { text: fmtFull(q.at) })),
-          el("p", { class: "qtext" }, linkify(q.text)), q.done ? el("small", { class: "muted", text: t("qAnswered") }) : null))));
+          el("p", { class: "qtext" }, linkify(q.text)), q.answer ? ansBox(q.answer, fmtFull) : null, q.done ? el("small", { class: "muted", text: t("qAnswered") }) : null))));
       box.scrollTop = 0; return;
     }
     const list = tab < 0 ? a.messages : a.dms[tab].messages;

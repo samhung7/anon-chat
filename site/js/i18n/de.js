@@ -411,4 +411,12 @@ I18N.add("de", {
   showQs: "Fragen ({n})",
   showNoQs: "Noch keine Fragen. Scanne den QR-Code, um zu fragen, auch anonym.",
   showHint: "QR-Code scannen und mitdiskutieren",
+  // written answers to questions
+  qAnsWrite: "Antwort schreiben",
+  qAnsEdit: "Antwort bearbeiten",
+  qAnsTitle: "Diese Frage beantworten",
+  qAnsDel: "Antwort löschen",
+  qAnsPh: "Schreib die Antwort. Sie erscheint unter der Frage und ist im Export enthalten.",
+  qAnsLabel: "Antwort",
+  qAnsSaved: "Antwort gespeichert, Frage als beantwortet markiert",
 });
