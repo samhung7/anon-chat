@@ -1,7 +1,8 @@
 /* Anonymous chat rooms. Someone opens a room and gets a 4-character code; others join with the code or link.
    Nobody signs up: each device picks a nickname and an animal, and gets an anonymous Firebase id behind the scenes.
-   A room is public (the code is enough) or private (the code plus a password). The owner can lock the room,
-   remove people, delete messages and end the room, which deletes everything. A room nobody has written in
+   A room is public (the code is enough) or private (the code plus a password). The owner can lock the room, cap
+   its size, name co-hosts, hand the room over and end it, which deletes everything; the owner and co-hosts remove
+   messages and people, and see what people report. Everyone can block someone on their own device. A room nobody has written in
    for 24 hours is deleted too (see tools/cleanup). Anyone can export what they can see before it goes.
    A room can also be end-to-end encrypted: its key travels only in the invite link (after the #), so the server
    stores the title, nicknames and messages as ciphertext. Private messages are always end-to-end encrypted.
@@ -80,6 +81,16 @@
   const roomUrl = (code) => location.origin + location.pathname + "?room=" + code + (R?.c && store.get(ROOMKEY(code)) ? "#k=" + store.get(ROOMKEY(code)) : "");
   const now = () => Date.now() + offset; // server time
   const isOwner = () => !!R?.meta && R.meta.owner === uid;
+  // co-hosts (meta/mods) remove messages and people, but not the owner or each other
+  const isMod = (id = uid) => R?.meta?.mods?.[id] === true;
+  const isStaff = () => isOwner() || isMod();
+  const canManage = (id) => id !== uid && (isOwner() || (isMod() && id !== R.meta?.owner && !isMod(id)));
+  const badge = (id) => (R?.meta?.owner === id ? " 👑" : isMod(id) ? " 🛡️" : "");
+  // people this device has blocked: their messages fold away here, and only here; they aren't told
+  const BLOCK_KEY = "chat-blocked";
+  const BLOCKED = new Set((() => { try { const l = JSON.parse(store.get(BLOCK_KEY)); return Array.isArray(l) ? l.filter((x) => typeof x === "string") : []; } catch (e) { return []; } })());
+  const isBlocked = (id) => BLOCKED.has(id);
+  const pause = (ms) => new Promise((ok) => setTimeout(ok, ms));
   const pairKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
   const who = (id) => R?.members?.[id] || R?.seen?.[id] || null; // R.seen keeps people who have left
   const nameOf = (id) => { const m = who(id); return m ? `${m.avatar} ${m.name}` : t("someoneLeft"); };
@@ -90,18 +101,40 @@
     return el("img", { src: g.url, width: g.w, height: g.h, alt: g.title || "GIF", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" });
   }
 
-  // text with clickable links; everything goes in as text, never as HTML
-  function linkify(text) {
+  // text with clickable links, and with @names of people in the room marked; everything goes in as text, never as HTML
+  function linkify(text, mentions) {
     const frag = document.createDocumentFragment();
+    const plain = (s) => (mentions ? withMentions(frag, s) : frag.append(s));
     const re = /https?:\/\/[^\s<>"'）」]+/g;
     let last = 0, m;
     while ((m = re.exec(text))) {
-      frag.append(text.slice(last, m.index));
+      plain(text.slice(last, m.index));
       frag.append(el("a", { href: m[0], target: "_blank", rel: "noopener noreferrer nofollow", text: m[0] }));
       last = m.index + m[0].length;
     }
-    frag.append(text.slice(last));
+    plain(text.slice(last));
     return frag;
+  }
+  // the person an @ at text[i] names: the longest nickname in the room that follows it (names may hold spaces)
+  function mentionAt(text, i) {
+    const rest = text.slice(i + 1).toLowerCase();
+    let best = null;
+    Object.entries(R?.members || {}).forEach(([id, m]) => { const n = (m.name || "").toLowerCase(); if (n && rest.startsWith(n) && (!best || n.length > best.len)) best = { id, len: n.length }; });
+    return best;
+  }
+  function withMentions(frag, text) {
+    let last = 0;
+    for (let i = text.indexOf("@"); i >= 0; i = text.indexOf("@", i + 1)) {
+      const m = mentionAt(text, i); if (!m) continue;
+      frag.append(text.slice(last, i), el("span", { class: "ment" + (m.id === uid ? " self" : ""), text: text.slice(i, i + 1 + m.len) }));
+      last = i + 1 + m.len; i = last - 1;
+    }
+    frag.append(text.slice(last));
+  }
+  function mentionsMe(text) {
+    if (!text || !R?.members[uid]) return false;
+    for (let i = text.indexOf("@"); i >= 0; i = text.indexOf("@", i + 1)) if (mentionAt(text, i)?.id === uid) return true;
+    return false;
   }
 
   /* ---------- end-to-end encryption (Web Crypto) ----------
@@ -413,6 +446,7 @@
       if (mine) { await enter(code, c); return; }
       if (await fb.get(roomRef(code, "banned/" + uid)).then((s) => s.val(), () => null)) { toast(t("bannedToast")); return; }
       if (meta.locked) { toast(t("lockedToast")); return; }
+      if (meta.cap && (meta.n || 0) >= meta.cap) { toast(t("capFull")); return; }
       busy(false);
       if (!me()) backdrop();
       let m = await ensureMe();
@@ -426,7 +460,7 @@
         if (pw == null) return;
         key = await hashPw(code, pw);
       }
-      for (;;) {
+      for (let tries = 0; ; tries++) {
         const k = await nkey(c, m.name);
         const holder = await holderOf(code, k);
         const upd = {
@@ -435,9 +469,17 @@
           [`rooms/${code}/meta/last`]: T(),
         };
         if (key) upd[`rooms/${code}/keys/${uid}`] = key;
+        // a room with a size limit counts its members: joining adds one (and fails, to try again, if someone got in first)
+        let counted = null;
+        if (meta.cap) {
+          counted = await fb.get(roomRef(code, "meta/n")).then((s) => s.val(), () => null);
+          if (typeof counted === "number" && counted >= meta.cap) { toast(t("capFull")); return; }
+          upd[`rooms/${code}/meta/n`] = (counted || 0) + 1;
+        }
         try { await fb.update(fb.ref(db), upd); break; }
         catch (e) {
           if (!/permission/i.test(e.message)) throw e;
+          if (meta.cap && tries < 3 && !(holder && holder !== uid)) continue;
           if (holder && holder !== uid) { // someone here already goes by this name
             busy(false); backdrop();
             m = await askMe(false, t("nameTakenJoin", { name: m.name }), false);
@@ -464,7 +506,8 @@
     // raw/rawSeen: member records as stored; members/seen: as shown (decrypted). Everything that arrives goes
     // through one queue (q), so decrypting never reorders messages.
     R = { code, c, meta: null, members: {}, seen: {}, raw: {}, rawSeen: {}, msgs: new Map(), dms: new Map(), plain: new Map(), dk: new Map(),
-          view: "all", unread: {}, drafts: {}, reply: null, imgs: new Map(), off: [], gone: false, ready: false, q: Promise.resolve(), t0: Date.now() + offset };
+          view: "all", unread: {}, drafts: {}, reply: null, imgs: new Map(), off: [], gone: false, ready: false, q: Promise.resolve(), t0: Date.now() + offset,
+          typing: {}, dmTyping: {}, reports: {}, lastAt: 0, below: 0, touched: false, readMark: 0 };
     rememberRoom(code);
     roomPath(code);
     $("#list").replaceChildren();
@@ -479,7 +522,7 @@
       if (!s.exists()) return gone("ended");
       const meta = s.val();
       if (R.c) meta.title = meta.xt ? (await unseal(R.c.aes, meta.xt, "t"))?.t || "" : "";
-      R.meta = meta; renderHeader(); renderPins();
+      R.meta = meta; renderHeader(); renderPins(); refreshNames(); syncReports();
     }), lost));
     on(fb.onValue(roomRef(code, "members"), (s) => queue(async () => {
       const raw = s.val() || {};
@@ -493,13 +536,18 @@
       R.members = next; R.ready = true;
       Object.assign(R.seen, JSON.parse(JSON.stringify(next)));
       if (!next[uid]) return checkGone();
+      // with a size limit, the owner's device keeps the count true (someone may have left without counting down)
+      const count = Object.keys(next).length;
+      if (isOwner() && R.meta?.cap && R.meta.n !== count) fb.set(roomRef(code, "meta/n"), count).catch(() => {});
       Object.keys(next).forEach((id) => id !== uid && watchDm(id));
       renderHeader(); refreshNames();
     }), lost));
     const q = fb.query(roomRef(code, "msgs"), fb.limitToLast(MAX_LOAD));
-    on(fb.onChildAdded(q, (s) => queue(async () => { const v = await openMsg(s.val(), null, s.key); R.msgs.set(s.key, v); if (R.view === "all") addMsg(s.key, v); if (pinIds().includes(s.key)) renderPins(); noteNew(v, null); }), lost));
-    on(fb.onChildChanged(q, (s) => queue(async () => { const v = await openMsg(s.val(), null, s.key); R.msgs.set(s.key, v); if (R.view === "all") updateMsg(s.key, v); })));
+    on(fb.onChildAdded(q, (s) => queue(async () => { const v = await openMsg(s.val(), null, s.key); R.msgs.set(s.key, v); R.lastAt = Math.max(R.lastAt, +v.at || 0); if (R.view === "all") addMsg(s.key, v); if (pinIds().includes(s.key)) renderPins(); noteNew(v, null); }), lost));
+    on(fb.onChildChanged(q, (s) => queue(async () => { const old = R.msgs.get(s.key), v = await openMsg(s.val(), null, s.key); R.msgs.set(s.key, v); if (R.view === "all") updateMsg(s.key, v, old); })));
     on(fb.onChildRemoved(q, (s) => queue(() => { R.msgs.delete(s.key); if (R.view === "all") document.getElementById("m-" + s.key)?.remove(); renderPins(); })));
+
+    on(fb.onValue(roomRef(code, "typing"), (s) => { R.typing = s.val() || {}; renderTyping(); }, () => {}));
 
     // online / offline
     const mine = roomRef(code, "members/" + uid + "/online");
@@ -521,19 +569,24 @@
     R.off.push(fb.onChildAdded(fb.ref(db, `rooms/${R.code}/dm/${pairKey(uid, other)}`), (s) => r.queue(async () => {
       const v = await openMsg(s.val(), other); box.set(s.key, v);
       if (R.view === other) { addMsg(s.key, v, true); markRead(other, v.at); }
-      else if (v.by !== uid && v.at > lastRead(other)) {
+      else if (v.by !== uid && v.at > lastRead(other) && !isBlocked(other)) {
         R.unread[other] = (R.unread[other] || 0) + 1;
         if (Date.now() - v.at < 60000) toast(t("dmToast", { who: nameOf(other) }));
         renderHeader();
       }
       noteNew(v, other);
     }), () => {}));
+    R.off.push(fb.onValue(fb.ref(db, `rooms/${R.code}/dmt/${pairKey(uid, other)}`), (s) => { if (r === R) { R.dmTyping[other] = s.val()?.[other] || 0; renderTyping(); } }, () => {}));
   }
   function noteNew(v, dmWith) {
-    if (v.by === uid || !document.hidden || !R.ready) return;
+    if (v.by === uid || !R.ready || isBlocked(v.by)) return;
+    const fresh = v.at > R.t0 && Date.now() - v.at < 60000; // not the history that loads on entering
+    const atMe = !dmWith && mentionsMe(v.text);
+    if (atMe && fresh && !document.hidden && R.view !== "all") toast(t("mentionToast", { who: author(v).name }));
+    if (!document.hidden) return;
     hiddenUnread++;
     document.title = `(${hiddenUnread}) ${R.meta?.title || APP}`;
-    if (v.at > R.t0 && Date.now() - v.at < 60000) notify(v, dmWith); // not the history that loads on entering
+    if (fresh) notify(v, dmWith, atMe);
   }
 
   /* ---------- notifications ----------
@@ -543,10 +596,11 @@
   const CAN_NOTIFY = "Notification" in window;
   const MUTE = (code) => "chat-mute:" + code;
   const notifyOn = (code) => CAN_NOTIFY && Notification.permission === "granted" && !store.get(MUTE(code));
-  async function notify(v, dmWith) {
-    if (!notifyOn(R.code)) return;
+  // atMe: someone @mentioned me, which notifies even in a room I muted
+  async function notify(v, dmWith, atMe) {
+    if (!notifyOn(R.code) && !(atMe && CAN_NOTIFY && Notification.permission === "granted")) return;
     const a = author(v, dmWith);
-    const title = dmWith ? t("dmToast", { who: a.name }) : `${a.avatar} ${a.name} | ${R.meta?.title || t("roomN", { code: R.code })}`;
+    const title = dmWith ? t("dmToast", { who: a.name }) : atMe ? t("mentionToast", { who: `${a.avatar} ${a.name}` }) : `${a.avatar} ${a.name} | ${R.meta?.title || t("roomN", { code: R.code })}`;
     const opts = { body: dmWith ? t("openToRead") : v.gif ? t("sentGif") : v.text ? v.text.slice(0, 120) : snippet(v), tag: "room-" + R.code, renotify: true, icon: "icons/stoa2-192.png", data: { url: roomUrl(R.code) } };
     try {
       const reg = await navigator.serviceWorker?.getRegistration();
@@ -566,9 +620,9 @@
   }
   // ask once per device, in a bar rather than a pop-up, and only where notifications could work
   const offerNotify = () => { $("#notifyBar").hidden = !(CAN_NOTIFY && Notification.permission === "default" && !store.get("chat-notify-asked")); };
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { hiddenUnread = 0; document.title = R?.meta?.title || APP; } });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { hiddenUnread = 0; document.title = R?.meta?.title || APP; markSeen(); } });
 
-  function leaveListeners() { R?.off.forEach((f) => { try { f(); } catch (e) {} }); }
+  function leaveListeners() { typingStop(); R?.off.forEach((f) => { try { f(); } catch (e) {} }); }
   // the room went away under us: find out why
   async function checkGone() {
     if (!R || R.gone) return;
@@ -604,6 +658,7 @@
     const list = Object.values(R.members || {});
     $("#peopleBtn .n").textContent = list.filter((m) => m.online !== false).length;
     $("#peopleBtn .dot").hidden = !Object.values(R.unread).some((n) => n > 0);
+    $("#chat .bar [data-a=menu] .dot").hidden = !reportCount();
     $("#composer").classList.toggle("off", R.gone);
     if (R.view !== "all") $("#dmBar .dmwho").replaceChildren(...tEl("dmBar", { name: el("b", { text: nameOf(R.view) }) }));
     if (!document.hidden || !hiddenUnread) document.title = meta.title || APP;
@@ -615,18 +670,24 @@
     document.querySelectorAll("#list .msg").forEach((node) => {
       const p = who(node.dataset.by); if (!p) return;
       const av = $(".who .av", node), nm = $(".who .nm", node); if (!nm) return;
-      av.textContent = p.avatar; nm.textContent = p.name + (R.meta?.owner === node.dataset.by ? " 👑" : "");
+      av.textContent = p.avatar; nm.textContent = p.name + badge(node.dataset.by);
     });
   }
-  function bubble(id, v, dm) {
+  // prev: the node it follows (the list's last one by default); show: unfold a blocked person's message
+  function bubble(id, v, dm, { prev = $("#list").lastElementChild, show = false } = {}) {
     const mine = v.by === uid;
-    const owner = R.meta?.owner === v.by;
-    const prev = $("#list").lastElementChild;
     const cont = prev && prev.dataset.by === v.by && v.at - Number(prev.dataset.at) < 180000;
-    const node = el("div", { class: "msg" + (mine ? " mine" : "") + (cont ? " cont" : ""), id: (dm ? "d-" : "m-") + id, "data-by": v.by, "data-at": v.at, "data-id": id },
+    const attrs = { id: (dm ? "d-" : "m-") + id, "data-by": v.by, "data-at": v.at, "data-id": id };
+    if (!mine && !show && isBlocked(v.by)) {
+      const folded = el("div", { class: "msg folded", ...attrs },
+        el("button", { type: "button", class: "foldbtn", onclick: () => folded.replaceWith(bubble(id, v, dm, { prev: folded.previousElementSibling, show: true })) }, t("blockedMsg")));
+      return folded;
+    }
+    const atMe = !mine && !dm && mentionsMe(v.text);
+    const node = el("div", { class: "msg" + (mine ? " mine" : "") + (cont ? " cont" : "") + (atMe ? " atme" : ""), ...attrs },
       cont ? null : el("div", { class: "who" },
         el("span", { class: "av", text: author(v, dm).avatar }),
-        el("span", { class: "nm", text: author(v, dm).name + (owner ? " 👑" : "") }),
+        el("span", { class: "nm", text: author(v, dm).name + badge(v.by) }),
         el("time", { text: fmtTime(v.at) })),
       v.rp ? replyQuote(v.rp, dm) : null,
       // the ⋯ beside the bubble opens what can be done with a message; the bubble itself is for reading
@@ -636,8 +697,9 @@
           : v.img ? el("button", { type: "button", class: "bub imgbub", "aria-label": t("viewPhoto"), onclick: () => photoUrl(v.img.f, v.by).then((u) => (u ? viewPhoto(u) : toast(t("photoGone")))) }, photoImg(v))
           : v.poll ? el("div", { class: "bub pollbub" }, pollView(livePoll(v), (k) => vote(id, k)))
           : v.draw ? el("div", { class: "bub drawbub" }, drawView(liveDraw(v)))
-          : el("div", { class: "bub" }, linkify(v.text || "")),
+          : el("div", { class: "bub" }, linkify(v.text || "", !dm)),
         el("button", { type: "button", class: "more", "aria-label": t("msgMenu"), text: "⋯", onclick: () => msgActions(id, (dm ? null : R.msgs.get(id)) || v, dm) })),
+      v.ed ? el("small", { class: "edited", text: t("edited") }) : null,
       dm ? null : el("div", { class: "re" }));
     if (!dm) fillReacts(node, v);
     return node;
@@ -696,16 +758,40 @@
       .then(() => toast(t(on ? "pinnedToast" : "unpinnedToast")), () => toast(t("tryAgain")));
   }
 
+  const LIST = () => $("#list");
+  const nearEnd = () => { const l = LIST(); return l.scrollHeight - l.scrollTop - l.clientHeight < 80; };
   function addMsg(id, v, dm) {
-    const list = $("#list");
-    const stick = list.scrollHeight - list.scrollTop - list.clientHeight < 80 || v.by === uid;
+    const list = LIST();
+    const stick = nearEnd() || v.by === uid;
     $(".empty", list)?.remove();
+    if (!dm) newLine(list, v);
     list.append(bubble(id, v, dm));
-    if (stick) list.scrollTop = list.scrollHeight;
+    if (R.div?.isConnected && !R.touched && v.at <= R.t0) R.div.scrollIntoView({ block: "start" }); // history still loading: start where they left off
+    else if (stick) list.scrollTop = list.scrollHeight;
+    else if (v.by !== uid && v.at > R.t0) R.below++;
+    showJump(); markSeen();
   }
-  function updateMsg(id, v) {
+  // a line above the first message that came since this device last read the room (R.readMark)
+  function newLine(list, v) {
+    if (R.readMark && !R.div && v.at > R.readMark && v.by !== uid) list.append(R.div = el("div", { class: "newline", text: t("newMsgs") }));
+  }
+  // this device has read the room up to its newest message once the bottom is on screen
+  const READ = (code) => "chat-read:" + code;
+  function markSeen() {
+    if (!R || R.gone || R.view !== "all" || document.hidden || $("#chat").hidden || !R.lastAt || !nearEnd()) return;
+    R.below = 0;
+    if (R.lastAt > (+store.get(READ(R.code)) || 0)) store.set(READ(R.code), String(R.lastAt));
+  }
+  // the ↓ button: back to the newest message, with how many came in while scrolled up
+  function showJump() {
+    const b = $("#jumpBtn"), l = LIST();
+    b.hidden = !R || R.gone || l.scrollHeight - l.scrollTop - l.clientHeight < 300;
+    b.textContent = R?.below ? t("jumpNew", { n: R.below }) : "↓";
+  }
+  function updateMsg(id, v, old) {
     const node = document.getElementById("m-" + id);
     if (!node) return;
+    if (old && (old.text !== v.text || old.ed !== v.ed)) { node.replaceWith(bubble(id, v, false, { prev: node.previousElementSibling })); return; } // edited
     fillReacts(node, v);
     if (v.poll) $(".pollbub", node)?.replaceChildren(pollView(livePoll(v), (k) => vote(id, k)));
   }
@@ -724,7 +810,7 @@
     if (R.shown !== R.view) {
       if (R.shown !== undefined) R.drafts[R.shown] = ta.value;
       ta.value = R.drafts[R.view] || ""; ta.dispatchEvent(new Event("input"));
-      R.shown = R.view; cancelReply();
+      R.shown = R.view; cancelReply(); typingStop();
     }
     renderPins();
     const list = $("#list");
@@ -732,9 +818,11 @@
     $("#dmBar").hidden = R.view === "all";
     $("#composer [data-a=more]").hidden = R.view !== "all"; // photos, polls and draws are for the room
     $("#chat").classList.toggle("indm", R.view !== "all");
+    R.div = null; R.touched = false;
     if (R.view === "all") {
       if (!R.msgs.size) list.append(el("p", { class: "empty", text: t("emptyRoom") }));
-      R.msgs.forEach((v, id) => list.append(bubble(id, v)));
+      R.readMark = +store.get(READ(R.code)) || 0; // where this device stopped reading (messages still loading go through addMsg)
+      R.msgs.forEach((v, id) => { newLine(list, v); list.append(bubble(id, v)); });
       $("#text").placeholder = t("textPh");
     } else {
       const box = R.dms.get(R.view) || new Map();
@@ -743,8 +831,9 @@
       R.unread[R.view] = 0;
       $("#text").placeholder = t("dmPh", { name: nameOf(R.view) });
     }
-    renderHeader();
-    list.scrollTop = list.scrollHeight;
+    renderHeader(); renderTyping();
+    if (R.div) R.div.scrollIntoView({ block: "start" }); else list.scrollTop = list.scrollHeight;
+    R.below = 0; showJump(); markSeen();
   }
   function openDm(other) {
     if (other === uid) return;
@@ -760,45 +849,61 @@
   }
   // one message to the room or the private chat on view: body as a plain room stores it, sealed as it goes inside x;
   // more: other paths written in the same update (a photo's picture)
+  // The rules let one person post at most every 800 ms, one message per write. Messages written faster than that
+  // wait their turn, a second apart, in the order they were written; one that still lands too soon tries once more.
+  let lastPost = 0;
   async function post(body, sealed, more = {}) {
     if (!R || R.gone) return false;
     const rp = R.reply && !!R.reply.dm === (R.view !== "all") ? R.reply.id : null;
     if (rp) { sealed.r = rp; if (!R.c) body.rp = rp; }
     const m = R.members[uid] || me(); // the name this room knows me by
     const base = `rooms/${R.code}`;
-    const upd = { [`${base}/meta/last`]: T(), ...more };
+    const upd = { [`${base}/meta/last`]: T(), [`${base}/members/${uid}/ls`]: T(), ...more };
     if (R.view === "all") {
       const id = fb.push(fb.ref(db, base + "/msgs")).key;
+      upd[`${base}/members/${uid}/lm`] = id;
       upd[`${base}/msgs/${id}`] = R.c ? { by: uid, x: await seal(R.c.aes, { ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T() }
         : { by: uid, name: m.name, avatar: m.avatar, ...body, at: T() };
     } else {
       if (!R.members[R.view]) { toast(t("peerLeft")); return false; }
       const key = await dmKey(R.view);
       if (!key) { toast(t("peerOld")); return false; }
-      const p = `${base}/dm/${pairKey(uid, R.view)}`;
-      upd[`${p}/${fb.push(fb.ref(db, p)).key}`] = { by: uid, to: R.view, x: await seal(key, sealed, "d:" + uid), at: T() };
+      const p = `${base}/dm/${pairKey(uid, R.view)}`, id = fb.push(fb.ref(db, p)).key;
+      upd[`${p}/${id}`] = { by: uid, to: R.view, x: await seal(key, sealed, "d:" + uid), at: T() };
+      upd[`${base}/members/${uid}/lm`] = id;
     }
-    $("#list .empty")?.remove(); cancelReply();
-    fb.update(fb.ref(db), upd).catch((e) => { console.error(e); toast(t("sendFail")); });
+    $("#list .empty")?.remove(); cancelReply(); typingStop();
+    const wait = lastPost + 1000 - Date.now();
+    lastPost = Math.max(Date.now(), lastPost + 1000);
+    const go = (again) => fb.update(fb.ref(db), upd).catch((e) => {
+      if (again && /permission/i.test(e.message)) { lastPost = Math.max(lastPost, Date.now()) + 1000; return pause(1000).then(() => go(false)); }
+      console.error(e); toast(t("sendFail"));
+    });
+    if (wait > 0) pause(wait).then(() => go(true)); else go(true);
     return true;
   }
   const react = (id, k, on) => fb.set(roomRef(R.code, `msgs/${id}/re/${k}/${uid}`), on ? true : null).catch(() => toast(t("tryAgain")));
 
   async function msgActions(id, v, dm) {
     if (!R || R.gone) return;
-    const canDel = !dm && v.by === uid;
+    const mine = v.by === uid, canDel = !dm && mine, canRemove = !dm && !mine && isStaff();
+    const name = author(v, dm).name;
     const reacts = dm ? null : el("div", { class: "reactrow" }, REACTS.map((emo, k) => {
       const on = !!v.re?.[k]?.[uid];
       return el("button", { type: "button", class: "chip big" + (on ? " on" : ""), "data-a": "re" + k, text: emo });
     }));
     const btns = v.bad ? [] : [["reply", t("reply")]];
     if (v.text && !v.bad) btns.push(["copy", t("copyText")]);
+    if (canDel && typeof v.text === "string" && v.text && !v.bad && !v.gif && !v.img && !v.poll && !v.draw) btns.push(["edit", t("edit")]);
     if (v.img) btns.push(["save", t("savePhoto")]);
     if (v.poll) btns.push(["voters", t("pollWho")]);
     if (v.poll && !v.closed && v.by === uid) btns.push(["close", t("pollClose")]);
     if (!dm && !v.bad && isOwner()) btns.push(pinIds().includes(id) ? ["unpin", t("unpin")] : ["pin", t("pinAsNotice")]);
-    if (!dm && v.by !== uid && R.members[v.by]) btns.push(["dm", t("dmTo", { name: author(v).name })]);
+    if (!dm && !mine && R.members[v.by]) btns.push(["dm", t("dmTo", { name })], ["at", t("mentionName", { name })]);
+    if (!dm && !mine && !isStaff()) btns.push(["report", t("report")]);
+    if (!mine) btns.push(isBlocked(v.by) ? ["unblock", t("unblockName", { name })] : ["block", t("blockName", { name })]);
     if (canDel) btns.push(["del", t("delMsg"), "danger"]);
+    if (canRemove) btns.push(["remove", t("removeMsg"), "danger"]);
     const txt = v.poll || v.draw ? snippet(v) : v.text || "";
     const body = el("div", {}, v.gif ? el("div", { class: "quote gifq" }, gifImg(v.gif)) : v.img ? el("div", { class: "quote gifq" }, photoImg(v, true))
       : el("blockquote", { class: "quote", text: txt.length > 140 ? txt.slice(0, 140) + "…" : txt }), reacts);
@@ -811,10 +916,144 @@
     if (a === "pin" || a === "unpin") pin(id, a === "pin");
     if (a === "save") photoUrl(v.img.f, v.by).then((u) => (u ? saveFile(u, `photo-${R.code}-${id}.jpg`) : toast(t("photoGone"))));
     if (a === "voters") pollVoters(v);
+    if (a === "edit") editMsg(id, v);
+    if (a === "at") mention(name);
+    if (a === "report") reportMsg(id);
+    if (a === "block" || a === "unblock") setBlocked(v.by, a === "block");
+    if (a === "remove" && (await confirmSheet(t("removeTitle"), t("delMsgBody"), t("removeMsg")))) removeMsg(id, v);
     if (a === "close" && (await confirmSheet(t("pollClose"), t("pollCloseBody"), t("pollClose"), "primary"))) fb.set(roomRef(R.code, `msgs/${id}/closed`), true).catch(() => toast(t("tryAgain")));
     // a photo's picture goes with its message
-    if (a === "del" && (await confirmSheet(t("delMsgTitle"), t("delMsgBody"), t("del"))))
-      fb.update(roomRef(R.code), { ["msgs/" + id]: null, ...(v.img ? { ["files/" + v.img.f]: null } : {}) }).catch(() => toast(t("delFail")));
+    if (a === "del" && (await confirmSheet(t("delMsgTitle"), t("delMsgBody"), t("del")))) removeMsg(id, v);
+  }
+  // the author deletes a message, or the owner or a co-host takes it down (with any reports on it)
+  function removeMsg(id, v) {
+    const upd = { ["msgs/" + id]: null };
+    if (v.img) upd["files/" + v.img.f] = null;
+    if (isStaff()) upd["reports/" + id] = null;
+    return fb.update(roomRef(R.code), upd).then(() => v.by !== uid && toast(t("removedToast")), () => toast(t("delFail")));
+  }
+  async function editMsg(id, v) {
+    const input = el("textarea", { class: "field", maxlength: 1000, rows: 4, id: "editText", "aria-label": t("msgAria") });
+    input.value = v.text;
+    const a = await sheet(t("editTitle"), input, [["no", t("cancel")], ["yes", t("save"), "primary"]], { onOpen: () => input.focus() });
+    if (a !== "yes" || !R || R.gone) return;
+    const text = input.value.trim().slice(0, 1000);
+    if (!text || text === v.text) return;
+    // an encrypted room seals the new words with everything else the message carried
+    const upd = R.c ? { x: await seal(R.c.aes, { t: text, n: v.name, a: v.avatar, ...(v.rp ? { r: v.rp } : {}) }, "m:" + uid), ed: T() } : { text, ed: T() };
+    fb.update(roomRef(R.code, "msgs/" + id), upd).catch(() => toast(t("tryAgain")));
+  }
+  function mention(name) {
+    if (!R || R.gone) return;
+    if (R.view !== "all") { R.view = "all"; renderView(); }
+    insertAtCursor("@" + name + " ");
+    $("#text").focus();
+  }
+  async function setBlocked(id, on) {
+    const name = who(id)?.name || "";
+    if (on && !(await confirmSheet(t("blockTitle", { who: nameOf(id) }), t("blockBody"), t("block")))) return;
+    if (on) BLOCKED.add(id); else BLOCKED.delete(id);
+    store.set(BLOCK_KEY, JSON.stringify([...BLOCKED].slice(-500)));
+    toast(t(on ? "blockedToast" : "unblockedToast", { name }));
+    if (R && !R.gone) renderView();
+  }
+
+  /* ---------- reports ----------
+     Anyone can report a message to the room's owner and co-hosts, with a reason; they see how many reported it and
+     why, never who. Reports go with the message, and with the room. */
+  async function reportMsg(id) {
+    const a = await sheet(t("reportTitle"), el("p", { class: "muted", text: t("reportBody") }), [0, 1, 2, 3].map((k) => ["r" + k, t("why" + k)]).concat([["no", t("cancel")]]));
+    if (!a?.startsWith("r") || !R || R.gone) return;
+    fb.set(roomRef(R.code, `reports/${id}/${uid}`), { r: +a.slice(1), at: T() })
+      .then(() => toast(t("reportedToast")), (e) => toast(t(/permission/i.test(e.message) ? "reportedAlready" : "tryAgain")));
+  }
+  const reportCount = () => (isStaff() ? Object.keys(R.reports || {}).filter((id) => R.msgs.has(id)).length : 0);
+  // the owner and co-hosts follow the reports; anyone else can't read them
+  function syncReports() {
+    const r = R, want = isStaff() && !R.gone;
+    if (want && !r.repOff) {
+      let first = true;
+      r.repOff = fb.onValue(roomRef(r.code, "reports"), (s) => {
+        if (r !== R) return;
+        const prev = r.reports; r.reports = s.val() || {};
+        const more = Object.entries(r.reports).some(([id, by]) => Object.keys(by || {}).length > Object.keys(prev[id] || {}).length && r.msgs.has(id));
+        if (!first && more) toast(t("newReport"));
+        first = false; renderHeader();
+      }, () => { r.repOff = null; });
+      r.off.push(() => r.repOff?.());
+    } else if (!want && r.repOff) { r.repOff(); r.repOff = null; r.reports = {}; renderHeader(); }
+  }
+  async function reportsSheet() {
+    const items = Object.entries(R.reports || {}).map(([id, by]) => ({ id, v: R.msgs.get(id), n: Object.keys(by || {}).length, why: [...new Set(Object.values(by || {}).map((x) => x?.r))] }));
+    const stale = items.filter((it) => !it.v); // the message is already gone
+    if (stale.length) fb.update(roomRef(R.code, "reports"), Object.fromEntries(stale.map((it) => [it.id, null]))).catch(() => {});
+    const live = items.filter((it) => it.v);
+    const body = live.length ? el("ul", { class: "replist" }, live.map((it) => el("li", {},
+      el("button", { type: "button", class: "go", "data-go": it.id },
+        el("small", { text: `${author(it.v).avatar} ${author(it.v).name} · ${t("reportN", { n: it.n })} · ${it.why.filter((k) => k >= 0 && k <= 3).map((k) => t("why" + k)).join(t("listSep"))}` }),
+        snippet(it.v)),
+      el("div", { class: "row" },
+        el("button", { type: "button", class: "btn small danger", "data-rm": it.id, text: t("removeMsg") }),
+        el("button", { type: "button", class: "btn small", "data-ok": it.id, text: t("dismiss") })))))
+      : el("p", { class: "muted", text: t("noReports") });
+    let pick = null;
+    await sheet(t("reportsTitle"), body, [["close", t("close")]], {
+      onOpen: (ov) => body.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { pick = { ...b.dataset }; ov.close("pick"); } }),
+    });
+    if (!pick || !R || R.gone) return;
+    if (pick.go) jumpTo(pick.go);
+    if (pick.rm && R.msgs.get(pick.rm)) removeMsg(pick.rm, R.msgs.get(pick.rm));
+    if (pick.ok) fb.set(roomRef(R.code, "reports/" + pick.ok), null).catch(() => toast(t("tryAgain")));
+  }
+
+  /* ---------- "someone is typing" ----------
+     While the box has text, this device stamps typing/{me} (dmt/{pair}/{me} in a private chat) every few seconds;
+     it goes when the text is sent or cleared, after 5 quiet seconds, or when the connection drops. */
+  let typingRef = null, typingAt = 0, typingTimer = 0;
+  function typingPing() {
+    if (!R || R.gone || !$("#text").value.trim()) return typingStop();
+    const path = R.view === "all" ? `typing/${uid}` : `dmt/${pairKey(uid, R.view)}/${uid}`;
+    const ref = roomRef(R.code, path);
+    if (typingRef && typingRef.toString() !== ref.toString()) typingStop();
+    clearTimeout(typingTimer); typingTimer = setTimeout(typingStop, 5000);
+    if (typingRef && Date.now() - typingAt < 3000) return;
+    typingRef = ref; typingAt = Date.now();
+    fb.onDisconnect(ref).remove().catch(() => {});
+    fb.set(ref, T()).catch(() => {});
+  }
+  function typingStop() {
+    clearTimeout(typingTimer);
+    const ref = typingRef; typingRef = null;
+    if (!ref) return;
+    fb.set(ref, null).catch(() => {}); fb.onDisconnect(ref).cancel().catch(() => {});
+  }
+  function renderTyping() {
+    const bar = $("#typingBar");
+    if (!R || R.gone) { bar.hidden = true; return; }
+    const fresh = (at) => typeof at === "number" && now() - at < 8000;
+    const ids = R.view === "all"
+      ? Object.entries(R.typing || {}).filter(([id, at]) => id !== uid && R.members[id] && !isBlocked(id) && fresh(at)).map(([id]) => id)
+      : fresh(R.dmTyping[R.view]) && !isBlocked(R.view) ? [R.view] : [];
+    const names = ids.map((id) => R.members[id]?.name || "");
+    bar.textContent = ids.length === 1 ? t("typing1", { a: names[0] }) : ids.length === 2 ? t("typing2", { a: names[0], b: names[1] }) : ids.length ? t("typingN") : "";
+    bar.hidden = !ids.length;
+  }
+  setInterval(() => R && !R.gone && renderTyping(), 2000);
+
+  // typing @ offers the people in the room whose names start with what follows it
+  function mentionBar() {
+    const bar = $("#mentionBar"), ta = $("#text");
+    const pos = ta.selectionStart ?? ta.value.length;
+    const m = R && !R.gone && R.view === "all" ? ta.value.slice(0, pos).match(/(?:^|[^A-Za-z0-9_@])@([^\s@]{0,12})$/) : null;
+    const q = m ? m[1].toLowerCase() : null;
+    const hits = q == null ? [] : Object.entries(R.members).filter(([id, p]) => id !== uid && (p.name || "").toLowerCase().startsWith(q)).slice(0, 8);
+    bar.hidden = !hits.length;
+    bar.replaceChildren(...hits.map(([, p]) => el("button", { type: "button", class: "chip", onclick: () => {
+      const start = pos - q.length - 1;
+      ta.value = (ta.value.slice(0, start) + "@" + p.name + " " + ta.value.slice(pos)).slice(0, 1000);
+      ta.selectionStart = ta.selectionEnd = Math.min(start + p.name.length + 2, ta.value.length);
+      ta.dispatchEvent(new Event("input")); ta.focus();
+    } }, `${p.avatar} ${p.name}`)));
   }
 
   /* ---------- photos ----------
@@ -858,7 +1097,7 @@
         const d = R.c ? await sealBytes(R.c.aes, p.bytes, `f:${uid}:${f}`) : b64u(p.bytes);
         R.imgs.set(f, Promise.resolve(URL.createObjectURL(new Blob([p.bytes], { type: "image/jpeg" })))); // no need to fetch my own
         const img = { f, w: p.w, h: p.h };
-        await post({ img }, { i: img }, { [`rooms/${R.code}/files/${f}`]: { by: uid, d, at: T() } });
+        await post({ img }, { i: img }, { [`rooms/${R.code}/files/${f}`]: { by: uid, d, at: T() }, [`rooms/${R.code}/members/${uid}/lf`]: f });
       }
     } finally { busy(false); }
   }
@@ -1038,42 +1277,95 @@
     });
   }
 
-  function people() {
+  // the member list; pick: a title and what tapping someone does instead (handing the room over)
+  function people(pick) {
     if (!R) return;
-    const ids = Object.keys(R.members).sort((a, b) => (a === R.meta?.owner ? -1 : b === R.meta?.owner ? 1 : (R.members[a].joined || 0) - (R.members[b].joined || 0)));
+    const rank = (id) => (id === R.meta?.owner ? 0 : isMod(id) ? 1 : 2);
+    const ids = Object.keys(R.members).filter((id) => !pick || id !== uid)
+      .sort((a, b) => rank(a) - rank(b) || (R.members[a].joined || 0) - (R.members[b].joined || 0));
     const list = el("ul", { class: "plist" }, ids.map((id) => {
       const m = R.members[id];
-      const tags = [id === uid ? t("you") : null, id === R.meta?.owner ? t("ownerTag") : null, m.online === false ? t("offlineTag") : null].filter(Boolean).join(" · ");
+      const tags = [id === uid ? t("you") : null, id === R.meta?.owner ? t("ownerTag") : isMod(id) ? t("modTag") : null,
+        isBlocked(id) ? t("blockedTag") : null, m.online === false ? t("offlineTag") : null].filter(Boolean).join(" · ");
       return el("li", { class: m.online === false ? "away" : "" },
         el("span", { class: "av", text: m.avatar }),
         el("span", { class: "nm" }, el("b", { text: m.name }), tags ? el("small", { text: tags }) : null),
-        id !== uid ? el("button", { type: "button", class: "btn small", "data-dm": id }, t("dm"), R.unread[id] ? el("i", { class: "badge", text: R.unread[id] }) : null) : null,
-        id !== uid && isOwner() ? el("button", { type: "button", class: "btn small danger", "data-kick": id, text: t("kick") }) : null);
+        pick ? el("button", { type: "button", class: "btn small primary", "data-pick": id, text: t("pickThis") })
+          : id !== uid ? [el("button", { type: "button", class: "btn small", "data-dm": id }, t("dm"), R.unread[id] ? el("i", { class: "badge", text: R.unread[id] }) : null),
+            el("button", { type: "button", class: "btn small", "data-pm": id, "aria-label": t("more"), text: "⋯" })] : null);
     }));
+    const n = Object.keys(R.members).length;
     let choice = null;
-    sheet(t("membersN", { n: ids.length }), list, [["close", t("close")]], {
+    sheet(pick || (R.meta?.cap ? t("membersCap", { n, cap: R.meta.cap }) : t("membersN", { n })), ids.length ? list : el("p", { class: "muted", text: t("noOneElse") }), [["close", t("close")]], {
       onOpen: (ov) => list.addEventListener("click", (e) => {
         const b = e.target.closest("button"); if (!b) return;
-        choice = b.dataset.dm ? ["dm", b.dataset.dm] : ["kick", b.dataset.kick]; ov.close("pick");
+        choice = { ...b.dataset }; ov.close("pick");
       }),
-    }).then(async () => {
-      if (!choice) return;
-      const [what, id] = choice;
-      if (what === "dm") return openDm(id);
-      const m = R.members[id];
-      if (m && (await confirmSheet(t("kickTitle", { who: `${m.avatar} ${m.name}` }), t("kickBody"), t("kick")))) {
-        const k = myKeyIn(id), release = k && (await holderOf(R.code, k)) === id; // don't free a name someone else still uses
-        fb.update(roomRef(R.code), { [`members/${id}`]: null, ...(release ? { [`names/${k}`]: null } : {}), [`banned/${id}`]: true }).then(() => toast(t("kickedToast", { name: m.name })), () => toast(t("kickFail")));
-      }
+    }).then(() => {
+      if (!choice || !R || R.gone) return;
+      if (choice.dm) openDm(choice.dm);
+      if (choice.pm) memberMenu(choice.pm);
+      if (choice.pick) transferOwner(choice.pick);
     });
+  }
+  // what can be done with someone: everyone can message, mention and block; the owner names co-hosts and hands
+  // the room over; the owner and co-hosts remove people
+  async function memberMenu(id) {
+    const m = R.members[id]; if (!m) return;
+    const btns = [["dm", t("dm")], ["at", t("mentionName", { name: m.name })], isBlocked(id) ? ["unblock", t("unblockName", { name: m.name })] : ["block", t("blockName", { name: m.name })]];
+    if (isOwner()) btns.push(isMod(id) ? ["unmod", t("unmakeMod")] : ["mod", t("makeMod")], ["owner", t("transfer")]);
+    if (canManage(id)) btns.push(["kick", t("kick"), "danger"]);
+    const a = await sheet(`${m.avatar} ${m.name}`, null, btns);
+    if (!R || R.gone) return;
+    if (a === "dm") openDm(id);
+    if (a === "at") mention(m.name);
+    if (a === "block" || a === "unblock") setBlocked(id, a === "block");
+    if (a === "mod" || a === "unmod") fb.set(roomRef(R.code, `meta/mods/${id}`), a === "mod" ? true : null)
+      .then(() => toast(t(a === "mod" ? "modDone" : "unmodDone", { name: m.name })), () => toast(t("tryAgain")));
+    if (a === "owner") transferOwner(id);
+    if (a === "kick") kick(id);
+  }
+  async function kick(id) {
+    const m = R.members[id];
+    if (!m || !(await confirmSheet(t("kickTitle", { who: `${m.avatar} ${m.name}` }), t("kickBody"), t("kick")))) return;
+    const k = myKeyIn(id), release = k && (await holderOf(R.code, k)) === id; // don't free a name someone else still uses
+    const upd = { [`members/${id}`]: null, [`banned/${id}`]: true };
+    if (release) upd[`names/${k}`] = null;
+    if (R.meta?.cap && R.meta.n > 0) upd["meta/n"] = R.meta.n - 1;
+    if (isOwner() && isMod(id)) upd[`meta/mods/${id}`] = null;
+    fb.update(roomRef(R.code), upd).then(() => toast(t("kickedToast", { name: m.name })), () => toast(t("kickFail")));
+  }
+  // the owner hands the room to someone in it, and stays on as a co-host
+  async function transferOwner(id) {
+    const m = R.members[id];
+    if (!m || !isOwner() || !(await confirmSheet(t("transferTitle", { who: `${m.avatar} ${m.name}` }), t("transferBody"), t("transfer"), "primary"))) return;
+    fb.update(roomRef(R.code, "meta"), { owner: id, [`mods/${id}`]: null, [`mods/${uid}`]: true })
+      .then(() => toast(t("transferDone", { name: m.name })), () => toast(t("tryAgain")));
+  }
+  async function capSheet() {
+    const n = Object.keys(R.members).length;
+    const input = el("input", { class: "field num", type: "number", inputmode: "numeric", min: Math.max(2, n), max: 1000, id: "capN", placeholder: t("capPh"), value: R.meta?.cap || "" });
+    const warn = el("p", { class: "note warn", hidden: true });
+    const body = el("div", {}, warn, el("p", { class: "muted", text: t("capBody", { n }) }), el("label", { class: "lbl", for: "capN", text: t("cap") }), input);
+    for (;;) {
+      const a = await sheet(t("cap"), body, [["no", t("cancel")], ["yes", t("save"), "primary"]], { onOpen: () => input.focus() });
+      if (a !== "yes" || !R || R.gone) return;
+      const raw = input.value.trim(), cap = Math.floor(+raw);
+      if (!raw) return fb.update(roomRef(R.code, "meta"), { cap: null, n: null }).then(() => toast(t("capOff")), failed);
+      if (!(cap >= 2 && cap <= 1000)) { warn.textContent = t("capBad"); warn.hidden = false; continue; }
+      if (cap < n) { warn.textContent = t("capTooLow", { n }); warn.hidden = false; continue; }
+      return fb.update(roomRef(R.code, "meta"), { cap, n }).then(() => toast(t("capSet", { n: cap })), failed);
+    }
   }
 
   async function menu() {
     if (!R) return;
     const btns = [["share", t("invite")], ["me", t("editMe")],
       notifyOn(R.code) ? ["mute", t("muteRoom")] : ["notify", t("notifyRoom")], ["export", t("exportChat")]];
+    if (isStaff()) btns.push(["reports", t("reportsMenu", { n: reportCount() })]);
     if (isOwner()) {
       btns.splice(1, 0, ["title", t("renameRoom")]);
+      btns.push(["cap", R.meta?.cap ? t("capMenuN", { n: R.meta.cap }) : t("cap")], ["transfer", t("transfer")]);
       btns.push(R.meta?.locked ? ["unlock", t("unlockRoom")] : ["lock", t("lockRoom")]);
       btns.push(["end", t("endRoom"), "danger"]);
     } else btns.push(["leave", t("leaveRoom"), "danger"]);
@@ -1083,12 +1375,16 @@
     if (a === "title") renameRoom();
     if (a === "notify" || a === "mute") setNotify(a === "notify");
     if (a === "export") exportSheet();
+    if (a === "reports") reportsSheet();
+    if (a === "cap") capSheet();
+    if (a === "transfer") people(t("pickOwner"));
     if (a === "lock" || a === "unlock") fb.update(roomRef(R.code, "meta"), { locked: a === "lock" }).then(() => toast(t(a === "lock" ? "lockedDone" : "unlockedDone")), () => toast(t("tryAgain")));
     if (a === "leave" && (await confirmSheet(t("leaveTitle"), t("leaveBody") + (R.meta?.priv ? t("leavePw") : ""), t("leave")))) {
       const code = R.code;
       R.gone = true; leaveListeners();
       const k = myKeyIn(uid), release = k && (await holderOf(code, k)) === uid; // same reason as in askMe
-      await fb.update(fb.ref(db), { [`rooms/${code}/members/${uid}`]: null, [`rooms/${code}/keys/${uid}`]: null, ...(release ? { [`rooms/${code}/names/${k}`]: null } : {}) }).catch(() => {});
+      const counted = R.meta?.cap && R.meta.n > 0 ? { [`rooms/${code}/meta/n`]: R.meta.n - 1 } : {}; // a place frees up
+      await fb.update(fb.ref(db), { [`rooms/${code}/members/${uid}`]: null, [`rooms/${code}/keys/${uid}`]: null, ...(release ? { [`rooms/${code}/names/${k}`]: null } : {}), ...counted }).catch(() => {});
       R = null; forgetRoom(code); store.set(ROOMKEY(code), null); home();
     }
     if (a === "end") endRoom();
@@ -1574,7 +1870,7 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
   });
   if (!KLIPY) $("#composer [data-a=gif]").hidden = true;
   $("#composer").addEventListener("click", (e) => { const b = e.target.closest(".tool"); if (b) openPicker(b.dataset.a); });
-  $("#peopleBtn").addEventListener("click", people);
+  $("#peopleBtn").addEventListener("click", () => people());
   // tapping the conversation while the emoji / GIF panel is open just closes the panel
   ["#list", "#pins"].forEach((s) => $(s).addEventListener("click", (e) => { if (pickerOpen) { closePicker(); e.stopPropagation(); e.preventDefault(); } }, true));
   $("#chat").addEventListener("click", (e) => {
@@ -1588,6 +1884,11 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
   const ta = $("#text");
   const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };
   ta.addEventListener("input", grow);
+  ta.addEventListener("input", () => { typingPing(); mentionBar(); });
+  $("#mentionBar").addEventListener("mousedown", (e) => e.preventDefault()); // keep the keyboard up while picking a name
+  LIST().addEventListener("scroll", () => { if (R) { markSeen(); showJump(); } }, { passive: true });
+  ["touchstart", "wheel"].forEach((ev) => LIST().addEventListener(ev, () => { if (R) R.touched = true; }, { passive: true }));
+  $("#jumpBtn").addEventListener("click", () => { if (R) R.touched = true; const l = LIST(); l.scrollTo({ top: l.scrollHeight, behavior: "smooth" }); });
   // a picture pasted into the box is sent as a photo
   ta.addEventListener("paste", (e) => {
     const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
@@ -1595,14 +1896,19 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
   });
   // the keyboard covers the home indicator, so the home-screen app's extra space under the box goes while typing
   ta.addEventListener("focus", () => document.body.classList.add("typing"));
-  ta.addEventListener("blur", () => document.body.classList.remove("typing"));
+  ta.addEventListener("blur", () => { document.body.classList.remove("typing"); typingStop(); });
   // Enter sends on a keyboard; on phones Enter is a new line and the button sends. Never while an IME is composing.
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && matchMedia("(pointer: fine)").matches) { e.preventDefault(); $("#composer").requestSubmit(); }
   });
+  // the box empties at once, so the next message can be typed while this one goes out
   $("#composer").addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (await send(ta.value)) { ta.value = ""; grow(); if (pickerOpen === "emoji") closePicker(); }
+    const text = ta.value;
+    if (!text.trim()) return;
+    ta.value = ""; grow(); mentionBar();
+    if (!(await send(text)) && !ta.value) { ta.value = text; grow(); } // not sent: give the text back
+    else if (pickerOpen === "emoji") closePicker();
     ta.focus();
   });
 

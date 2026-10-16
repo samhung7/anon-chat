@@ -6,8 +6,9 @@ Made for lecture Q&A, anonymous reading groups, workshops and team projects. Int
 - **Rooms**: Open Stoa / 公開議廊 (the code is enough) or Private Salon / 私人沙龍, which is always end-to-end encrypted (only the full link or QR code gets in). Older password rooms can still be joined with their password, but new ones can no longer be made.
 - **End-to-end encryption**: private messages are always end-to-end encrypted. A room can also be opened as encrypted: its key travels only in the invite link and QR code (after the `#`, which browsers never send to a server), so the database holds the title, nicknames and messages only as ciphertext. People need the full link to join; the 4-character code alone isn't enough. See below.
 - **Identity**: a nickname and an animal, kept on the device. Nicknames are unique within a room (ignoring case). Behind the scenes each device gets an anonymous Firebase id.
-- **Chat**: live messages, replies that quote and jump to the original, links, an emoji picker, GIF search (KLIPY), six reactions, who's here and who's online, private messages between two people (the owner can't read those either).
-- **Owner**: rename the room, pin up to three messages as announcements (one line at the top, tap to open), lock it to newcomers, remove someone (they can't come back from that device), end the room. People delete only their own messages.
+- **Chat**: live messages, replies that quote and jump to the original, links, @mentions (typing @ offers names; a mention notifies even a muted room), editing your own messages (marked 已編輯), "someone is typing", a line above the messages that came since you last read and a ↓ button back to the newest, an emoji picker, GIF search (KLIPY), six reactions, who's here and who's online, private messages between two people (the owner can't read those either).
+- **Owner**: rename the room, pin up to three messages as announcements (one line at the top, tap to open), cap how many people can be in it, lock it to newcomers, name co-hosts, hand the room to someone else (and stay on as a co-host), end the room. The owner and co-hosts remove anyone's message and remove people (co-hosts can't remove the owner or each other); removed people can't come back from that device.
+- **Safety**: anyone can report a message to the owner and co-hosts with a reason (they see why and how many, never who), and block someone on their own device, which folds that person's messages away. The rules let each person post at most every 800 ms, one message per write. Terms and privacy policy: `site/legal.html` (Chinese and English).
 - **Notifications**: a system notification for each new message while the page is open in the background (a tab, or the installed app). Each room can be muted from its ⋯ menu; the setting stays on the device. A closed page gets nothing, since that would need a push server.
 - **Deleting**: ending a room deletes every message and private message right away. A room nobody has written in for 24 hours is deleted by an hourly job (`tools/cleanup`), and its code can be reused.
 - **Export and records**: everyone can download what they can see, including their own private messages, as `.json`, `.html` or `.txt`, or keep it in this browser under 「我的聊天記錄」. The `.json` and `.html` files can be imported back and read here, read-only (the `.html` carries the same JSON inside it). Records stay on the device; nothing is uploaded. An imported file is checked field by field, but a file is only as trustworthy as whoever sent it: nothing proves it wasn't edited by hand.
@@ -30,16 +31,20 @@ test/rules.test.mjs         rule tests against the Firebase emulator
 Data in the Realtime Database:
 
 ```
-rooms/{code}/meta           owner, title, created, last (last activity), priv, locked   readable by any signed-in device
+rooms/{code}/meta           owner, title, created, last (last activity), priv, locked,  readable by any signed-in device
+                            mods/{uid} (co-hosts), cap and n (size limit, members counted)
                             encrypted room: enc, kc (key check), xt (sealed title) instead of title
-rooms/{code}/members/{uid}  name, avatar, joined, online, pk (public key for private messages)   members only
+rooms/{code}/members/{uid}  name, avatar, joined, online, pk (public key for private messages),   members only
+                            ls (when they last posted), lm/lf (the message/photo that post wrote)
                             encrypted room: x (sealed name and avatar), h (keyed hash of the name) instead of name, avatar
 rooms/{code}/names/{key}    uid holding that nickname: the lowercased name, or h in an encrypted room   any signed-in device
 rooms/{code}/msgs/{id}      by, name, avatar, text or gif{url,w,h,title}, at, re/{0-5}/{uid}  members only
                             encrypted room: by, x (sealed text or gif, name, avatar), at, re
 rooms/{code}/dm/{uidA_uidB}/{id}  by, to, x (sealed text or gif), at                    those two only
 rooms/{code}/keys/{uid}     the password hash a member joined with                     nobody reads it
-rooms/{code}/banned/{uid}   people the owner removed
+rooms/{code}/banned/{uid}   people the owner or a co-host removed
+rooms/{code}/reports/{msg}/{uid}  r (reason 0-3), at                                   owner and co-hosts only
+rooms/{code}/typing/{uid}   server time while typing; dmt/{uidA_uidB}/{uid} the same in a private chat
 secrets/{code}              a private room's password hash                             nobody reads it; the rules compare against it
 ```
 
