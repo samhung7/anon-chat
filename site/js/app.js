@@ -59,7 +59,7 @@
       const ov = el("div", { class: "overlay" });
       const box = el("div", { class: "sheet", role: "dialog", "aria-label": title },
         title ? el("h2", { text: title }) : null, body,
-        buttons.length ? el("div", { class: "actions" }, buttons.map(([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a, text: label }))) : null);
+        buttons.length ? el("div", { class: "actions" + (buttons.length > 3 ? " many" : "") }, buttons.map(([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a, text: label }))) : null);
       ov.append(box);
       const done = (v) => { ov.remove(); document.removeEventListener("keydown", esc); res(v); };
       const esc = (e) => { if (e.key === "Escape") done(null); };
