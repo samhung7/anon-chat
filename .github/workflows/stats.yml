@@ -1,0 +1,27 @@
+# Shows the anonymous daily usage counts (rooms opened, messages, questions, ...) in the run's summary.
+# Run it by hand from the Actions tab, or read it every Monday. Uses the same secrets as cleanup.yml.
+name: Usage stats
+on:
+  schedule:
+    - cron: "0 1 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+    steps:
+      - if: env.FIREBASE_SERVICE_ACCOUNT == ''
+        run: echo "FIREBASE_SERVICE_ACCOUNT is not set; skipping."
+      - if: env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: actions/checkout@v4
+      - if: env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: env.FIREBASE_SERVICE_ACCOUNT != ''
+        working-directory: tools/cleanup
+        run: npm ci && node stats.mjs

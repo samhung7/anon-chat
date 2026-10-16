@@ -386,3 +386,93 @@ test("encrypted room: photos, polls and votes are sealed", async () => {
   await assertSucceeds(set(ref(db("alice"), `rooms/${C}/msgs/m1/votes/alice`), "c2VhbGVk"));
   await assertFails(set(ref(db("alice"), `rooms/${C}/msgs/m1/votes/alice`), "0,1"));
 });
+
+// a question as the app asks it: who asked goes in qby (only they can read it), and asking is rate-limited like posting
+const ask = async (uid, id, body, { queued = false, by = uid } = {}) => {
+  await admin((d) => remove(ref(d, `rooms/${C}/members/${uid}/ls`)));
+  return update(ref(db(uid), `rooms/${C}`), { [`${queued ? "qq" : "qs"}/${id}`]: { at: T, ...body }, [`qby/${id}`]: by, [`members/${uid}/ls`]: T, [`members/${uid}/lq`]: id });
+};
+
+test("Q&A: members ask (anonymously too) once the owner turns it on; others upvote; staff mark answered", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertFails(ask("bob", "q1", { text: "還沒開" }));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/meta/qa`), true)); // only the owner turns it on
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/qa`), true));
+  await assertFails(ask("bob", "q1", { text: "冒名" }, { by: "carol" }));
+  await assertFails(ask("bob", "q1", { text: "a".repeat(301) }));
+  await assertFails(ask("bob", "q1", { text: "x", by: "bob" })); // no author on the question itself
+  await assertSucceeds(ask("bob", "q1", { text: "匿名的問題" }));
+  await assertSucceeds(ask("carol", "q2", { text: "具名的問題", name: "carol", avatar: "🦊" }));
+  await assertFails(ask("carol", "q1", { text: "蓋掉別人的" }));
+  await assertFails(update(ref(db("dave")), { [`rooms/${C}/qs/q3`]: { at: T, text: "外人" }, [`rooms/${C}/qby/q3`]: "dave" }));
+  // who asked stays with the asker
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/qby/q1`)));
+  await assertFails(get(ref(db("alice"), `rooms/${C}/qby/q1`)));
+  await assertFails(get(ref(db("carol"), `rooms/${C}/qby`)));
+  // upvotes: one each, not on your own
+  await assertSucceeds(set(ref(db("carol"), `rooms/${C}/qs/q1/up/carol`), true));
+  await assertFails(set(ref(db("carol"), `rooms/${C}/qs/q1/up/alice`), true));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/qs/q1/up/bob`), true));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/qs/nope/up/bob`), true));
+  await assertSucceeds(set(ref(db("carol"), `rooms/${C}/qs/q1/up/carol`), null));
+  // answered, and the one being answered now: the owner and co-hosts only
+  await assertFails(set(ref(db("bob"), `rooms/${C}/qs/q2/done`), T));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/qs/q2/done`), T));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/mods/carol`), true));
+  await assertSucceeds(set(ref(db("carol"), `rooms/${C}/meta/qnow`), "q1"));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/meta/qnow`), "q2"));
+  await assertFails(set(ref(db("carol"), `rooms/${C}/qs/q1/text`), "改字"));
+  // taking a question down: the asker or staff
+  await assertFails(remove(ref(db("bob"), `rooms/${C}/qs/q2`)));
+  await assertSucceeds(remove(ref(db("bob"), `rooms/${C}/qs/q1`)));
+  await assertSucceeds(remove(ref(db("alice"), `rooms/${C}/qs/q2`)));
+  // the owner turns it off: no more asking
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/qa`), false));
+  await assertFails(ask("bob", "q4", { text: "關了" }));
+});
+
+test("Q&A with review: questions wait until the owner or a co-host lets them through", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { qa: true, qmod: true }));
+  await assertFails(ask("bob", "q1", { text: "跳過審核" }));
+  await assertSucceeds(ask("alice", "q0", { text: "房主的不用審核" })); // the owner's own question
+  await assertSucceeds(ask("bob", "q1", { text: "等審核", name: "bob", avatar: "🐻" }, { queued: true }));
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/qq/q1`))); // the asker sees theirs is waiting
+  await assertFails(get(ref(db("carol"), `rooms/${C}/qq/q1`)));
+  await assertFails(get(ref(db("carol"), `rooms/${C}/qq`)));
+  await assertSucceeds(get(ref(db("alice"), `rooms/${C}/qq`)));
+  // letting it through moves it word for word
+  await assertFails(update(ref(db("carol"), `rooms/${C}`), { "qs/q1": { at: T, text: "等審核", name: "bob", avatar: "🐻" }, "qq/q1": null }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}`), { "qs/q1": { at: T, text: "改過", name: "bob", avatar: "🐻" }, "qq/q1": null }));
+  let at; await admin(async (d) => { at = (await get(ref(d, `rooms/${C}/qq/q1/at`))).val(); });
+  await assertFails(update(ref(db("alice"), `rooms/${C}`), { "qs/q1": { at, text: "等審核" }, "qq/q1": null })); // dropping the name
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "qs/q1": { at, text: "等審核", name: "bob", avatar: "🐻" }, "qq/q1": null }));
+  // turning one away
+  await assertSucceeds(ask("bob", "q2", { text: "不妥" }, { queued: true }));
+  await assertFails(remove(ref(db("carol"), `rooms/${C}/qq/q2`)));
+  await assertSucceeds(remove(ref(db("alice"), `rooms/${C}/qq/q2`)));
+  // the asker takes theirs back while it waits
+  await assertSucceeds(ask("bob", "q3", { text: "算了" }, { queued: true }));
+  await assertSucceeds(remove(ref(db("bob"), `rooms/${C}/qq/q3`)));
+});
+
+test("Q&A in an encrypted room is sealed", async () => {
+  await createEnc("alice"); await joinEnc("bob", H("b"));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/qa`), true));
+  await assertFails(ask("bob", "q1", { text: "明文" }));
+  await assertFails(ask("bob", "q1", { x: "c2VhbGVk", name: "bob" }));
+  await assertSucceeds(ask("bob", "q1", { x: "c2VhbGVk" }));
+});
+
+test("usage stats: anonymous daily counts that only go up by one", async () => {
+  const s = (uid) => ref(db(uid), "stats/2026-10-16/msgs");
+  await assertFails(set(ref(env.unauthenticatedContext().database(), "stats/2026-10-16/msgs"), 1));
+  await assertFails(set(s("bob"), 5));
+  await assertSucceeds(set(s("bob"), 1));
+  await assertSucceeds(set(s("carol"), 2));
+  await assertFails(set(s("carol"), 1));
+  await assertFails(set(s("carol"), null));
+  await assertFails(set(ref(db("bob"), "stats/2026-10-16/whatever"), 1));
+  await assertFails(set(ref(db("bob"), "stats/today/msgs"), 1));
+  await assertFails(get(ref(db("bob"), "stats")));
+});

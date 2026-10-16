@@ -86,10 +86,13 @@ a { color: var(--ink); }
       <li>你在聊天室裡的暱稱、頭像、加入時間、是否在線上，以及正在輸入的短暫狀態。</li>
       <li>你傳的訊息、照片、投票、抽籤和表情回應。照片在上傳前會在你的裝置上壓縮，並移除拍攝地點等 EXIF 資料。</li>
       <li>檢舉紀錄：被檢舉的訊息、原因和檢舉人的匿名 ID（房主和副房主看不到是誰檢舉的）。</li>
+      <li>講座提問：問題內容、按讚的人，以及你選擇具名時的暱稱。提問者的匿名 ID 另外存放，只有提問者自己讀得到，房主和副房主也看不到匿名提問是誰問的。</li>
     </ul>
     <p>私人沙龍的名稱、暱稱、訊息和照片，以及所有私訊，都在你的裝置上加密後才上傳，伺服器只存密文，我們無法讀取。</p>
     <h3>3. 存多久</h3>
-    <p>聊天室結束或閒置 24 小時後，伺服器上的內容會全部刪除，包含檢舉紀錄。你刪除自己的訊息時也會立刻刪除。</p>
+    <p>聊天室結束或閒置 24 小時後，伺服器上的內容會全部刪除，包含檢舉紀錄和提問。你刪除自己的訊息時也會立刻刪除。</p>
+    <h3>使用統計</h3>
+    <p>為了了解服務的使用情形，我們會記錄每天的總數，例如開了幾間聊天室、送出幾則訊息、提了幾個問題。這些只是每日加總的數字，不包含任何內容、暱稱、帳號 ID 或聊天室代碼，也無法對應到任何人。</p>
     <h3>4. 存在你裝置上的資料</h3>
     <p>瀏覽器的本機儲存空間會保存：你的暱稱和頭像、你在的聊天室清單、私人沙龍的金鑰、私訊用的金鑰、讀到哪裡、你封鎖的人、語言和外觀設定，以及你存下來的聊天記錄。這些資料不會上傳，清除瀏覽器資料就會刪除。</p>
     <h3>5. 我們使用的第三方服務</h3>
@@ -150,10 +153,13 @@ a { color: var(--ink); }
       <li>Your nickname and avatar in each room, when you joined, whether you're online, and a short-lived "typing" status.</li>
       <li>The messages, photos, polls, draws and reactions you send. Photos are compressed on your device before upload, which also removes EXIF data such as where they were taken.</li>
       <li>Reports: the reported message, the reason and the reporter's anonymous ID (owners and co-hosts can't see who reported).</li>
+      <li>Lecture questions: the question, who upvoted it, and your nickname if you chose to ask by name. The asker's anonymous ID is kept apart where only the asker can read it, so not even the owner or co-hosts can see who asked an anonymous question.</li>
     </ul>
     <p>In a Private Salon the room name, nicknames, messages and photos, and every private message anywhere, are encrypted on your device before upload. The server only holds ciphertext, and we can't read it.</p>
     <h3>3. How long it's kept</h3>
-    <p>When a room ends or has been idle for 24 hours, everything about it is deleted from the server, reports included. A message you delete is deleted at once.</p>
+    <p>When a room ends or has been idle for 24 hours, everything about it is deleted from the server, reports and questions included. A message you delete is deleted at once.</p>
+    <h3>Usage statistics</h3>
+    <p>To understand how the service is used, we count daily totals, such as how many rooms were opened, messages sent and questions asked. These are only numbers added up per day. They hold no content, nicknames, account IDs or room codes, and can't be traced to anyone.</p>
     <h3>4. What stays on your device</h3>
     <p>Your browser's local storage keeps your nickname and avatar, the rooms you're in, Private Salon keys, your private-message key, where you stopped reading, who you've blocked, your language and appearance settings, and records you saved. None of this is uploaded, and clearing your browser data deletes it.</p>
     <h3>5. Third-party services</h3>
