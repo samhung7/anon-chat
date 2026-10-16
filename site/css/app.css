@@ -161,6 +161,8 @@ code { font-size: .9em; }
 .sheet p { margin: 0 0 10px; }
 .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 @media (min-width: 600px) { .actions { flex-direction: row-reverse; flex-wrap: wrap; } .actions .btn { flex: 1; } }
+/* a menu of many choices: two columns on a wide screen, in reading order, the destructive one across the bottom */
+@media (min-width: 600px) { .actions.many { display: grid; grid-template-columns: 1fr 1fr; } .actions.many .btn.danger { grid-column: 1 / -1; } .sheet:has(.actions.many) { max-width: 600px; } }
 .avatars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin: 10px 0; }
 .avbtn { font-size: 24px; aspect-ratio: 1; border: 2px solid transparent; background: var(--surface-2); border-radius: 12px; padding: 0; }
 .avbtn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-2); }
