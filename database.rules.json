@@ -7,7 +7,7 @@
         "meta/last"
       ],
       "$code": {
-        ".write": "(auth != null) && (((!newData.exists()) && ((data.child('meta/owner').val() === auth.uid) || (data.child('meta/last').val() < now - 86400000))) || (((!data.exists()) || (data.child('meta/last').val() < now - 86400000)) && (newData.child('meta/owner').val() === auth.uid) && (newData.child('members/' + auth.uid).exists()) && (!newData.child('msgs').exists()) && (!newData.child('dm').exists()) && (!newData.child('banned').exists())))",
+        ".write": "(auth != null) && (((!newData.exists()) && ((data.child('meta/owner').val() === auth.uid) || (data.child('meta/last').val() < now - 86400000))) || (((!data.exists()) || (data.child('meta/last').val() < now - 86400000)) && (newData.child('meta/owner').val() === auth.uid) && (newData.child('members/' + auth.uid).exists()) && (!newData.child('msgs').exists()) && (!newData.child('files').exists()) && (!newData.child('dm').exists()) && (!newData.child('banned').exists())))",
         ".validate": "($code.matches(/^[2-9A-HJKMNP-Z]{4}$/)) && (newData.hasChild('meta'))",
         "meta": {
           ".read": "auth != null",
@@ -105,7 +105,7 @@
           ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
           "$id": {
             ".write": "(auth != null) && (data.parent().parent().child('members/' + auth.uid).exists()) && (((!data.exists()) && (newData.child('by').val() === auth.uid)) || ((!newData.exists()) && (data.child('by').val() === auth.uid)))",
-            ".validate": "(newData.hasChildren(['by', 'at'])) && ((((newData.parent().parent().child('meta/enc').val() === true)) && (newData.hasChild('x'))) || ((!(newData.parent().parent().child('meta/enc').val() === true)) && (newData.hasChildren(['name', 'avatar'])) && (newData.hasChild('text') || newData.hasChild('gif'))))",
+            ".validate": "(newData.hasChildren(['by', 'at'])) && ((((newData.parent().parent().child('meta/enc').val() === true)) && (newData.hasChild('x'))) || ((!(newData.parent().parent().child('meta/enc').val() === true)) && (newData.hasChildren(['name', 'avatar'])) && ((newData.hasChild('text')) || (newData.hasChild('gif')) || (newData.hasChild('img')) || (newData.hasChild('poll')) || (newData.hasChild('draw')))))",
             "by": {
               ".validate": "newData.isString()"
             },
@@ -136,8 +136,59 @@
                 ".validate": false
               }
             },
+            "img": {
+              ".validate": "newData.hasChildren(['f', 'w', 'h']) && !(newData.parent().parent().parent().child('meta/enc').val() === true)",
+              "f": {
+                ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{1,32}$/) && newData.parent().parent().parent().parent().child('files/' + newData.val() + '/by').val() === auth.uid"
+              },
+              "w": {
+                ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 4000"
+              },
+              "h": {
+                ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 4000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "poll": {
+              ".validate": "newData.hasChildren(['q', 'o', 'm']) && newData.child('o/1').exists() && !(newData.parent().parent().parent().child('meta/enc').val() === true)",
+              "q": {
+                ".validate": "newData.isString() && newData.val().length <= 200 && newData.val().length > 0"
+              },
+              "o": {
+                "$i": {
+                  ".validate": "$i.matches(/^[0-9]$/) && newData.isString() && newData.val().length <= 80 && newData.val().length > 0"
+                }
+              },
+              "m": {
+                ".validate": "newData.isBoolean()"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "draw": {
+              ".validate": "newData.hasChildren(['p', 'w']) && !(newData.parent().parent().parent().child('meta/enc').val() === true)",
+              "t": {
+                ".validate": "newData.isString() && newData.val().length <= 60"
+              },
+              "p": {
+                "$i": {
+                  ".validate": "$i.matches(/^[0-9]{1,3}$/) && newData.isString() && newData.val().length <= 128"
+                }
+              },
+              "w": {
+                "$i": {
+                  ".validate": "$i.matches(/^[0-9]{1,3}$/) && newData.isString() && newData.val().length <= 128"
+                }
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
             "x": {
-              ".validate": "newData.isString() && newData.val().length <= 4000 && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
+              ".validate": "newData.isString() && newData.val().length <= 12000 && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
             },
             "rp": {
               ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{1,32}$/) && !(newData.parent().parent().parent().child('meta/enc').val() === true)"
@@ -153,6 +204,35 @@
                   ".validate": "newData.val() === true"
                 }
               }
+            },
+            "votes": {
+              "$uid": {
+                ".write": "(auth != null) && (auth.uid === $uid) && (data.parent().parent().parent().parent().child('members/' + auth.uid).exists()) && (data.parent().parent().child('closed').val() !== true)",
+                ".validate": "(((newData.parent().parent().parent().parent().child('meta/enc').val() === true)) && (newData.isString() && newData.val().length <= 200 && newData.val().matches(/^[A-Za-z0-9_-]+$/))) || ((!(newData.parent().parent().parent().parent().child('meta/enc').val() === true)) && (newData.parent().parent().child('poll').exists()) && ((newData.isString() && newData.val().matches(/^[0-9]$/)) || ((newData.parent().parent().child('poll/m').val() === true) && (newData.isString() && newData.val().matches(/^[0-9](,[0-9]){1,9}$/)))))"
+              }
+            },
+            "closed": {
+              ".write": "auth != null && data.parent().child('by').val() === auth.uid",
+              ".validate": "newData.val() === true"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "files": {
+          ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
+          "$id": {
+            ".write": "(auth != null) && (data.parent().parent().child('members/' + auth.uid).exists()) && (((!data.exists()) && (newData.child('by').val() === auth.uid)) || ((!newData.exists()) && (data.child('by').val() === auth.uid)))",
+            ".validate": "newData.hasChildren(['by', 'd', 'at'])",
+            "by": {
+              ".validate": "newData.isString()"
+            },
+            "d": {
+              ".validate": "newData.isString() && newData.val().length <= 450000"
+            },
+            "at": {
+              ".validate": "newData.val() === now"
             },
             "$other": {
               ".validate": false

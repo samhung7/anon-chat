@@ -126,15 +126,20 @@
   }
   const mac = async (c, s) => hex(await SUB.sign("HMAC", c.mac, TE.encode(s))).slice(0, 24);
   const keyCheck = async (c) => (await mac(c, "key-check")).slice(0, 16);
-  async function seal(key, obj, aad) {
+  async function sealBytes(key, bytes, aad) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = new Uint8Array(await SUB.encrypt({ name: "AES-GCM", iv, additionalData: TE.encode(aad) }, key, TE.encode(JSON.stringify(obj))));
+    const ct = new Uint8Array(await SUB.encrypt({ name: "AES-GCM", iv, additionalData: TE.encode(aad) }, key, bytes));
     const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
     return b64u(out);
   }
-  async function unseal(key, s, aad) {
-    try { const b = unb64u(s); return JSON.parse(TD.decode(await SUB.decrypt({ name: "AES-GCM", iv: b.slice(0, 12), additionalData: TE.encode(aad) }, key, b.slice(12)))); }
+  async function unsealBytes(key, s, aad) {
+    try { const b = unb64u(s); return new Uint8Array(await SUB.decrypt({ name: "AES-GCM", iv: b.slice(0, 12), additionalData: TE.encode(aad) }, key, b.slice(12))); }
     catch (e) { return null; }
+  }
+  const seal = (key, obj, aad) => sealBytes(key, TE.encode(JSON.stringify(obj)), aad);
+  async function unseal(key, s, aad) {
+    const b = await unsealBytes(key, s, aad);
+    try { return b && JSON.parse(TD.decode(b)); } catch (e) { return null; }
   }
   // this device's key pair for private messages
   let DH = null;
@@ -198,9 +203,23 @@
     const p = (await unseal(R.c.aes, m.x, "u:" + id)) || {};
     return { ...m, name: String(p.n || "？").slice(0, 24), avatar: String(p.a || "👤").slice(0, 8) };
   }
+  // photos, polls and draws as stored, or as unsealed (so checked the same way)
+  const listOf = (x) => (Array.isArray(x) ? x : x && typeof x === "object" ? Object.values(x) : []);
+  const strOf = (x, n) => (typeof x === "string" ? x.slice(0, n) : "");
+  const cleanImg = (i) => (i && typeof i.f === "string" && /^[\w-]{1,32}$/.test(i.f) ? { f: i.f, w: Math.min(+i.w || 300, 4000), h: Math.min(+i.h || 300, 4000) } : null);
+  const cleanPoll = (p) => { const o = listOf(p?.o).slice(0, 10).map((x) => strOf(x, 80)); return p && o.length >= 2 ? { q: strOf(p.q, 200), o, m: p.m === true } : null; };
+  const cleanDraw = (d) => (d ? { t: strOf(d.t, 60), p: listOf(d.p).slice(0, 200).map((x) => strOf(x, 128)), w: listOf(d.w).slice(0, 200).map((x) => strOf(x, 128)) } : null);
   // a message as shown: decrypted (or marked unreadable), everything else as stored
-  async function openMsg(v, dmWith) {
-    if (!v?.x) return v;
+  async function openMsg(v, dmWith, id) {
+    if (!v) return v;
+    if (!v.x) {
+      const out = { ...v };
+      if (v.img) out.img = cleanImg(v.img);
+      if (v.poll) out.poll = cleanPoll(v.poll);
+      if (v.draw) out.draw = cleanDraw(v.draw);
+      if (out.poll && v.votes) out.votes = await openVotes(v.votes, id, out.poll);
+      return out;
+    }
     let p = R.plain.get(v.x);
     if (p === undefined) {
       const key = dmWith ? await dmKey(dmWith) : R.c?.aes;
@@ -210,9 +229,28 @@
     const out = { ...v }; delete out.x;
     if (!p) return { ...out, text: t(dmWith ? "cantDecryptDm" : "cantDecrypt"), bad: true };
     if (p.g && typeof p.g.url === "string") out.gif = { url: p.g.url.slice(0, 500), w: Math.min(+p.g.w || 200, 2000), h: Math.min(+p.g.h || 200, 2000), title: String(p.g.title || "").slice(0, 120) };
+    else if (p.i && !dmWith) out.img = cleanImg(p.i);
+    else if (p.p && !dmWith) out.poll = cleanPoll(p.p);
+    else if (p.d && !dmWith) out.draw = cleanDraw(p.d);
     else out.text = String(p.t || "").slice(0, 1000);
+    if (out.poll && v.votes) out.votes = await openVotes(v.votes, id, out.poll);
     if (!dmWith) { out.name = String(p.n || "？").slice(0, 24); out.avatar = String(p.a || "👤").slice(0, 8); }
     if (typeof p.r === "string" && /^[\w-]{1,32}$/.test(p.r)) out.rp = p.r;
+    return out;
+  }
+  // everyone's votes on a poll, { uid: [option, ...] }; each is "0" or "0,2", sealed in an encrypted room
+  async function openVotes(raw, id, poll) {
+    const out = {};
+    for (const [who, s] of Object.entries(raw || {})) {
+      let picks = typeof s === "string" ? s : "";
+      if (R.c && picks) {
+        let o = R.plain.get(picks);
+        if (o === undefined) { o = await unseal(R.c.aes, picks, `v:${id}:${who}`); if (o != null) R.plain.set(picks, o); }
+        picks = typeof o === "string" ? o : "";
+      }
+      const list = [...new Set(picks ? picks.split(",").map(Number) : [])].filter((k) => Number.isInteger(k) && k >= 0 && k < poll.o.length);
+      if (list.length) out[who] = poll.m ? list : list.slice(0, 1);
+    }
     return out;
   }
 
@@ -426,7 +464,7 @@
     // raw/rawSeen: member records as stored; members/seen: as shown (decrypted). Everything that arrives goes
     // through one queue (q), so decrypting never reorders messages.
     R = { code, c, meta: null, members: {}, seen: {}, raw: {}, rawSeen: {}, msgs: new Map(), dms: new Map(), plain: new Map(), dk: new Map(),
-          view: "all", unread: {}, drafts: {}, reply: null, off: [], gone: false, ready: false, q: Promise.resolve(), t0: Date.now() + offset };
+          view: "all", unread: {}, drafts: {}, reply: null, imgs: new Map(), off: [], gone: false, ready: false, q: Promise.resolve(), t0: Date.now() + offset };
     rememberRoom(code);
     roomPath(code);
     $("#list").replaceChildren();
@@ -459,8 +497,8 @@
       renderHeader(); refreshNames();
     }), lost));
     const q = fb.query(roomRef(code, "msgs"), fb.limitToLast(MAX_LOAD));
-    on(fb.onChildAdded(q, (s) => queue(async () => { const v = await openMsg(s.val()); R.msgs.set(s.key, v); if (R.view === "all") addMsg(s.key, v); if (pinIds().includes(s.key)) renderPins(); noteNew(v, null); }), lost));
-    on(fb.onChildChanged(q, (s) => queue(async () => { const v = await openMsg(s.val()); R.msgs.set(s.key, v); if (R.view === "all") updateMsg(s.key, v); })));
+    on(fb.onChildAdded(q, (s) => queue(async () => { const v = await openMsg(s.val(), null, s.key); R.msgs.set(s.key, v); if (R.view === "all") addMsg(s.key, v); if (pinIds().includes(s.key)) renderPins(); noteNew(v, null); }), lost));
+    on(fb.onChildChanged(q, (s) => queue(async () => { const v = await openMsg(s.val(), null, s.key); R.msgs.set(s.key, v); if (R.view === "all") updateMsg(s.key, v); })));
     on(fb.onChildRemoved(q, (s) => queue(() => { R.msgs.delete(s.key); if (R.view === "all") document.getElementById("m-" + s.key)?.remove(); renderPins(); })));
 
     // online / offline
@@ -509,7 +547,7 @@
     if (!notifyOn(R.code)) return;
     const a = author(v, dmWith);
     const title = dmWith ? t("dmToast", { who: a.name }) : `${a.avatar} ${a.name} | ${R.meta?.title || t("roomN", { code: R.code })}`;
-    const opts = { body: dmWith ? t("openToRead") : v.gif ? t("sentGif") : (v.text || "").slice(0, 120), tag: "room-" + R.code, renotify: true, icon: "icons/stoa2-192.png", data: { url: roomUrl(R.code) } };
+    const opts = { body: dmWith ? t("openToRead") : v.gif ? t("sentGif") : v.text ? v.text.slice(0, 120) : snippet(v), tag: "room-" + R.code, renotify: true, icon: "icons/stoa2-192.png", data: { url: roomUrl(R.code) } };
     try {
       const reg = await navigator.serviceWorker?.getRegistration();
       if (reg) return await reg.showNotification(title, opts); // phones only show notifications through the service worker
@@ -591,16 +629,22 @@
         el("span", { class: "nm", text: author(v, dm).name + (owner ? " 👑" : "") }),
         el("time", { text: fmtTime(v.at) })),
       v.rp ? replyQuote(v.rp, dm) : null,
-      v.gif ? el("div", { class: "bub gifbub" }, gifImg(v.gif)) : el("div", { class: "bub" }, linkify(v.text || "")),
+      v.gif ? el("div", { class: "bub gifbub" }, gifImg(v.gif))
+        : v.img ? el("div", { class: "bub imgbub" }, photoImg(v))
+        : v.poll ? el("div", { class: "bub pollbub" }, pollView(livePoll(v), (k) => vote(id, k)))
+        : v.draw ? el("div", { class: "bub drawbub" }, drawView(liveDraw(v)))
+        : el("div", { class: "bub" }, linkify(v.text || "")),
       dm ? null : el("div", { class: "re" }));
     if (!dm) fillReacts(node, v);
-    // only the bubble itself opens the actions; the name line and the empty space beside it do nothing
-    node.addEventListener("click", (e) => { if (e.target.closest(".bub") && !e.target.closest("a")) msgActions(id, v, dm); });
+    // only the bubble itself opens the actions; the name line and the empty space beside it do nothing,
+    // nor do a link, a poll's options or a draw's list of who took part
+    node.addEventListener("click", (e) => { if (e.target.closest(".bub") && !e.target.closest("a, .opt, details")) msgActions(id, (dm ? null : R.msgs.get(id)) || v, dm); });
     return node;
   }
   // one line naming a message: who, and the start of what they said
   const findMsg = (id, dm) => (dm ? R.dms.get(R.view)?.get(id) : R.msgs.get(id));
-  const snippet = (v) => (v.gif ? "GIF" : (v.text || "").replace(/\s+/g, " ").slice(0, 80));
+  const snippet = (v) => (v.gif ? "GIF" : v.img ? "📷 " + t("photo") : v.poll ? "📊 " + v.poll.q : v.draw ? "🎲 " + (v.draw.t || t("draw"))
+    : (v.text || "")).replace(/\s+/g, " ").slice(0, 80);
   function replyQuote(rp, dm) {
     const o = findMsg(rp, dm);
     return el("button", { type: "button", class: "rpq", onclick: () => jumpTo(rp, dm) },
@@ -640,7 +684,7 @@
       pinsOpen ? el("ul", {}, items.map((it) => el("li", {},
         el("button", { type: "button", class: "go", onclick: () => it.v && jumpTo(it.id) },
           it.v ? el("small", { text: `${author(it.v).avatar} ${author(it.v).name} · ${fmtTime(it.v.at)}` }) : null,
-          it.v?.gif ? gifImg(it.v.gif) : line(it)),
+          it.v?.gif ? gifImg(it.v.gif) : it.v?.img ? photoImg(it.v, true) : line(it)),
         isOwner() ? el("button", { type: "button", class: "btn small unpin", text: t("unpin"), onclick: () => pin(it.id, false) }) : null))) : null].filter(Boolean));
   }
   function pin(id, on) {
@@ -660,7 +704,9 @@
   }
   function updateMsg(id, v) {
     const node = document.getElementById("m-" + id);
-    if (node) fillReacts(node, v);
+    if (!node) return;
+    fillReacts(node, v);
+    if (v.poll) $(".pollbub", node)?.replaceChildren(pollView(livePoll(v), (k) => vote(id, k)));
   }
   function fillReacts(node, v) {
     const box = $(".re", node); if (!box) return;
@@ -683,6 +729,7 @@
     const list = $("#list");
     list.replaceChildren();
     $("#dmBar").hidden = R.view === "all";
+    $("#composer [data-a=more]").hidden = R.view !== "all"; // photos, polls and draws are for the room
     $("#chat").classList.toggle("indm", R.view !== "all");
     if (R.view === "all") {
       if (!R.msgs.size) list.append(el("p", { class: "empty", text: t("emptyRoom") }));
@@ -705,16 +752,20 @@
   }
 
   /* ---------- actions ---------- */
-  async function send(text, gif) {
+  function send(text, gif) {
     text = (text || "").trim().slice(0, 1000);
-    if ((!text && !gif) || !R || R.gone) return false;
+    if (!text && !gif) return false;
+    return post(gif ? { gif } : { text }, gif ? { g: gif } : { t: text });
+  }
+  // one message to the room or the private chat on view: body as a plain room stores it, sealed as it goes inside x;
+  // more: other paths written in the same update (a photo's picture)
+  async function post(body, sealed, more = {}) {
+    if (!R || R.gone) return false;
     const rp = R.reply && !!R.reply.dm === (R.view !== "all") ? R.reply.id : null;
-    const body = gif ? { gif } : { text };
-    const sealed = gif ? { g: gif } : { t: text };
     if (rp) { sealed.r = rp; if (!R.c) body.rp = rp; }
     const m = R.members[uid] || me(); // the name this room knows me by
     const base = `rooms/${R.code}`;
-    const upd = { [`${base}/meta/last`]: T() };
+    const upd = { [`${base}/meta/last`]: T(), ...more };
     if (R.view === "all") {
       const id = fb.push(fb.ref(db, base + "/msgs")).key;
       upd[`${base}/msgs/${id}`] = R.c ? { by: uid, x: await seal(R.c.aes, { ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T() }
@@ -740,11 +791,16 @@
       return el("button", { type: "button", class: "chip big" + (on ? " on" : ""), "data-a": "re" + k, text: emo });
     }));
     const btns = v.bad ? [] : [["reply", t("reply")]];
-    if (!v.gif && !v.bad) btns.push(["copy", t("copyText")]);
+    if (v.text && !v.bad) btns.push(["copy", t("copyText")]);
+    if (v.img) btns.push(["view", t("viewPhoto")], ["save", t("savePhoto")]);
+    if (v.poll) btns.push(["voters", t("pollWho")]);
+    if (v.poll && !v.closed && v.by === uid) btns.push(["close", t("pollClose")]);
     if (!dm && !v.bad && isOwner()) btns.push(pinIds().includes(id) ? ["unpin", t("unpin")] : ["pin", t("pinAsNotice")]);
     if (!dm && v.by !== uid && R.members[v.by]) btns.push(["dm", t("dmTo", { name: author(v).name })]);
     if (canDel) btns.push(["del", t("delMsg"), "danger"]);
-    const body = el("div", {}, v.gif ? el("div", { class: "quote gifq" }, gifImg(v.gif)) : el("blockquote", { class: "quote", text: v.text.length > 140 ? v.text.slice(0, 140) + "…" : v.text }), reacts);
+    const txt = v.poll || v.draw ? snippet(v) : v.text || "";
+    const body = el("div", {}, v.gif ? el("div", { class: "quote gifq" }, gifImg(v.gif)) : v.img ? el("div", { class: "quote gifq" }, photoImg(v, true))
+      : el("blockquote", { class: "quote", text: txt.length > 140 ? txt.slice(0, 140) + "…" : txt }), reacts);
     let picked = null;
     const a = await sheet("", body, btns, { onOpen: (ov) => reacts?.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { picked = +b.dataset.a.slice(2); ov.close("react"); } }) });
     if (a === "react") return react(id, picked, !v.re?.[picked]?.[uid]);
@@ -752,7 +808,216 @@
     if (a === "dm") openDm(v.by);
     if (a === "reply") startReply(id, v, dm);
     if (a === "pin" || a === "unpin") pin(id, a === "pin");
-    if (a === "del" && (await confirmSheet(t("delMsgTitle"), t("delMsgBody"), t("del")))) fb.remove(roomRef(R.code, "msgs/" + id)).catch(() => toast(t("delFail")));
+    if (a === "view") photoUrl(v.img.f, v.by).then((u) => (u ? viewPhoto(u) : toast(t("photoGone"))));
+    if (a === "save") photoUrl(v.img.f, v.by).then((u) => (u ? saveFile(u, `photo-${R.code}-${id}.jpg`) : toast(t("photoGone"))));
+    if (a === "voters") pollVoters(v);
+    if (a === "close" && (await confirmSheet(t("pollClose"), t("pollCloseBody"), t("pollClose"), "primary"))) fb.set(roomRef(R.code, `msgs/${id}/closed`), true).catch(() => toast(t("tryAgain")));
+    // a photo's picture goes with its message
+    if (a === "del" && (await confirmSheet(t("delMsgTitle"), t("delMsgBody"), t("del"))))
+      fb.update(roomRef(R.code), { ["msgs/" + id]: null, ...(v.img ? { ["files/" + v.img.f]: null } : {}) }).catch(() => toast(t("delFail")));
+  }
+
+  /* ---------- photos ----------
+     A photo is shrunk on the device before it's sent: at most 1280px on its long side, as a JPEG of at most about
+     300 KB. Phone photos are often 3-10 MB; sent as they are they'd be slow on mobile data and fill the database
+     (and its monthly download allowance) fast. Redrawing the picture also drops its EXIF data: where it was taken,
+     when, and on what phone. The picture is stored apart from the message (files/{id}), so the message list stays
+     small, and each one is fetched only when it scrolls into view. In an encrypted room it's sealed with the room key. */
+  const PHOTO_EDGE = 1280, PHOTO_MAX = 300000, PHOTO_LIMIT = 330000, PHOTOS_AT_ONCE = 6;
+  async function shrink(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+      const W = img.naturalWidth, H = img.naturalHeight;
+      if (!W || !H) throw new Error("no-size");
+      let edge = PHOTO_EDGE, q = 0.8;
+      for (let n = 0; ; n++) {
+        const s = Math.min(1, edge / Math.max(W, H)), w = Math.max(1, Math.round(W * s)), h = Math.max(1, Math.round(H * s));
+        const cv = el("canvas", { width: w, height: h }), cx = cv.getContext("2d");
+        cx.fillStyle = "#fff"; cx.fillRect(0, 0, w, h); // a transparent PNG gets a white background, not a black one
+        cx.drawImage(img, 0, 0, w, h);
+        const blob = await new Promise((ok) => cv.toBlob(ok, "image/jpeg", q));
+        if (!blob) throw new Error("encode");
+        if (blob.size <= PHOTO_MAX || n >= 6) return { bytes: new Uint8Array(await blob.arrayBuffer()), w, h };
+        if (q > 0.65) q -= 0.1; else edge = Math.round(edge * 0.8); // lower the quality a little first, then the size
+      }
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function sendPhotos(files) {
+    if (!R || R.gone || R.view !== "all") return;
+    const list = [...files].filter((f) => !f.type || f.type.startsWith("image/"));
+    if (!list.length) return;
+    if (list.length > PHOTOS_AT_ONCE) toast(t("photoMax", { n: PHOTOS_AT_ONCE }));
+    busy(true);
+    try {
+      for (const file of list.slice(0, PHOTOS_AT_ONCE)) {
+        let p;
+        try { p = await shrink(file); } catch (e) { console.warn(e); toast(t("photoFail")); continue; }
+        if (p.bytes.length > PHOTO_LIMIT || !R || R.gone) { toast(t("photoFail")); continue; }
+        const f = fb.push(roomRef(R.code, "files")).key;
+        const d = R.c ? await sealBytes(R.c.aes, p.bytes, `f:${uid}:${f}`) : b64u(p.bytes);
+        R.imgs.set(f, Promise.resolve(URL.createObjectURL(new Blob([p.bytes], { type: "image/jpeg" })))); // no need to fetch my own
+        const img = { f, w: p.w, h: p.h };
+        await post({ img }, { i: img }, { [`rooms/${R.code}/files/${f}`]: { by: uid, d, at: T() } });
+      }
+    } finally { busy(false); }
+  }
+  // a photo's picture as a blob: URL, fetched once per visit (null if it's gone or can't be read)
+  function photoUrl(f, by) {
+    const r = R;
+    if (!r.imgs.has(f)) r.imgs.set(f, fb.get(roomRef(r.code, "files/" + f)).then(async (s) => {
+      const v = s.val();
+      if (!v || v.by !== by || typeof v.d !== "string") return null;
+      let bytes = null;
+      if (r.c) bytes = await unsealBytes(r.c.aes, v.d, `f:${by}:${f}`);
+      else try { bytes = unb64u(v.d); } catch (e) {}
+      return bytes ? URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" })) : null;
+    }).catch(() => null).then((u) => { if (!u) r.imgs.delete(f); return u; }));
+    return r.imgs.get(f);
+  }
+  // fetch a photo when its message comes near the screen, not all of them on entering the room
+  let photoWatch = null;
+  function photoImg(v, now) {
+    const { f, w, h } = v.img;
+    const img = el("img", { class: "photo", width: w, height: h, alt: t("photo"), decoding: "async" });
+    img.fetchPhoto = () => photoUrl(f, v.by).then((u) => { if (u) img.src = u; else img.replaceWith(el("span", { class: "muted", text: t("photoGone") })); });
+    if (now || !("IntersectionObserver" in window)) img.fetchPhoto();
+    else {
+      photoWatch ||= new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { photoWatch.unobserve(e.target); e.target.fetchPhoto(); } }), { root: $("#list"), rootMargin: "600px 0px" });
+      photoWatch.observe(img);
+    }
+    return img;
+  }
+  function viewPhoto(src) {
+    const close = () => { ov.remove(); document.removeEventListener("keydown", esc); };
+    const esc = (e) => { if (e.key === "Escape") close(); };
+    const ov = el("div", { class: "lightbox", role: "dialog", "aria-label": t("photo"), onclick: close },
+      el("img", { src, alt: t("photo") }), el("button", { type: "button", class: "icon", "aria-label": t("close"), text: "✕" }));
+    document.addEventListener("keydown", esc);
+    document.body.append(ov);
+  }
+  function saveFile(href, name) {
+    const link = el("a", { href, download: name });
+    document.body.append(link); link.click(); link.remove();
+  }
+
+  /* ---------- polls ----------
+     Anyone starts one: a question and 2 to 10 options, one vote per person or several. Tapping an option votes,
+     tapping it again takes the vote back; votes can change until the poll's author closes it. Who voted for what
+     is visible to the room, like reactions. */
+  // a poll as shown, the same shape a saved record keeps: { q, m, closed, total, o: [{ t, n, on, names }] }
+  function livePoll(v) {
+    const votes = v.votes || {}, ids = Object.keys(votes);
+    return { q: v.poll.q, m: v.poll.m, closed: !!v.closed, total: ids.length, o: v.poll.o.map((label, k) => {
+      const who = ids.filter((w) => votes[w].includes(k));
+      return { t: label, n: who.length, on: who.includes(uid), names: who.map(nameOf) };
+    }) };
+  }
+  // onVote: null for a saved record, which only shows the result
+  function pollView(p, onVote) {
+    return el("div", { class: "pollbox" + (p.closed ? " closed" : "") },
+      el("div", { class: "ph" }, el("span", { text: "📊 " + t("poll") }), el("small", { text: [t(p.m ? "pollMultiTag" : "pollSingleTag"), p.closed ? t("pollClosed") : null].filter(Boolean).join(" · ") })),
+      el("b", { class: "pq", text: p.q }),
+      p.o.map((o, k) => el("button", {
+        type: "button", class: "opt" + (o.on ? " on" : ""), "aria-pressed": String(!!o.on), disabled: !onVote || p.closed || R?.gone,
+        title: o.names?.join(t("listSep")) || null, onclick: () => onVote?.(k),
+      }, el("span", { class: "bar", style: `width:${p.total ? Math.round((o.n * 100) / p.total) : 0}%` }),
+        el("span", { class: "ol", text: (o.on ? "✓ " : "") + o.t }), el("span", { class: "oc", text: o.n }))),
+      el("small", { class: "pf", text: t("pollVotes", { n: p.total }) }));
+  }
+  async function vote(id, k) {
+    const v = R?.msgs.get(id);
+    if (!v?.poll || v.closed || R.gone) return;
+    const mine = v.votes?.[uid] || [];
+    const next = v.poll.m ? (mine.includes(k) ? mine.filter((x) => x !== k) : [...mine, k].sort((a, b) => a - b)) : mine.includes(k) ? [] : [k];
+    const s = next.join(",");
+    const val = !s ? null : R.c ? await seal(R.c.aes, s, `v:${id}:${uid}`) : s;
+    fb.set(roomRef(R.code, `msgs/${id}/votes/${uid}`), val).catch(() => toast(t("tryAgain")));
+  }
+  function pollVoters(v) {
+    const p = livePoll(v);
+    sheet(p.q, el("div", { class: "voters" }, p.o.map((o) => el("div", {},
+      el("b", { text: `${o.t} · ${o.n}` }), el("p", { class: "muted small", text: o.names.join(t("listSep")) || "—" })))), [["close", t("close")]]);
+  }
+  // the radio-button pair used by the poll and draw sheets
+  function choice(opts, value, onPick) {
+    const seg = el("div", { class: "seg row", role: "radiogroup" }, opts.map(([v, label]) => el("button", { type: "button", role: "radio", "aria-checked": String(v === value), "data-v": v, text: label })));
+    seg.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-checked", String(x === b))); onPick(b.dataset.v);
+    });
+    return seg;
+  }
+  async function newPoll() {
+    if (!R || R.gone) return;
+    const q = el("input", { class: "field", maxlength: 200, id: "pollQ", placeholder: t("pollQPh"), autocomplete: "off" });
+    const opts = el("div", { class: "pollopts" });
+    const addBtn = el("button", { type: "button", class: "btn small", text: t("pollAdd"), onclick: () => { addOpt(); opts.lastElementChild.focus(); } });
+    const addOpt = () => {
+      if (opts.children.length < 10) opts.append(el("input", { class: "field", maxlength: 80, autocomplete: "off", placeholder: t("pollOpt", { n: opts.children.length + 1 }), "aria-label": t("pollOpt", { n: opts.children.length + 1 }) }));
+      addBtn.hidden = opts.children.length >= 10;
+    };
+    addOpt(); addOpt();
+    let multi = false;
+    const warn = el("p", { class: "note warn", hidden: true });
+    const body = el("div", {}, warn, el("label", { class: "lbl", for: "pollQ", text: t("pollQ") }), q,
+      el("label", { class: "lbl", text: t("pollOpts") }), opts, addBtn,
+      el("label", { class: "lbl", text: t("pollHow") }), choice([["1", t("pollSingle")], ["n", t("pollMulti")]], "1", (v) => (multi = v === "n")));
+    for (;;) {
+      const a = await sheet(t("pollNew"), body, [["no", t("cancel")], ["yes", t("pollStart"), "primary"]], { onOpen: () => q.focus() });
+      if (a !== "yes" || !R || R.gone) return;
+      const question = q.value.trim().slice(0, 200);
+      const o = [...opts.querySelectorAll("input")].map((x) => x.value.trim().slice(0, 80)).filter(Boolean);
+      if (!question || o.length < 2) { warn.textContent = t("pollNeed"); warn.hidden = false; continue; }
+      const poll = { q: question, o, m: multi };
+      return post({ poll }, { p: poll });
+    }
+  }
+
+  /* ---------- draws ----------
+     Pick who takes part (everyone here, to start with) and how many to draw. The drawing happens on this device,
+     with the browser's cryptographic random numbers, and the result goes to the room as a message. */
+  const randBelow = (n) => { const a = new Uint32Array(1), lim = Math.floor(2 ** 32 / n) * n; do crypto.getRandomValues(a); while (a[0] >= lim); return a[0] % n; };
+  const drawOf = (list, k) => { const a = [...list]; for (let i = a.length - 1; i > 0; i--) { const j = randBelow(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a.slice(0, k); };
+  // a draw as shown, the same shape a saved record keeps: { t, p: [names], w: [names] }; a new one is revealed slowly
+  const liveDraw = (v) => ({ t: v.draw.t, p: v.draw.p.map(nameOf), w: v.draw.w.map(nameOf), fresh: v.at > R.t0 && now() - v.at < 15000 });
+  function drawView(d) {
+    return el("div", { class: "drawbox" + (d.fresh ? " fresh" : "") },
+      el("div", { class: "ph" }, el("span", { text: "🎲 " + t("draw") })),
+      d.t ? el("b", { class: "pq", text: d.t }) : null,
+      el("small", { class: "pf", text: t("drawFrom", { n: d.p.length, k: d.w.length }) }),
+      el("div", { class: "winners" }, d.w.map((n, i) => el("span", { class: "win", style: `--i:${i}`, text: "🏆 " + n }))),
+      el("details", {}, el("summary", { text: t("drawWhoIn") }), el("p", { class: "small", text: d.p.join(t("listSep")) })));
+  }
+  async function newDraw() {
+    if (!R || R.gone) return;
+    const ids = Object.keys(R.members).sort((a, b) => (R.members[a].joined || 0) - (R.members[b].joined || 0));
+    const what = el("input", { class: "field", maxlength: 60, id: "drawWhat", placeholder: t("drawWhatPh"), autocomplete: "off" });
+    const boxes = el("div", { class: "picklist" }, ids.map((id) => el("label", { class: "pick" },
+      el("input", { type: "checkbox", value: id, checked: true }),
+      el("span", { class: "av", text: R.members[id].avatar }),
+      el("span", { class: "nm", text: R.members[id].name + (id === uid ? t("meTag") : "") }))));
+    const count = el("input", { class: "field num", type: "number", min: 1, max: ids.length, value: 1, id: "drawN", inputmode: "numeric" });
+    const picked = () => [...boxes.querySelectorAll("input:checked")].map((x) => x.value);
+    const allBtn = el("button", { type: "button", class: "btn small", text: t("drawNone"), onclick: () => {
+      const on = !picked().length; boxes.querySelectorAll("input").forEach((x) => (x.checked = on)); sync();
+    } });
+    const sync = () => { const n = picked().length; allBtn.textContent = t(n ? "drawNone" : "drawAll"); count.max = Math.max(1, n); };
+    boxes.addEventListener("change", sync);
+    const warn = el("p", { class: "note warn", hidden: true });
+    const body = el("div", {}, warn, el("label", { class: "lbl", for: "drawWhat", text: t("drawWhat") }), what,
+      el("div", { class: "lblrow" }, el("label", { class: "lbl", text: t("drawWho") }), allBtn), boxes,
+      el("label", { class: "lbl", for: "drawN", text: t("drawCount") }), count);
+    for (;;) {
+      const a = await sheet(t("drawNew"), body, [["no", t("cancel")], ["yes", t("drawGo"), "primary"]]);
+      if (a !== "yes" || !R || R.gone) return;
+      const p = picked().filter((id) => R.members[id]), k = Math.floor(+count.value);
+      if (!p.length) { warn.textContent = t("drawNeed"); warn.hidden = false; continue; }
+      if (!(k >= 1 && k <= p.length)) { warn.textContent = t("drawCountBad", { n: p.length }); warn.hidden = false; continue; }
+      const title = what.value.trim().slice(0, 60);
+      const draw = { ...(title ? { t: title } : {}), p, w: drawOf(p, k) };
+      return post({ draw }, { d: draw });
+    }
   }
 
   function share() {
@@ -865,17 +1130,26 @@
       REACTS.forEach((e, k) => { const n = Object.keys(v.re?.[k] || {}).length; if (n) out[e] = n; });
       return Object.keys(out).length ? out : undefined;
     };
-    const one = (v, author) => ({ name: author.name, avatar: author.avatar, at: v.at, text: v.text || undefined, gif: v.gif || undefined, mine: v.by === uid || undefined });
-    return {
+    const pics = []; // photos, for the .html file to carry; not kept in the archive itself
+    const one = (v, author) => {
+      const m = { name: author.name, avatar: author.avatar, at: v.at, text: v.text || undefined, gif: v.gif || undefined, mine: v.by === uid || undefined };
+      if (v.img) { m.photo = { w: v.img.w, h: v.img.h }; pics.push([m, v]); }
+      if (v.poll) { const { q, m: multi, closed, total, o } = livePoll(v); m.poll = { q, m: multi, closed: closed || undefined, total, o: o.map(({ t: x, n }) => ({ t: x, n })) }; }
+      if (v.draw) { const { t: x, p, w } = liveDraw(v); m.draw = { t: x || undefined, p, w }; }
+      return m;
+    };
+    const a = {
       format: ARCHIVE, version: 1,
       title: meta.title || t("roomN", { code: R.code }), code: R.code, created: meta.created, exported: Date.now(),
       me: { name: self.name, avatar: self.avatar },
-      messages: [...R.msgs.values()].map((v) => ({ ...one(v, author(v)), owner: v.by === meta.owner || undefined, reactions: reacts(v) })),
+      messages: [...R.msgs.values()].map((v) => Object.assign(one(v, author(v)), { owner: v.by === meta.owner || undefined, reactions: reacts(v) })),
       dms: [...R.dms.entries()].filter(([, box]) => box.size).map(([other, box]) => {
         const them = who(other) || { name: t("someoneLeft"), avatar: "👤" };
         return { with: { name: them.name, avatar: them.avatar }, messages: [...box.values()].map((v) => one(v, v.by === uid ? self : them)) };
       }),
     };
+    Object.defineProperty(a, "pics", { value: pics });
+    return a;
   }
   // an imported file is untrusted: keep only the fields we know, with the same limits as the database
   function readArchive(o) {
@@ -883,15 +1157,23 @@
     const str = (x, n) => (typeof x === "string" ? x.slice(0, n) : "");
     const num = (x) => (Number.isFinite(+x) ? +x : 0);
     const gif = (g) => (g && typeof g.url === "string" && GIF_HOST.test(g.url) ? { url: g.url.slice(0, 500), w: num(g.w) || 200, h: num(g.h) || 200, title: str(g.title, 120) } : undefined);
+    const arr = (x) => (Array.isArray(x) ? x : []);
+    const photo = (p) => (p && typeof p === "object" ? { w: Math.min(num(p.w), 4000) || 300, h: Math.min(num(p.h), 4000) || 300 } : undefined);
+    const poll = (p) => {
+      const o = arr(p?.o).slice(0, 10).map((x) => ({ t: str(x?.t, 80), n: Math.min(Math.max(num(x?.n), 0), 9999) }));
+      return p && typeof p === "object" && o.length >= 2 ? { q: str(p.q, 200), m: p.m === true, closed: p.closed === true || undefined, total: Math.min(Math.max(num(p.total), 0), 9999), o } : undefined;
+    };
+    const draw = (d) => (d && typeof d === "object" ? { t: str(d.t, 60) || undefined, p: arr(d.p).slice(0, 200).map((x) => str(x, 40)), w: arr(d.w).slice(0, 200).map((x) => str(x, 40)) } : undefined);
     const msg = (m) => {
-      const out = { name: str(m?.name, 24) || "？", avatar: str(m?.avatar, 8), at: num(m?.at), text: str(m?.text, 1000) || undefined, gif: gif(m?.gif), mine: m?.mine === true || undefined, owner: m?.owner === true || undefined };
+      const out = { name: str(m?.name, 24) || "？", avatar: str(m?.avatar, 8), at: num(m?.at), text: str(m?.text, 1000) || undefined, gif: gif(m?.gif), mine: m?.mine === true || undefined, owner: m?.owner === true || undefined,
+        photo: photo(m?.photo), poll: poll(m?.poll), draw: draw(m?.draw) };
       if (m?.reactions && typeof m.reactions === "object") {
         const r = {}; REACTS.forEach((e) => { const n = num(m.reactions[e]); if (n > 0) r[e] = Math.min(n, 9999); });
         if (Object.keys(r).length) out.reactions = r;
       }
       return out;
     };
-    const keep = (list) => (Array.isArray(list) ? list : []).slice(0, 5000).map(msg).filter((m) => m.text || m.gif);
+    const keep = (list) => (Array.isArray(list) ? list : []).slice(0, 5000).map(msg).filter((m) => m.text || m.gif || m.photo || m.poll || m.draw);
     return {
       format: ARCHIVE, version: 1, title: str(o.title, 60) || t("recordDefault"), code: str(o.code, 4), created: num(o.created), exported: num(o.exported),
       me: { name: str(o.me?.name, 24), avatar: str(o.me?.avatar, 8) },
@@ -901,31 +1183,47 @@
   }
   const countOf = (a) => a.messages.length + a.dms.reduce((s, d) => s + d.messages.length, 0);
   const label = (m) => `${m.avatar} ${m.name}`;
+  // a photo, poll or draw in words, for the .txt file (and the .html one)
+  const pollText = (p) => `📊 ${p.q} (${t(p.m ? "pollMultiTag" : "pollSingleTag")}${p.closed ? " · " + t("pollClosed") : ""})\n` +
+    p.o.map((o) => `· ${o.t}${t("colon")}${o.n}`).join("\n") + "\n" + t("pollVotes", { n: p.total });
+  const drawText = (d) => `🎲 ${d.t || t("draw")}\n${t("drawFrom", { n: d.p.length, k: d.w.length })}\n🏆 ${d.w.join(t("listSep"))}\n${t("drawWhoIn")}${t("colon")}${d.p.join(t("listSep"))}`;
+  const bodyText = (m) => (m.photo ? "📷 " + t("photo") : m.poll ? pollText(m.poll) : m.draw ? drawText(m.draw) : m.text);
   function toText(a) {
-    const line = (m) => `[${fmtFull(m.at)}] ${label(m)}${m.mine ? t("meTag") : ""}${t("colon")}${m.gif ? `[GIF] ${m.gif.title || ""} ${m.gif.url}`.replace(/\s+/g, " ") : m.text.replace(/\n/g, "\n    ")}`;
+    const line = (m) => `[${fmtFull(m.at)}] ${label(m)}${m.mine ? t("meTag") : ""}${t("colon")}${m.gif ? `[GIF] ${m.gif.title || ""} ${m.gif.url}`.replace(/\s+/g, " ") : bodyText(m).replace(/\n/g, "\n    ")}`;
     const out = [t("expHead", { title: a.title, code: a.code }), t("expAt", { t: fmtFull(a.exported) }), "", `── ${t("everyone")} ──`];
     a.messages.forEach((m) => out.push(line(m)));
     if (!a.messages.length) out.push(t("noMsgs"));
     a.dms.forEach((d) => { out.push("", `── ${t("dmHead", { who: label(d.with) })} ──`); d.messages.forEach((m) => out.push(line(m))); });
     return out.join("\n") + "\n";
   }
-  function toHtml(a) {
+  function toHtml(a, srcs = new Map()) {
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    const row = (m) => `<div class="m${m.mine ? " me" : ""}"><div class="h">${esc(label(m))}${m.owner ? " 👑" : ""} <time>${esc(fmtFull(m.at))}</time></div>${m.gif ? `<img class="g" src="${esc(m.gif.url)}" width="${+m.gif.w}" height="${+m.gif.h}" alt="${esc(m.gif.title || "GIF")}" loading="lazy">` : `<div class="b">${esc(m.text)}</div>`}${m.reactions ? `<div class="r">${Object.entries(m.reactions).map(([e, n]) => `${e} ${n}`).join("　")}</div>` : ""}</div>`;
+    const row = (m) => `<div class="m${m.mine ? " me" : ""}"><div class="h">${esc(label(m))}${m.owner ? " 👑" : ""} <time>${esc(fmtFull(m.at))}</time></div>${m.gif ? `<img class="g" src="${esc(m.gif.url)}" width="${+m.gif.w}" height="${+m.gif.h}" alt="${esc(m.gif.title || "GIF")}" loading="lazy">` : srcs.get(m) ? `<img class="p" src="${esc(srcs.get(m))}" width="${+m.photo.w}" height="${+m.photo.h}" alt="${esc(t("photo"))}">` : `<div class="b">${esc(bodyText(m))}</div>`}${m.reactions ? `<div class="r">${Object.entries(m.reactions).map(([e, n]) => `${e} ${n}`).join("　")}</div>` : ""}</div>`;
     const sec = (h, list) => `<h2>${esc(h)}</h2>${list.map(row).join("") || `<p class="e">${esc(t("noMsgs"))}</p>`}`;
     const data = JSON.stringify(a).replace(/</g, "\\u003c");
     return `<!doctype html><html lang="${I18N.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(a.title)}</title>
-<style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#3a3128;background:#f4efe6}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e4dccc}.sub{color:#857a6b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#857a6b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e4dccc;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#d9cdb6;color:#3a3128;border-color:#d9cdb6}.g{max-width:240px;height:auto;border-radius:12px}.r{font-size:13px;margin-top:2px}.e{color:#b3aa9b}@media(prefers-color-scheme:dark){body{background:#1b1916;color:#f4efe6}.b{background:#25221e;border-color:#3e3a33}.me .b{background:#e7decd;border-color:#e7decd;color:#2a251f}h2{border-color:#3e3a33}}</style></head><body>
+<style>body{font:15px/1.55 system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;color:#3a3128;background:#f4efe6}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid #e4dccc}.sub{color:#857a6b;font-size:13px}.m{margin:10px 0;max-width:85%}.m.me{margin-left:auto;text-align:right}.h{font-size:12px;color:#857a6b;margin-bottom:2px}.b{display:inline-block;text-align:left;background:#fff;border:1px solid #e4dccc;border-radius:14px;padding:8px 12px;white-space:pre-wrap;word-break:break-word}.me .b{background:#d9cdb6;color:#3a3128;border-color:#d9cdb6}.g{max-width:240px;height:auto;border-radius:12px}.p{max-width:min(360px,100%);height:auto;border-radius:12px}.r{font-size:13px;margin-top:2px}.e{color:#b3aa9b}@media(prefers-color-scheme:dark){body{background:#1b1916;color:#f4efe6}.b{background:#25221e;border-color:#3e3a33}.me .b{background:#e7decd;border-color:#e7decd;color:#2a251f}h2{border-color:#3e3a33}}</style></head><body>
 <h1>${esc(a.title)}</h1><div class="sub">${esc(t("expSub", { code: a.code, t: fmtFull(a.exported) }))}</div>
 ${sec(t("everyone"), a.messages)}
 ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join("")}
 <script type="application/json" id="${ARCHIVE}">${data}</script>
 </body></html>`;
   }
-  function download(a, kind) {
+  // the .html file carries the photos themselves, so it shows them after the room is gone
+  async function photoSrcs(a) {
+    const out = new Map();
+    if (!a.pics?.length || !R) return out;
+    toast(t("photosPacking"));
+    for (const [m, v] of a.pics) {
+      const u = await photoUrl(v.img.f, v.by);
+      if (u) out.set(m, await fetch(u).then((r) => r.blob()).then((b) => new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => ok(null); fr.readAsDataURL(b); })).catch(() => null));
+    }
+    return out;
+  }
+  async function download(a, kind) {
     const stamp = new Date(a.exported || Date.now()).toISOString().slice(0, 16).replace(/[-:T]/g, "");
     const name = `chat-${a.code || "record"}-${stamp}.${kind}`; // ASCII: some browsers drop non-ASCII download names
-    const body = kind === "txt" ? toText(a) : kind === "html" ? toHtml(a) : JSON.stringify(a, null, 1);
+    const body = kind === "txt" ? toText(a) : kind === "html" ? toHtml(a, await photoSrcs(a)) : JSON.stringify(a, null, 1);
     const type = { txt: "text/plain", html: "text/html", json: "application/json" }[kind] + ";charset=utf-8";
     const link = el("a", { href: URL.createObjectURL(new Blob([body], { type })), download: name });
     document.body.append(link); link.click(); link.remove();
@@ -1064,7 +1362,10 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
       prev = m;
       return el("div", { class: "msg" + (m.mine ? " mine" : "") + (cont ? " cont" : "") },
         cont ? null : el("div", { class: "who" }, el("span", { class: "av", text: m.avatar }), el("span", { class: "nm", text: m.name + (m.owner ? " 👑" : "") }), el("time", { text: fmtFull(m.at) })),
-        m.gif ? el("div", { class: "bub gifbub ro" }, gifImg(m.gif)) : el("div", { class: "bub ro" }, linkify(m.text)),
+        m.gif ? el("div", { class: "bub gifbub ro" }, gifImg(m.gif))
+          : m.poll ? el("div", { class: "bub pollbub ro" }, pollView(m.poll, null))
+          : m.draw ? el("div", { class: "bub drawbub ro" }, drawView(m.draw))
+          : el("div", { class: "bub ro" }, m.photo ? "📷 " + t("photo") : linkify(m.text)),
         m.reactions ? el("div", { class: "re" }, Object.entries(m.reactions).map(([e, n]) => el("span", { class: "chip", text: `${e} ${n}` }))) : null);
     }) : [el("p", { class: "empty", text: t("empty") })]));
     box.scrollTop = 0;
@@ -1094,7 +1395,13 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
     $("#composer").querySelectorAll(".tool").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.a === kind)));
     const box = $("#picker");
     box.hidden = false;
-    if (kind === "emoji") {
+    box.classList.toggle("short", kind === "more");
+    if (kind === "more") {
+      const item = (icon, label, fn) => el("button", { type: "button", class: "morebtn", onclick: () => { fn(); closePicker(); } }, el("span", { class: "i", text: icon }), el("span", { text: label }));
+      // the file picker opens right inside the tap, or a phone may refuse to open it
+      box.replaceChildren(el("div", { class: "more" },
+        item("📷", t("photo"), () => $("#photoFile").click()), item("📊", t("poll"), newPoll), item("🎲", t("draw"), newDraw)));
+    } else if (kind === "emoji") {
       const grid = el("div", { class: "emojigrid" });
       const fill = (cat) => {
         grid.replaceChildren(...EMOJI[cat].split(" ").map((e) => el("button", { type: "button", class: "emo", text: e })));
@@ -1258,6 +1565,7 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
   });
   $("#codeBtn").addEventListener("click", share);
   $("#importFile").addEventListener("change", (e) => { importFile(e.target.files[0]); e.target.value = ""; });
+  $("#photoFile").addEventListener("change", (e) => { const files = [...e.target.files]; e.target.value = ""; sendPhotos(files); });
   $("#record").addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]")?.dataset.a, t = e.target.closest("[data-tab]");
     if (a === "home") home();
@@ -1280,6 +1588,11 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
   const ta = $("#text");
   const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };
   ta.addEventListener("input", grow);
+  // a picture pasted into the box is sent as a photo
+  ta.addEventListener("paste", (e) => {
+    const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+    if (files.length && R && R.view === "all") { e.preventDefault(); sendPhotos(files); }
+  });
   // the keyboard covers the home indicator, so the home-screen app's extra space under the box goes while typing
   ta.addEventListener("focus", () => document.body.classList.add("typing"));
   ta.addEventListener("blur", () => document.body.classList.remove("typing"));

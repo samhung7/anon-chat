@@ -282,3 +282,55 @@ html.opening #home { display: none; }
 .langs { display: flex; flex-direction: column; gap: 6px; }
 .langs .btn[aria-checked="true"] { border-color: var(--accent); background: var(--accent-2); font-weight: 600; }
 .brand .logo img { width: 100%; height: 100%; display: block; }
+
+/* ---------- photos, polls, draws ---------- */
+.picker.short { height: auto; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+.more { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 4px 0; }
+.morebtn { display: flex; flex-direction: column; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); border-radius: 14px; padding: 12px 6px; font: inherit; font-size: 14px; }
+.morebtn .i { font-size: 26px; line-height: 1; }
+.morebtn:active, .morebtn:hover { background: var(--accent-2); }
+.bub.imgbub { padding: 0; background: none; border: 0; overflow: hidden; border-radius: 14px; }
+.mine .bub.imgbub { background: none; }
+.photo { display: block; max-width: min(260px, 64vw); max-height: 360px; width: auto; height: auto; object-fit: cover; background: var(--surface-2); border-radius: 14px; }
+.quote.gifq .photo { max-width: 160px; max-height: 200px; border-radius: 10px; }
+.pins li .go .photo { max-width: 100%; max-height: 120px; border-radius: 8px; }
+.lightbox { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .92); display: flex; align-items: center; justify-content: center; animation: fade .15s; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+.lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.lightbox .icon { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 10px; color: #fff; background: rgba(255, 255, 255, .15); }
+/* a poll or a draw is a card, also in my own (accent-coloured) bubble */
+.bub.pollbub, .bub.drawbub { background: var(--surface); border-color: var(--line); color: var(--text); white-space: normal; width: min(300px, 74vw); padding: 10px 12px; }
+.mine .bub.pollbub, .mine .bub.drawbub { background: var(--surface); border-color: var(--accent); color: var(--text); }
+.pollbox, .drawbox { display: flex; flex-direction: column; gap: 6px; }
+.ph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--accent-ink); font-weight: 600; }
+.ph small { color: var(--muted); font-weight: 400; }
+.pq { font-size: 15px; white-space: pre-wrap; word-break: break-word; }
+.pf { color: var(--muted); font-size: 12px; }
+.opt { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); border-radius: 10px; padding: 6px 10px; font: inherit; font-size: 14px; text-align: left; overflow: hidden; cursor: pointer; }
+.opt .bar { position: absolute; inset: 0 auto 0 0; background: var(--accent-2); transition: width .3s; }
+.opt .ol, .opt .oc { position: relative; }
+.opt .ol { flex: 1; min-width: 0; word-break: break-word; }
+.opt .oc { color: var(--muted); font-variant-numeric: tabular-nums; }
+.opt.on { border-color: var(--accent-ink); font-weight: 600; }
+.opt:disabled { cursor: default; opacity: 1; }
+.pollbox.closed .opt { opacity: .8; }
+.voters > div { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.voters p { margin: 2px 0 0; }
+.winners { display: flex; flex-wrap: wrap; gap: 6px; }
+.win { background: var(--accent-2); border: 1px solid var(--accent); border-radius: 999px; padding: 4px 12px; font-weight: 600; }
+.drawbox.fresh .win { animation: pop .45s calc(.8s + var(--i) * .45s) both; }
+@keyframes pop { 0% { opacity: 0; transform: scale(.4); } 70% { transform: scale(1.12); } 100% { opacity: 1; transform: none; } }
+.drawbox details { font-size: 13px; color: var(--muted); }
+.drawbox summary { cursor: pointer; }
+.drawbox details p { margin: 4px 0 0; }
+.pollopts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.seg.row { flex-direction: row; }
+.seg.row button { flex: 1; text-align: center; }
+.lblrow { display: flex; justify-content: space-between; align-items: flex-end; }
+.picklist { display: flex; flex-direction: column; max-height: 36dvh; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
+.pick { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.pick:last-child { border-bottom: 0; }
+.pick input { width: 20px; height: 20px; accent-color: var(--accent-ink); }
+.pick .av { font-size: 22px; }
+.pick .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field.num { width: 110px; }
+@media (prefers-reduced-motion: reduce) { .drawbox.fresh .win { animation: none; } }
