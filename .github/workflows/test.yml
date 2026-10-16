@@ -18,6 +18,8 @@ jobs:
           distribution: temurin
           java-version: 21
       - run: npm ci
+      - name: Browser for the page tests
+        run: npx playwright install --with-deps chromium
       - name: database.rules.json matches tools/rules.py
         run: python3 tools/rules.py && git diff --exit-code database.rules.json
       - run: npm test
