@@ -79,6 +79,7 @@
     <div class="wide"><b data-i18n="f5t">🔐 端對端加密</b><span data-i18n="f5">私訊一律加密；私人沙龍連伺服器都看不到聊天內容。</span></div>
   </section>
   <p class="muted small center" data-i18n="useFor">適合講座問答、讀書會、工作坊和團隊專案。</p>
+  <p class="legal small center"><a href="legal.html#terms" data-i18n="terms">服務條款</a> · <a href="legal.html#privacy" data-i18n="privacy">隱私權政策</a> · <a href="mailto:hello@stoatalk.app" data-i18n="contact">聯絡我們</a></p>
 </main>
 
 <!-- ---------- chat ---------- -->
@@ -90,7 +91,7 @@
       <button id="codeBtn" class="codechip" type="button" aria-label="分享聊天室" data-i18n-attr="aria-label:shareRoom"></button>
     </div>
     <button id="peopleBtn" class="icon people" type="button" aria-label="成員" data-i18n-attr="aria-label:members"><span>👥</span><span class="n"></span><i class="dot" hidden></i></button>
-    <button class="icon" type="button" data-a="menu" aria-label="更多" data-i18n-attr="aria-label:more">⋯</button>
+    <button class="icon" type="button" data-a="menu" aria-label="更多" data-i18n-attr="aria-label:more">⋯<i class="dot" hidden></i></button>
   </header>
   <div id="dmBar" class="dmbar" hidden>
     <button class="link" type="button" data-a="all" data-i18n="backAll">‹ 回到大家</button>
@@ -102,11 +103,16 @@
     <button class="link" type="button" data-a="notifyYes" data-i18n="notifyYes">開啟通知</button>
     <button class="link" type="button" data-a="notifyNo" data-i18n="notifyNo">不用</button>
   </div>
-  <div id="list" class="list" aria-live="polite"></div>
+  <div class="listwrap">
+    <div id="list" class="list" aria-live="polite"></div>
+    <div id="typingBar" class="typingbar" hidden></div>
+    <button id="jumpBtn" class="jump" type="button" aria-label="回到最新的訊息" data-i18n-attr="aria-label:jumpAria" hidden>↓</button>
+  </div>
   <div id="replyBar" class="replybar" hidden>
     <span class="rtxt"></span>
     <button class="icon small" type="button" data-a="noreply" aria-label="取消回覆" data-i18n-attr="aria-label:cancelReply">✕</button>
   </div>
+  <div id="mentionBar" class="mentionbar" hidden></div>
   <div id="picker" class="picker" hidden></div>
   <form id="composer" class="composer" autocomplete="off">
     <button class="tool" type="button" data-a="more" aria-label="照片、投票、抽籤" data-i18n-attr="aria-label:moreAria" aria-pressed="false">＋</button>
