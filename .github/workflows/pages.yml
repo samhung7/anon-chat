@@ -19,9 +19,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      # tie the page to this commit's files: ?v=dev in index.html and the service worker's cache name
+      # tie the page to this commit's files: ?v=dev in index.html and in the modules' imports, and the service worker's cache name
       - run: |
-          sed -i "s/?v=dev/?v=${GITHUB_SHA::8}/g" site/index.html
+          sed -i "s/?v=dev/?v=${GITHUB_SHA::8}/g" site/index.html site/js/app/*.js
+          if grep -rn "?v=dev" site/index.html site/js/app; then exit 1; fi
           sed -i "s/anon-chat-dev/anon-chat-${GITHUB_SHA::8}/" site/sw.js
           grep -c "?v=${GITHUB_SHA::8}" site/index.html
       - uses: actions/upload-pages-artifact@v3

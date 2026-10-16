@@ -21,7 +21,11 @@ Made for lecture Q&A, anonymous reading groups, workshops and team projects. Int
 ```
 site/                       the whole app, served as-is by GitHub Pages
   index.html, css/app.css
-  js/app.js                 everything the page does
+  js/app/                   the page itself, as ES modules served as they are (no build step); main.js starts it.
+                            room.js keeps one room live (Room, its data and events), api.js is every write to it,
+                            kinds.js is each kind of message (text, GIF, photo, poll, draw), crypto.js the encryption;
+                            the screens (chat.js, qa.js, show.js, home.js, ...) draw what a Room tells them
+  js/i18n.js, js/theme.js   the language and light/dark, loaded in <head> before anything paints
   js/config.js              Firebase web config (public by design)
   js/vendor/                Firebase SDK bundle and qrcode-generator (npm run vendor rebuilds them)
   sw.js, manifest.webmanifest, icons/
@@ -29,6 +33,8 @@ database.rules.json         who may read and write what; generated from tools/ru
 tools/rules.py              the rules, written readably (npm run rules)
 tools/cleanup/              hourly job that deletes rooms idle for 24 hours; stats.mjs prints the usage counts
 test/rules.test.mjs         rule tests against the Firebase emulator
+test/app.e2e.test.mjs       the page in a real browser (Playwright), two or three people at once, against the emulator
+test/unit.test.mjs          the record format, encryption, kinds of message, translations and module wiring
 ```
 
 Data in the Realtime Database:
@@ -78,6 +84,8 @@ npx firebase emulators:start --only database --project demo-anon-chat
 ```
 
 `?emu` points the page at the local emulator (remembered until `?emu=0`). Open a second browser profile or a private window to be a second person.
+The page tests need Chromium: `npx playwright install chromium` once.
+A module in `site/js/app/` imports the others as `./name.js?v=dev`; the deploy stamps the commit there too, and `site/sw.js` lists each module (the unit tests check both).
 After editing `tools/rules.py`, run `npm run rules` and commit the new `database.rules.json` (CI checks they match).
 
 Live at https://stoatalk.app. Pushing to `main` deploys `site/` to GitHub Pages (`.github/workflows/pages.yml`); the custom domain is set in the repository's Settings > Pages, with the apex `A`/`AAAA` records pointing at GitHub Pages and `www` as a `CNAME` to `<user>.github.io`. The share card (`og:image` in `index.html`) uses an absolute URL on that domain.
