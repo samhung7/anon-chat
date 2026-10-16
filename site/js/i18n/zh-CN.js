@@ -297,4 +297,5 @@ I18N.add("zh-CN", {
   drawCountBad: "抽出人数要在 1 到 {n} 之间",
   drawFrom: "从 {n} 人中抽出 {k} 人",
   drawWhoIn: "参加的人",
+  msgMenu: "消息选项",
 });
