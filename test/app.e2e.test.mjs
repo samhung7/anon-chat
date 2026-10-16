@@ -374,3 +374,64 @@ test("owner settings: rename, size limit, hand over; coming back after a reload;
   await bob.waitForFunction(() => document.documentElement.lang === "ja");
   noErrors();
 });
+
+test("Q&A review, and a record with private chats and questions as .txt and .html", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { url } = await createRoom(alice, "Host", { priv: true, title: "Lecture" });
+  await joinByLink(bob, url, "Bob");
+  await menuPick(alice, "qaon");
+  await menuPick(alice, "qmodon");
+  await bob.locator("#tabs [data-a=qa]").click();
+  await bob.locator("#askAnon").uncheck();
+  await say(bob, "Is it recorded?");
+  await bob.locator(".qcard.waiting, .note.qnote").first().waitFor();
+  const waiting = alice.locator(".qcard.waiting", { hasText: "Is it recorded?" });
+  await waiting.waitFor();
+  await waiting.locator(".btn.primary").click(); // let it through
+  await bob.locator(".qcard:not(.waiting)", { hasText: "Is it recorded?" }).waitFor();
+
+  // a private message, so the record has a private chat too
+  await bob.locator("#tabs [data-a=all]").click();
+  await bob.locator("#peopleBtn").click();
+  await sheet(bob).locator("[data-dm]").click();
+  await say(bob, "psst");
+  await bubble(bob, "psst").waitFor();
+
+  await menuPick(bob, "export");
+  const [txt] = await Promise.all([bob.waitForEvent("download"), press(bob, "txt")]);
+  const text = readFileSync(await txt.path(), "utf8");
+  assert.match(text, /psst/);
+  assert.match(text, /Is it recorded\?/);
+  assert.match(text, /Bob/);
+  await menuPick(bob, "export");
+  const [html] = await Promise.all([bob.waitForEvent("download"), press(bob, "html")]);
+  const page = readFileSync(await html.path(), "utf8");
+  assert.match(page, /<script type="application\/json" id="anon-chat-archive">/);
+  assert.ok(!page.includes("<script>"), "no live script in the file");
+
+  // the .html file imports back, with a tab for the private chat and one for the questions
+  await bob.locator("#chat .bar [data-a=home]").click(); // back to the room view
+  await bob.locator("#chat .bar [data-a=home]").click(); // home
+  await bob.locator("#importFile").setInputFiles(await html.path());
+  await bob.locator("#record").waitFor();
+  assert.equal(await bob.locator("#recTabs .tab").count(), 3);
+  await bob.locator("#recTabs .tab").nth(1).click();
+  await bob.locator("#recList .bub", { hasText: "psst" }).waitFor();
+  await bob.locator("#recTabs .tab").nth(2).click();
+  await bob.locator("#recList .qcard", { hasText: "Is it recorded?" }).waitFor();
+  noErrors();
+});
+
+test("theme, and a code that doesn't exist", async () => {
+  const alice = await person("a");
+  await alice.locator("#meBtn").click();
+  await press(alice, "theme");
+  await sheet(alice).locator("[data-theme=dark]").click();
+  await alice.waitForFunction(() => document.documentElement.dataset.theme === "dark");
+  await alice.keyboard.press("Escape");
+  await alice.locator("#joinCode").fill("ZZZZ");
+  await alice.locator("#joinForm button").click();
+  await alice.locator(".toast").first().waitFor();
+  assert.equal(await alice.locator("#home").isVisible(), true);
+  noErrors();
+});
