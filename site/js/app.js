@@ -30,6 +30,8 @@
   const CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // no 0/O, 1/I/L
   const REACTS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
   const DAY = 864e5, MAX_LOAD = 2000;
+  // ?show opens a room as the projector screen: the code, the QR Code, the questions and the latest poll, in large type
+  let SHOW = params.has("show");
 
   let fb, db, uid, offset = 0, connecting = null;
   // the room we're in
@@ -91,6 +93,8 @@
   const BLOCKED = new Set((() => { try { const l = JSON.parse(store.get(BLOCK_KEY)); return Array.isArray(l) ? l.filter((x) => typeof x === "string") : []; } catch (e) { return []; } })());
   const isBlocked = (id) => BLOCKED.has(id);
   const pause = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  // the view: "all" (the room), "qa" (its questions) or the uid of someone in a private chat
+  const isDm = () => !!R && R.view !== "all" && R.view !== "qa";
   const pairKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
   const who = (id) => R?.members?.[id] || R?.seen?.[id] || null; // R.seen keeps people who have left
   const nameOf = (id) => { const m = who(id); return m ? `${m.avatar} ${m.name}` : t("someoneLeft"); };
@@ -358,6 +362,8 @@
     return connecting;
   }
   const T = () => fb.serverTimestamp();
+  // usage, counted anonymously: one more of something today (stats/{day}/{what}); no content, no ids
+  const stat = (k) => { if (db) fb.set(fb.ref(db, `stats/${new Date(now()).toISOString().slice(0, 10)}/${k}`), fb.increment(1)).catch(() => {}); };
   const roomRef = (code, path = "") => fb.ref(db, `rooms/${code}${path ? "/" + path : ""}`);
   async function hashPw(code, pw) {
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`anon-chat:${code}:${pw}`));
@@ -409,6 +415,7 @@
           });
         } catch (e) { if (/permission/i.test(e.message)) continue; throw e; } // code in use: draw another
         if (raw) store.set(ROOMKEY(code), b64u(raw));
+        stat(c ? "salons" : "rooms");
         await enter(code, c);
         share();
         return;
@@ -476,7 +483,7 @@
           if (typeof counted === "number" && counted >= meta.cap) { toast(t("capFull")); return; }
           upd[`rooms/${code}/meta/n`] = (counted || 0) + 1;
         }
-        try { await fb.update(fb.ref(db), upd); break; }
+        try { await fb.update(fb.ref(db), upd); stat("joins"); break; }
         catch (e) {
           if (!/permission/i.test(e.message)) throw e;
           if (meta.cap && tries < 3 && !(holder && holder !== uid)) continue;
@@ -507,7 +514,9 @@
     // through one queue (q), so decrypting never reorders messages.
     R = { code, c, meta: null, members: {}, seen: {}, raw: {}, rawSeen: {}, msgs: new Map(), dms: new Map(), plain: new Map(), dk: new Map(),
           view: "all", unread: {}, drafts: {}, reply: null, imgs: new Map(), off: [], gone: false, ready: false, q: Promise.resolve(), t0: Date.now() + offset,
-          typing: {}, dmTyping: {}, reports: {}, lastAt: 0, below: 0, touched: false, readMark: 0 };
+          typing: {}, dmTyping: {}, reports: {}, lastAt: 0, below: 0, touched: false, readMark: 0,
+          qs: new Map(), qq: new Map(), qqRaw: {}, myWait: new Set(), justAsked: new Set(), qdoneOpen: false };
+    if (SHOW) stat("shows");
     rememberRoom(code);
     roomPath(code);
     $("#list").replaceChildren();
@@ -522,7 +531,7 @@
       if (!s.exists()) return gone("ended");
       const meta = s.val();
       if (R.c) meta.title = meta.xt ? (await unseal(R.c.aes, meta.xt, "t"))?.t || "" : "";
-      R.meta = meta; renderHeader(); renderPins(); refreshNames(); syncReports();
+      R.meta = meta; renderHeader(); renderPins(); refreshNames(); syncReports(); syncQueue(); renderQa(); renderShow();
     }), lost));
     on(fb.onValue(roomRef(code, "members"), (s) => queue(async () => {
       const raw = s.val() || {};
@@ -540,14 +549,20 @@
       const count = Object.keys(next).length;
       if (isOwner() && R.meta?.cap && R.meta.n !== count) fb.set(roomRef(code, "meta/n"), count).catch(() => {});
       Object.keys(next).forEach((id) => id !== uid && watchDm(id));
-      renderHeader(); refreshNames();
+      renderHeader(); refreshNames(); renderShow();
     }), lost));
     const q = fb.query(roomRef(code, "msgs"), fb.limitToLast(MAX_LOAD));
-    on(fb.onChildAdded(q, (s) => queue(async () => { const v = await openMsg(s.val(), null, s.key); R.msgs.set(s.key, v); R.lastAt = Math.max(R.lastAt, +v.at || 0); if (R.view === "all") addMsg(s.key, v); if (pinIds().includes(s.key)) renderPins(); noteNew(v, null); }), lost));
-    on(fb.onChildChanged(q, (s) => queue(async () => { const old = R.msgs.get(s.key), v = await openMsg(s.val(), null, s.key); R.msgs.set(s.key, v); if (R.view === "all") updateMsg(s.key, v, old); })));
-    on(fb.onChildRemoved(q, (s) => queue(() => { R.msgs.delete(s.key); if (R.view === "all") document.getElementById("m-" + s.key)?.remove(); renderPins(); })));
+    on(fb.onChildAdded(q, (s) => queue(async () => { const v = await openMsg(s.val(), null, s.key); R.msgs.set(s.key, v); R.lastAt = Math.max(R.lastAt, +v.at || 0); if (R.view === "all") addMsg(s.key, v); if (pinIds().includes(s.key)) renderPins(); noteNew(v, null); if (v.poll) renderShow(); }), lost));
+    on(fb.onChildChanged(q, (s) => queue(async () => { const old = R.msgs.get(s.key), v = await openMsg(s.val(), null, s.key); R.msgs.set(s.key, v); if (R.view === "all") updateMsg(s.key, v, old); if (v.poll) renderShow(); })));
+    on(fb.onChildRemoved(q, (s) => queue(() => { R.msgs.delete(s.key); if (R.view === "all") document.getElementById("m-" + s.key)?.remove(); renderPins(); renderShow(); })));
 
     on(fb.onValue(roomRef(code, "typing"), (s) => { R.typing = s.val() || {}; renderTyping(); }, () => {}));
+    on(fb.onValue(roomRef(code, "qs"), (s) => queue(async () => {
+      R.qs = await openQs(s.val());
+      R.qs.forEach((q, id) => R.justAsked.delete(id));
+      renderQa(); renderHeader(); renderShow();
+      if (R.myWait.size) refreshWait();
+    }), () => {}));
 
     // online / offline
     const mine = roomRef(code, "members/" + uid + "/online");
@@ -660,7 +675,12 @@
     $("#peopleBtn .dot").hidden = !Object.values(R.unread).some((n) => n > 0);
     $("#chat .bar [data-a=menu] .dot").hidden = !reportCount();
     $("#composer").classList.toggle("off", R.gone);
-    if (R.view !== "all") $("#dmBar .dmwho").replaceChildren(...tEl("dmBar", { name: el("b", { text: nameOf(R.view) }) }));
+    const tabs = $("#tabs");
+    tabs.hidden = !(meta.qa || R.qs.size) || isDm();
+    $("[data-a=qa] .n", tabs).textContent = R.qs.size ? " " + R.qs.size : "";
+    $("[data-a=qa] .dot", tabs).hidden = !(isStaff() && R.qq.size);
+    tabs.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.a === R.view)));
+    if (isDm()) $("#dmBar .dmwho").replaceChildren(...tEl("dmBar", { name: el("b", { text: nameOf(R.view) }) }));
     if (!document.hidden || !hiddenUnread) document.title = meta.title || APP;
   }
   // who wrote a message, under their current name: messages keep the name they were sent with,
@@ -815,15 +835,22 @@
     renderPins();
     const list = $("#list");
     list.replaceChildren();
-    $("#dmBar").hidden = R.view === "all";
+    $("#dmBar").hidden = !isDm();
     $("#composer [data-a=more]").hidden = R.view !== "all"; // photos, polls and draws are for the room
-    $("#chat").classList.toggle("indm", R.view !== "all");
+    $("#composer [data-a=gif]").hidden = !KLIPY || R.view === "qa";
+    $("#chat").classList.toggle("indm", isDm());
+    $("#chat").classList.toggle("inqa", R.view === "qa");
+    $("#askBar").hidden = R.view !== "qa";
+    ta.maxLength = R.view === "qa" ? 300 : 1000;
     R.div = null; R.touched = false;
     if (R.view === "all") {
       if (!R.msgs.size) list.append(el("p", { class: "empty", text: t("emptyRoom") }));
       R.readMark = +store.get(READ(R.code)) || 0; // where this device stopped reading (messages still loading go through addMsg)
       R.msgs.forEach((v, id) => { newLine(list, v); list.append(bubble(id, v)); });
       $("#text").placeholder = t("textPh");
+    } else if (R.view === "qa") {
+      $("#text").placeholder = t("askPh");
+      renderQa(); refreshWait();
     } else {
       const box = R.dms.get(R.view) || new Map();
       if (!box.size) list.append(el("p", { class: "empty", text: t("emptyDm") }));
@@ -832,7 +859,8 @@
       $("#text").placeholder = t("dmPh", { name: nameOf(R.view) });
     }
     renderHeader(); renderTyping();
-    if (R.div) R.div.scrollIntoView({ block: "start" }); else list.scrollTop = list.scrollHeight;
+    if (R.view === "qa") list.scrollTop = 0;
+    else if (R.div) R.div.scrollIntoView({ block: "start" }); else list.scrollTop = list.scrollHeight;
     R.below = 0; showJump(); markSeen();
   }
   function openDm(other) {
@@ -873,14 +901,18 @@
       upd[`${base}/members/${uid}/lm`] = id;
     }
     $("#list .empty")?.remove(); cancelReply(); typingStop();
+    queued(upd, R.view === "all" ? (body.img ? "photos" : body.poll ? "polls" : body.draw ? "draws" : "msgs") : "dms");
+    return true;
+  }
+  // one rate-limited update, written in its turn; what: the usage count it adds one to once it's in
+  function queued(upd, what) {
     const wait = lastPost + 1000 - Date.now();
     lastPost = Math.max(Date.now(), lastPost + 1000);
-    const go = (again) => fb.update(fb.ref(db), upd).catch((e) => {
+    const go = (again) => fb.update(fb.ref(db), upd).then(() => { stat(what); return true; }, (e) => {
       if (again && /permission/i.test(e.message)) { lastPost = Math.max(lastPost, Date.now()) + 1000; return pause(1000).then(() => go(false)); }
-      console.error(e); toast(t("sendFail"));
+      console.error(e); toast(t("sendFail")); return false;
     });
-    if (wait > 0) pause(wait).then(() => go(true)); else go(true);
-    return true;
+    return wait > 0 ? pause(wait).then(() => go(true)) : go(true);
   }
   const react = (id, k, on) => fb.set(roomRef(R.code, `msgs/${id}/re/${k}/${uid}`), on ? true : null).catch(() => toast(t("tryAgain")));
 
@@ -1011,7 +1043,7 @@
      it goes when the text is sent or cleared, after 5 quiet seconds, or when the connection drops. */
   let typingRef = null, typingAt = 0, typingTimer = 0;
   function typingPing() {
-    if (!R || R.gone || !$("#text").value.trim()) return typingStop();
+    if (!R || R.gone || R.view === "qa" || !$("#text").value.trim()) return typingStop();
     const path = R.view === "all" ? `typing/${uid}` : `dmt/${pairKey(uid, R.view)}/${uid}`;
     const ref = roomRef(R.code, path);
     if (typingRef && typingRef.toString() !== ref.toString()) typingStop();
@@ -1031,7 +1063,7 @@
     const bar = $("#typingBar");
     if (!R || R.gone) { bar.hidden = true; return; }
     const fresh = (at) => typeof at === "number" && now() - at < 8000;
-    const ids = R.view === "all"
+    const ids = R.view === "qa" ? [] : R.view === "all"
       ? Object.entries(R.typing || {}).filter(([id, at]) => id !== uid && R.members[id] && !isBlocked(id) && fresh(at)).map(([id]) => id)
       : fresh(R.dmTyping[R.view]) && !isBlocked(R.view) ? [R.view] : [];
     const names = ids.map((id) => R.members[id]?.name || "");
@@ -1054,6 +1086,191 @@
       ta.selectionStart = ta.selectionEnd = Math.min(start + p.name.length + 2, ta.value.length);
       ta.dispatchEvent(new Event("input")); ta.focus();
     } }, `${p.avatar} ${p.name}`)));
+  }
+
+  /* ---------- lecture Q&A ----------
+     The owner turns it on (meta/qa); people ask in the ❓ tab, by name or anonymously, and upvote each other's
+     questions, which sort by votes. The owner and co-hosts mark one as being answered now (meta/qnow, shown large on
+     the projector) and others as answered, and take any down. With review on (meta/qmod) a question waits in qq/
+     until they let it through. Who asked sits in qby/{id}, which only the asker can read: anonymous means anonymous
+     to the owner too. In an encrypted room a question is sealed with the room key, bound to its id. */
+  async function openQ(id, v) {
+    let p = { t: v.text, n: v.name, a: v.avatar };
+    if (v.x) {
+      p = R.plain.get(v.x);
+      if (p === undefined) { p = R.c ? await unseal(R.c.aes, v.x, "q:" + id) : null; if (p) R.plain.set(v.x, p); }
+    }
+    const base = { id, at: +v.at || 0, up: Object.keys(v.up || {}), done: +v.done || 0 };
+    if (!p) return { ...base, text: t("cantDecrypt"), name: "", avatar: "", bad: true };
+    const named = typeof p.n === "string" && !!p.n;
+    return { ...base, text: String(p.t || "").slice(0, 300), name: named ? p.n.slice(0, 24) : "", avatar: named ? String(p.a || "👤").slice(0, 8) : "" };
+  }
+  async function openQs(raw) {
+    const out = new Map();
+    for (const [id, v] of Object.entries(raw || {})) if (v && typeof v === "object") out.set(id, await openQ(id, v));
+    return out;
+  }
+  // the questions this device asked in a room (so it can take them back, and knows not to upvote them)
+  const MYQ = (code) => "chat-myq:" + code;
+  const myQs = () => { try { const l = JSON.parse(store.get(MYQ(R.code))); return Array.isArray(l) ? l.filter((x) => typeof x === "string") : []; } catch (e) { return []; } };
+  const isMyQ = (id) => myQs().includes(id);
+  const byVotes = (a, b) => b.up.length - a.up.length || a.at - b.at;
+  const askAnon = () => $("#askAnon").checked;
+  async function ask(text) {
+    text = (text || "").trim().slice(0, 300);
+    if (!text || !R || R.gone) return false;
+    if (!R.meta?.qa) { toast(t("qaClosedToast")); return false; }
+    const id = fb.push(roomRef(R.code, "qs")).key, base = `rooms/${R.code}`, r = R;
+    const m = R.members[uid] || me(), named = !askAnon(), wait = R.meta.qmod === true && !isStaff(); // the owner's and co-hosts' own skip review
+    const body = R.c ? { x: await seal(R.c.aes, named ? { t: text, n: m.name, a: m.avatar } : { t: text }, "q:" + id), at: T() }
+      : { text, ...(named ? { name: m.name, avatar: m.avatar } : {}), at: T() };
+    store.set(MYQ(R.code), JSON.stringify([...myQs(), id].slice(-200)));
+    R.justAsked.add(id);
+    if (wait) R.myWait.add(id);
+    queued({ [`${base}/${wait ? "qq" : "qs"}/${id}`]: body, [`${base}/qby/${id}`]: uid, [`${base}/members/${uid}/ls`]: T(), [`${base}/members/${uid}/lq`]: id, [`${base}/meta/last`]: T() }, "qs")
+      .then((ok) => {
+        if (r !== R) return;
+        if (!ok) { R.myWait.delete(id); return renderQa(); }
+        if (wait) toast(t("qWaitToast"));
+      });
+    renderQa();
+    return true;
+  }
+  // the owner or a co-host lets a waiting question through, word for word
+  async function approveQ(id) {
+    const v = R.qqRaw[id] || (await fb.get(roomRef(R.code, "qq/" + id)).then((s) => s.val(), () => null));
+    if (!v || !R || R.gone) return;
+    const q = {};
+    ["at", "text", "x", "name", "avatar"].forEach((k) => { if (v[k] != null) q[k] = v[k]; });
+    fb.update(roomRef(R.code), { ["qs/" + id]: q, ["qq/" + id]: null }).catch(() => toast(t("tryAgain")));
+  }
+  async function removeQ(id, waiting) {
+    const mine = isMyQ(id) && !isStaff();
+    if (!waiting && !(await confirmSheet(t(mine ? "qTakeBack" : "qRemove"), t(mine ? "qTakeBackBody" : "qRemoveBody"), t(mine ? "qTakeBack" : "qRemove")))) return;
+    const upd = { [(waiting ? "qq/" : "qs/") + id]: null };
+    if (isStaff() && R.meta?.qnow === id) upd["meta/qnow"] = null;
+    fb.update(roomRef(R.code), upd).catch(() => toast(t("tryAgain")));
+  }
+  const upvote = (id, on) => fb.set(roomRef(R.code, `qs/${id}/up/${uid}`), on ? true : null).catch(() => toast(t("tryAgain")));
+  function markDone(id, on) {
+    const upd = { [`qs/${id}/done`]: on ? T() : null };
+    if (on && R.meta?.qnow === id) upd["meta/qnow"] = null;
+    fb.update(roomRef(R.code), upd).catch(() => toast(t("tryAgain")));
+  }
+  const setQNow = (id) => fb.set(roomRef(R.code, "meta/qnow"), id).catch(() => toast(t("tryAgain")));
+  function setQa(on) {
+    fb.update(roomRef(R.code, "meta"), { qa: on }).then(() => {
+      toast(t(on ? "qaOnToast" : "qaOffToast"));
+      if (on) { stat("qa"); if (R && !R.gone) { R.view = "qa"; renderView(); } }
+    }, () => toast(t("tryAgain")));
+  }
+  // the owner and co-hosts follow the questions waiting for review
+  function syncQueue() {
+    const r = R, want = isStaff() && !R.gone;
+    if (want && !r.qqOff) {
+      let first = true;
+      r.qqOff = fb.onValue(roomRef(r.code, "qq"), (s) => r.queue(async () => {
+        const raw = s.val() || {}, before = r.qq.size;
+        r.qqRaw = raw; r.qq = await openQs(raw);
+        if (!first && r.qq.size > before) toast(t("qNewWaiting"));
+        first = false; renderQa(); renderHeader();
+      }), () => { r.qqOff = null; });
+      r.off.push(() => r.qqOff?.());
+    } else if (!want && r.qqOff) { r.qqOff(); r.qqOff = null; r.qq = new Map(); r.qqRaw = {}; renderQa(); renderHeader(); }
+  }
+  // which of my questions are still waiting for review (each one only I can read)
+  async function refreshWait() {
+    if (!R || R.gone || isStaff()) return;
+    const r = R, still = new Set();
+    await Promise.all(myQs().filter((id) => !r.qs.has(id)).map((id) => r.justAsked.has(id) ? still.add(id)
+      : fb.get(roomRef(r.code, "qq/" + id)).then((s) => s.exists() && still.add(id), () => still.add(id))));
+    if (r !== R) return;
+    store.set(MYQ(r.code), JSON.stringify(myQs().filter((id) => r.qs.has(id) || still.has(id))));
+    const changed = still.size !== r.myWait.size || [...still].some((id) => !r.myWait.has(id));
+    r.myWait = still;
+    if (changed) renderQa();
+  }
+  function qCard(q, waiting) {
+    const staff = isStaff(), mine = isMyQ(q.id), live = !waiting && R.meta?.qnow === q.id && !q.done, voted = q.up.includes(uid);
+    const btn = (label, fn, cls = "") => el("button", { type: "button", class: "btn small " + cls, text: label, onclick: fn });
+    const tools = [];
+    if (waiting) tools.push(btn(t("qApprove"), () => approveQ(q.id), "primary"), btn(t("qReject"), () => removeQ(q.id, true), "danger"));
+    else if (!R.gone) {
+      if (staff && !q.done) tools.push(btn(t(live ? "qNowOff" : "qNowOn"), () => setQNow(live ? null : q.id)));
+      if (staff) tools.push(btn(t(q.done ? "qUndone" : "qDone"), () => markDone(q.id, !q.done)));
+      if (staff || mine) tools.push(btn(t(mine && !staff ? "qTakeBack" : "qRemove"), () => removeQ(q.id, false), "danger"));
+    }
+    return el("div", { class: "qcard" + (live ? " live" : "") + (q.done ? " done" : "") + (waiting ? " waiting" : ""), id: "q-" + q.id },
+      waiting ? null : el("button", { type: "button", class: "upvote" + (voted ? " on" : ""), "aria-pressed": String(voted), "aria-label": t("qUpvote"),
+        title: mine ? t("qMine") : t("qUpvote"), disabled: mine || R.gone || q.bad, onclick: () => upvote(q.id, !voted) },
+        el("span", { text: "▲" }), el("b", { text: q.up.length })),
+      el("div", { class: "qbody" },
+        live ? el("span", { class: "qlive", text: t("qLive") }) : null,
+        el("div", { class: "qwho" }, el("span", { text: q.name ? `${q.avatar} ${q.name}` : t("anonAsker") }),
+          mine ? el("small", { class: "qmine", text: t("qMine") }) : null, el("time", { text: fmtTime(q.at) })),
+        el("p", { class: "qtext" }, linkify(q.text)),
+        tools.length ? el("div", { class: "qtools" }, tools) : null));
+  }
+  function renderQa() {
+    if (!R || R.view !== "qa" || $("#chat").hidden) return;
+    const list = LIST(), keep = list.scrollTop, staff = isStaff();
+    const all = [...R.qs.values()];
+    const open = all.filter((q) => !q.done).sort(byVotes), done = all.filter((q) => q.done).sort((a, b) => b.done - a.done);
+    const parts = [];
+    if (!R.meta?.qa) parts.push(el("p", { class: "note", text: t("qaClosedNote") }));
+    else if (R.meta.qmod) parts.push(el("p", { class: "note qnote", text: t(staff ? "qModStaffNote" : "qModNote") }));
+    if (staff && R.qq.size) parts.push(el("h3", { class: "qh", text: t("qWaitingN", { n: R.qq.size }) }), ...[...R.qq.values()].sort((a, b) => a.at - b.at).map((q) => qCard(q, true)), el("h3", { class: "qh", text: t("qOpenN", { n: open.length }) }));
+    if (!staff && R.myWait.size) parts.push(el("p", { class: "note qnote", text: t("qMineWaiting", { n: R.myWait.size }) }));
+    if (open.length) parts.push(...open.map((q) => qCard(q)));
+    else if (!done.length && R.meta?.qa) parts.push(el("p", { class: "empty", text: t("qEmpty") }));
+    if (done.length) {
+      const d = el("details", { class: "qdone", open: R.qdoneOpen }, el("summary", { text: t("qDoneN", { n: done.length }) }), done.map((q) => qCard(q)));
+      d.addEventListener("toggle", () => (R.qdoneOpen = d.open));
+      parts.push(d);
+    }
+    list.replaceChildren(...parts);
+    list.scrollTop = keep;
+  }
+
+  /* ---------- the projector screen (?show) ----------
+     For a lecture hall: how to join (QR Code, address and code) beside the question being answered and the most
+     upvoted ones, or the latest poll. It opens in its own tab, as the same person, and follows the room live. */
+  function openShow() {
+    const k = R.c && store.get(ROOMKEY(R.code));
+    const url = location.pathname + "?room=" + R.code + "&show=1" + (EMU && params.get("as") ? "&as=" + params.get("as") : "") + (k ? "#k=" + k : "");
+    if (!window.open(url, "_blank")) location.href = url;
+  }
+  let showRaf = 0, wake = null;
+  function renderShow() { if (SHOW && !showRaf) showRaf = requestAnimationFrame(() => { showRaf = 0; drawShow(); }); }
+  function drawShow() {
+    const box = $("#show");
+    if (!SHOW || !R || R.gone || box.hidden) return;
+    if (!wake && navigator.wakeLock) navigator.wakeLock.request("screen").then((w) => { wake = w; w.addEventListener("release", () => (wake = null)); }, () => {}); // keep the projector awake
+    const meta = R.meta || {}, url = roomUrl(R.code);
+    if (box.dataset.url !== url) {
+      const qr = qrcode(0, "M"); qr.addData(url); qr.make();
+      $(".sqr", box).innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+      box.dataset.url = url;
+    }
+    $(".stitle", box).textContent = meta.title || APP;
+    $(".sjoin", box).textContent = t(R.c ? "showJoinEnc" : "showJoin");
+    $(".shost", box).textContent = R.c ? "" : location.host + location.pathname.replace(/index\.html$/, "");
+    $(".scode", box).textContent = R.c ? "" : R.code;
+    $(".sppl", box).textContent = t("showPeople", { n: Object.values(R.members).filter((m) => m.online !== false).length });
+    const poll = [...R.msgs.values()].reverse().find((v) => v.poll);
+    const pollBox = poll ? el("div", { class: "spollbox" }, pollView(livePoll(poll), null)) : null;
+    const live = meta.qnow && R.qs.get(meta.qnow);
+    const open = [...R.qs.values()].filter((q) => !q.done && q !== live).sort(byVotes).slice(0, live ? 4 : 6);
+    const who = (q) => (q.name ? `${q.avatar} ${q.name}` : t("anonAsker"));
+    const main = [];
+    if (meta.qa || R.qs.size) {
+      if (live && !live.done) main.push(el("div", { class: "snow" }, el("span", { class: "qlive", text: t("qLive") }), el("p", { text: live.text }), el("small", { text: `${who(live)} · ▲ ${live.up.length}` })));
+      main.push(el("h2", { text: t("showQs", { n: [...R.qs.values()].filter((q) => !q.done).length }) }));
+      main.push(open.length ? el("ol", { class: "slist" }, open.map((q) => el("li", {}, el("span", { class: "sv", text: "▲ " + q.up.length }), el("span", { class: "st" }, q.text, el("small", { text: who(q) })))))
+        : el("p", { class: "shint", text: live ? "" : t("showNoQs") }));
+    } else main.push(pollBox || el("p", { class: "shint big", text: t("showHint") }));
+    $(".smain", box).replaceChildren(...main);
+    $(".spoll", box).replaceChildren(...(meta.qa || R.qs.size) && pollBox ? [pollBox] : []);
   }
 
   /* ---------- photos ----------
@@ -1362,7 +1579,9 @@
     if (!R) return;
     const btns = [["share", t("invite")], ["me", t("editMe")],
       notifyOn(R.code) ? ["mute", t("muteRoom")] : ["notify", t("notifyRoom")], ["export", t("exportChat")]];
-    if (isStaff()) btns.push(["reports", t("reportsMenu", { n: reportCount() })]);
+    if (isOwner()) btns.push(R.meta?.qa ? ["qaoff", t("qaOff")] : ["qaon", t("qaOn")]);
+    if (isOwner() && R.meta?.qa) btns.push(R.meta.qmod ? ["qmodoff", t("qModOff")] : ["qmodon", t("qModOn")]);
+    if (isStaff()) btns.push(["show", t("showScreen")], ["reports", t("reportsMenu", { n: reportCount() })]);
     if (isOwner()) {
       btns.splice(1, 0, ["title", t("renameRoom")]);
       btns.push(["cap", R.meta?.cap ? t("capMenuN", { n: R.meta.cap }) : t("cap")], ["transfer", t("transfer")]);
@@ -1376,6 +1595,9 @@
     if (a === "notify" || a === "mute") setNotify(a === "notify");
     if (a === "export") exportSheet();
     if (a === "reports") reportsSheet();
+    if (a === "qaon" || a === "qaoff") setQa(a === "qaon");
+    if (a === "qmodon" || a === "qmodoff") fb.update(roomRef(R.code, "meta"), { qmod: a === "qmodon" }).then(() => toast(t(a === "qmodon" ? "qModOnToast" : "qModOffToast")), () => toast(t("tryAgain")));
+    if (a === "show") openShow();
     if (a === "cap") capSheet();
     if (a === "transfer") people(t("pickOwner"));
     if (a === "lock" || a === "unlock") fb.update(roomRef(R.code, "meta"), { locked: a === "lock" }).then(() => toast(t(a === "lock" ? "lockedDone" : "unlockedDone")), () => toast(t("tryAgain")));
@@ -1444,6 +1666,10 @@
         return { with: { name: them.name, avatar: them.avatar }, messages: [...box.values()].map((v) => one(v, v.by === uid ? self : them)) };
       }),
     };
+    // the lecture's questions, most upvoted first: the record a host takes away
+    const qs = [...R.qs.values()].filter((q) => !q.bad).sort(byVotes)
+      .map((q) => ({ text: q.text, name: q.name || undefined, avatar: q.avatar || undefined, at: q.at, votes: q.up.length, done: !!q.done || undefined }));
+    if (qs.length) a.questions = qs;
     Object.defineProperty(a, "pics", { value: pics });
     return a;
   }
@@ -1475,9 +1701,15 @@
       me: { name: str(o.me?.name, 24), avatar: str(o.me?.avatar, 8) },
       messages: keep(o.messages),
       dms: (Array.isArray(o.dms) ? o.dms : []).slice(0, 200).map((d) => ({ with: { name: str(d?.with?.name, 24) || "？", avatar: str(d?.with?.avatar, 8) }, messages: keep(d?.messages) })).filter((d) => d.messages.length),
+      ...(() => {
+        const qs = arr(o.questions).slice(0, 2000).map((q) => ({ text: str(q?.text, 300), name: str(q?.name, 24) || undefined, avatar: str(q?.avatar, 8) || undefined,
+          at: num(q?.at), votes: Math.min(Math.max(num(q?.votes), 0), 9999), done: q?.done === true || undefined })).filter((q) => q.text);
+        return qs.length ? { questions: qs } : {};
+      })(),
     };
   }
-  const countOf = (a) => a.messages.length + a.dms.reduce((s, d) => s + d.messages.length, 0);
+  const countOf = (a) => a.messages.length + a.dms.reduce((s, d) => s + d.messages.length, 0) + (a.questions?.length || 0);
+  const qLine = (q) => `▲ ${q.votes} · ${q.name ? `${q.avatar || ""} ${q.name}`.trim() : t("anonAsker")} · ${fmtFull(q.at)}${q.done ? " · " + t("qAnswered") : ""}`;
   const label = (m) => `${m.avatar} ${m.name}`;
   // a photo, poll or draw in words, for the .txt file (and the .html one)
   const pollText = (p) => `📊 ${p.q} (${t(p.m ? "pollMultiTag" : "pollSingleTag")}${p.closed ? " · " + t("pollClosed") : ""})\n` +
@@ -1490,6 +1722,7 @@
     a.messages.forEach((m) => out.push(line(m)));
     if (!a.messages.length) out.push(t("noMsgs"));
     a.dms.forEach((d) => { out.push("", `── ${t("dmHead", { who: label(d.with) })} ──`); d.messages.forEach((m) => out.push(line(m))); });
+    if (a.questions) { out.push("", `── ${t("qaTab")} ──`); a.questions.forEach((q) => out.push(`[${qLine(q)}]`, "    " + q.text.replace(/\n/g, "\n    "))); }
     return out.join("\n") + "\n";
   }
   function toHtml(a, srcs = new Map()) {
@@ -1502,6 +1735,7 @@
 <h1>${esc(a.title)}</h1><div class="sub">${esc(t("expSub", { code: a.code, t: fmtFull(a.exported) }))}</div>
 ${sec(t("everyone"), a.messages)}
 ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join("")}
+${a.questions ? `<h2>${esc(t("qaTab"))}</h2>${a.questions.map((q) => `<div class="m"><div class="h">${esc(qLine(q))}</div><div class="b">${esc(q.text)}</div></div>`).join("")}` : ""}
 <script type="application/json" id="${ARCHIVE}">${data}</script>
 </body></html>`;
   }
@@ -1533,6 +1767,7 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
       el("p", { class: "muted", text: t("exportCount", { n: countOf(a) }) }),
       el("p", { class: "muted small", text: t("exportHint") })),
       [["save", t("saveHere"), "primary"], ["json", t("jsonImp")], ["html", t("htmlImp")], ["txt", t("txtFile")]]);
+    if (pick) stat("exports");
     if (pick === "save") saveRecord(a);
     else if (pick) download(a, pick);
   }
@@ -1643,15 +1878,23 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
     $("#recSub").textContent = t("recSub", { t: fmtFull(a.exported) });
     const tabs = $("#recTabs");
     tabs.replaceChildren(el("button", { type: "button", class: "tab", "data-tab": -1, text: t("everyoneN", { n: a.messages.length }) }),
-      ...a.dms.map((d, i) => el("button", { type: "button", class: "tab", "data-tab": i, text: `🔒 ${label(d.with)}` })));
-    tabs.hidden = !a.dms.length;
+      ...a.dms.map((d, i) => el("button", { type: "button", class: "tab", "data-tab": i, text: `🔒 ${label(d.with)}` })),
+      ...(a.questions ? [el("button", { type: "button", class: "tab", "data-tab": -2, text: `❓ ${t("qaTab")} ${a.questions.length}` })] : []));
+    tabs.hidden = !a.dms.length && !a.questions;
     renderRecord();
   }
   function renderRecord() {
     const { a, tab } = REC_VIEW;
     $("#recTabs").querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(+b.dataset.tab === tab)));
-    const list = tab < 0 ? a.messages : a.dms[tab].messages;
     const box = $("#recList");
+    if (tab === -2) { // the questions, read-only
+      box.replaceChildren(...a.questions.map((q) => el("div", { class: "qcard" + (q.done ? " done" : "") },
+        el("div", { class: "upvote", "aria-hidden": "true" }, el("span", { text: "▲" }), el("b", { text: q.votes })),
+        el("div", { class: "qbody" }, el("div", { class: "qwho" }, el("span", { text: q.name ? `${q.avatar || ""} ${q.name}` : t("anonAsker") }), el("time", { text: fmtFull(q.at) })),
+          el("p", { class: "qtext" }, linkify(q.text)), q.done ? el("small", { class: "muted", text: t("qAnswered") }) : null))));
+      box.scrollTop = 0; return;
+    }
+    const list = tab < 0 ? a.messages : a.dms[tab].messages;
     let prev = null;
     box.replaceChildren(...(list.length ? list.map((m) => {
       const cont = prev && prev.name === m.name && !!prev.mine === !!m.mine && m.at - prev.at < 180000;
@@ -1785,13 +2028,17 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
 
   /* ---------- screens ---------- */
   // the address names the room, so reloading the page comes back to it
-  const roomPath = (code) => history.replaceState(null, "", "?room=" + code + (EMU && params.get("as") ? "&as=" + params.get("as") : ""));
+  const roomPath = (code) => history.replaceState(null, "", "?room=" + code + (SHOW ? "&show=1" : "") + (EMU && params.get("as") ? "&as=" + params.get("as") : ""));
   // opening a room's link starts with no screen showing; a question on the way in (nickname, link, password) shows the home page behind it
   function backdrop() { if ($("#home").hidden && $("#chat").hidden && $("#record").hidden) { $("#home").hidden = false; showResume(); } }
-  function showChat() { $("#home").hidden = true; $("#record").hidden = true; $("#chat").hidden = false; renderView(); }
+  function showChat() {
+    $("#home").hidden = true; $("#record").hidden = true;
+    if (SHOW) { $("#chat").hidden = true; $("#show").hidden = false; renderShow(); return; }
+    $("#chat").hidden = false; renderView();
+  }
   function home() {
-    $("#chat").hidden = true; $("#record").hidden = true; $("#home").hidden = false;
-    REC_VIEW = null; closePicker();
+    $("#chat").hidden = true; $("#record").hidden = true; $("#show").hidden = true; $("#home").hidden = false;
+    REC_VIEW = null; closePicker(); SHOW = false;
     $("#composer").classList.remove("off");
     document.title = t("docTitle");
     history.replaceState(null, "", location.pathname + (EMU && params.get("as") ? "?as=" + params.get("as") : ""));
@@ -1871,6 +2118,9 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
   if (!KLIPY) $("#composer [data-a=gif]").hidden = true;
   $("#composer").addEventListener("click", (e) => { const b = e.target.closest(".tool"); if (b) openPicker(b.dataset.a); });
   $("#peopleBtn").addEventListener("click", () => people());
+  $("#askAnon").checked = store.get("chat-ask-anon") !== "0";
+  $("#askAnon").addEventListener("change", (e) => store.set("chat-ask-anon", e.target.checked ? null : "0"));
+  $("#show").addEventListener("click", (e) => { if (e.target.closest("[data-a=exitShow]") && R) location.href = "?room=" + R.code + (EMU && params.get("as") ? "&as=" + params.get("as") : ""); });
   // tapping the conversation while the emoji / GIF panel is open just closes the panel
   ["#list", "#pins"].forEach((s) => $(s).addEventListener("click", (e) => { if (pickerOpen) { closePicker(); e.stopPropagation(); e.preventDefault(); } }, true));
   $("#chat").addEventListener("click", (e) => {
@@ -1878,6 +2128,7 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
     if (a === "home") { if (R?.view !== "all") { R.view = "all"; renderView(); } else home(); }
     if (a === "menu") menu();
     if (a === "all") { R.view = "all"; renderView(); }
+    if (a === "qa") { R.view = "qa"; renderView(); }
     if (a === "notifyYes" || a === "notifyNo") setNotify(a === "notifyYes");
     if (a === "noreply") cancelReply();
   });
@@ -1907,7 +2158,7 @@ ${a.dms.map((d) => sec(t("dmHead", { who: label(d.with) }), d.messages)).join(""
     const text = ta.value;
     if (!text.trim()) return;
     ta.value = ""; grow(); mentionBar();
-    if (!(await send(text)) && !ta.value) { ta.value = text; grow(); } // not sent: give the text back
+    if (!(await (R?.view === "qa" ? ask(text) : send(text))) && !ta.value) { ta.value = text; grow(); } // not sent: give the text back
     else if (pickerOpen === "emoji") closePicker();
     ta.focus();
   });

@@ -23,7 +23,7 @@ room_write = o(
     # creating (or taking over a stale code): the creator is inside, and no old content comes along
     j(fresh_room, "newData.child('meta/owner').val() === auth.uid", "newData.child('members/' + auth.uid).exists()",
       "!newData.child('msgs').exists()", "!newData.child('files').exists()", "!newData.child('dm').exists()", "!newData.child('banned').exists()",
-      "!newData.child('reports').exists()"),
+      "!newData.child('reports').exists()", "!newData.child('qs').exists()", "!newData.child('qq').exists()", "!newData.child('qby').exists()"),
 )
 
 member_join = j(
@@ -148,6 +148,29 @@ TYPING = lambda room, extra="true": {
     ".write": j("auth != null", "auth.uid === $uid", o("!newData.exists()", j(is_member(room), extra))),
     ".validate": "newData.val() === now",
 }
+# Q&A (a lecture's questions, meta/qa on): qs/{id} are the questions everyone sees and upvotes; with meta/qmod on, a
+# new question waits in qq/{id} until the owner or a co-host lets it through. A question names no author: who asked
+# sits apart in qby/{id}, which only the asker can read, so a question can be anonymous even to the owner (and the
+# asker can still take it back). Asking is rate-limited like posting, with lq naming the question.
+QROOM = "root.child('rooms/' + $code)"
+# (the owner's and co-hosts' own questions skip review)
+q_on = lambda queued: j(f"{QROOM}.child('meta/qa').val() === true",
+                        f"{QROOM}.child('meta/qmod').val() === true" if queued else o(f"{QROOM}.child('meta/qmod').val() !== true", is_staff(QROOM)))
+q_ask = lambda queued: j("!data.exists()", q_on(queued), f"!{QROOM}.child('qby/' + $id).exists()",
+                         "newData.parent().parent().child('qby/' + $id).val() === auth.uid", sent_now("newData.parent().parent()", "lq"))
+q_take_back = j("!newData.exists()", o(is_staff(QROOM), f"{QROOM}.child('qby/' + $id).val() === auth.uid"))
+QUEUED = lambda f: f"newData.child('{f}').val() === {QROOM}.child('qq/' + $id + '/{f}').val()"
+q_approve = j("!data.exists()", is_staff(QROOM), f"{QROOM}.child('qq/' + $id).exists()", "!newData.parent().parent().child('qq/' + $id).exists()",
+              *[QUEUED(f) for f in ("text", "x", "name", "avatar", "at")])
+Q_ENC = ENC(QROOM)
+QUESTION = lambda extra: dict({
+    ".validate": j("newData.hasChild('at')", o(j(Q_ENC, "newData.hasChild('x')", "!newData.hasChild('text')"), j("!" + Q_ENC, "newData.hasChild('text')"))),
+    "text": {".validate": NONEMPTY(300) + " && !" + Q_ENC},
+    "name": {".validate": S(24) + " && !" + Q_ENC}, "avatar": {".validate": S(8) + " && !" + Q_ENC},   # left out to ask anonymously
+    "x": {".validate": SEALED(2000) + " && " + Q_ENC},   # {t, n?, a?} sealed to the question's id
+    "at": {".validate": "newData.val() === now || newData.val() === data.val() || newData.val() === " + QROOM + ".child('qq/' + $id + '/at').val()"},
+    "$other": NO,
+}, **extra)
 rules = {"rules": {
     ".read": False, ".write": False,
     "rooms": {
@@ -176,6 +199,9 @@ rules = {"rules": {
                 # up to three messages the owner pins as announcements, one per slot
                 "pins": {"$slot": {".validate": "$slot.matches(/^[0-2]$/) && " + PUSH_ID}},
                 "mods": {"$uid": {".validate": "newData.val() === true"}},
+                "qa": {".validate": "newData.isBoolean()"}, "qmod": {".validate": "newData.isBoolean()"},
+                # the question being answered now, shown large on the projector; the owner or a co-host picks it
+                "qnow": {".write": "auth != null && (" + is_staff("data.parent().parent()") + ")", ".validate": PUSH_ID},
                 "cap": {".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 1000"},
                 # members counted while there's a size limit: each person adds or removes themselves; the owner sets it
                 "n": {".write": j("auth != null", o(
@@ -197,7 +223,7 @@ rules = {"rules": {
                     "pk": {".validate": SEALED(120)},   # public key for end-to-end encrypted private messages
                     "joined": {".validate": "newData.isNumber()"},
                     "ls": {".validate": f"newData.val() === now && (!data.exists() || data.val() < now - {GAP})"},
-                    "lm": {".validate": PUSH_ID}, "lf": {".validate": PUSH_ID},
+                    "lm": {".validate": PUSH_ID}, "lf": {".validate": PUSH_ID}, "lq": {".validate": PUSH_ID},
                     "online": {".validate": "newData.isBoolean()"},
                     "$other": NO,
                 },
@@ -272,9 +298,39 @@ rules = {"rules": {
             "dmt": {"$pair": {
                 ".read": "auth != null && ($pair.beginsWith(auth.uid + '_') || $pair.endsWith('_' + auth.uid)) && " + is_member("data.parent().parent()"),
                 "$uid": TYPING("data.parent().parent().parent()", "$pair.beginsWith(auth.uid + '_') || $pair.endsWith('_' + auth.uid)")}},
+            "qs": {
+                ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
+                "$id": QUESTION({
+                    ".write": j("auth != null", is_member(QROOM), o(q_ask(False), q_approve, q_take_back)),
+                    # an upvote, one per person, never on your own question
+                    "up": {"$uid": {".write": j("auth != null", "auth.uid === $uid", is_member(QROOM), f"{QROOM}.child('qby/' + $id).val() !== auth.uid",
+                                                "data.parent().parent().exists()"),
+                                    ".validate": "newData.val() === true"}},
+                    # answered, marked by the owner or a co-host
+                    "done": {".write": j("auth != null", is_staff(QROOM), "data.parent().exists()"), ".validate": "newData.val() === now"},
+                }),
+            },
+            "qq": {
+                ".read": "auth != null && (" + is_staff("data.parent()") + ")",
+                "$id": QUESTION({
+                    ".read": f"auth != null && {QROOM}.child('qby/' + $id).val() === auth.uid",   # the asker sees it's still waiting
+                    ".write": j("auth != null", o(j(is_member(QROOM), q_ask(True)), q_take_back)),
+                }),
+            },
+            "qby": {"$id": {
+                ".read": "auth != null && data.val() === auth.uid",
+                ".write": j("auth != null", "!data.exists()", "newData.val() === auth.uid", is_member(QROOM)),
+            }},
             "$other": NO,
         }
     },
+    # usage, counted anonymously per day: stats/{YYYY-MM-DD}/{what} goes up by one at a time; nobody reads it but
+    # the site's owner (Firebase console, or tools/cleanup/stats.mjs)
+    "stats": {"$day": {"$k": {
+        ".write": j("auth != null", r"$day.matches(/^20[0-9]{2}-[01][0-9]-[0-3][0-9]$/)",
+                    "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports)$/)",
+                    o(j("!data.exists()", "newData.val() === 1"), "newData.val() === data.val() + 1")),
+        ".validate": "newData.isNumber()"}}},
     # private-room passwords (a hash), never readable; only the rules compare against them
     "secrets": {"$code": {
         ".write": j("auth != null", o(

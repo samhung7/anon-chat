@@ -9,6 +9,9 @@ Made for lecture Q&A, anonymous reading groups, workshops and team projects. Int
 - **Chat**: live messages, replies that quote and jump to the original, links, @mentions (typing @ offers names; a mention notifies even a muted room), editing your own messages (marked 已編輯), "someone is typing", a line above the messages that came since you last read and a ↓ button back to the newest, an emoji picker, GIF search (KLIPY), six reactions, who's here and who's online, private messages between two people (the owner can't read those either).
 - **Owner**: rename the room, pin up to three messages as announcements (one line at the top, tap to open), cap how many people can be in it, lock it to newcomers, name co-hosts, hand the room to someone else (and stay on as a co-host), end the room. The owner and co-hosts remove anyone's message and remove people (co-hosts can't remove the owner or each other); removed people can't come back from that device.
 - **Safety**: anyone can report a message to the owner and co-hosts with a reason (they see why and how many, never who), and block someone on their own device, which folds that person's messages away. The rules let each person post at most every 800 ms, one message per write. Terms and privacy policy: `site/legal.html` (Chinese and English).
+- **Lecture Q&A**: the owner opens a ❓ tab where people ask, by name or anonymously, and upvote each other's questions, which sort by votes. The owner and co-hosts mark the one being answered now and the ones answered, take any down, and can turn on review so new questions wait until they publish them. Anonymous means anonymous to the owner too: who asked is kept where only the asker can read it.
+- **Projector screen** (`?room={code}&show=1`, from the owner's ⋯ menu): the QR Code and code to join beside the question being answered, the most upvoted ones and the latest poll, live and in large type.
+- **Usage stats**: anonymous daily counts (rooms opened, joins, messages, questions, ...) in `stats/{day}`, with no content or ids. `.github/workflows/stats.yml` shows the last 30 days in its run summary every Monday, or when run by hand.
 - **Notifications**: a system notification for each new message while the page is open in the background (a tab, or the installed app). Each room can be muted from its ⋯ menu; the setting stays on the device. A closed page gets nothing, since that would need a push server.
 - **Deleting**: ending a room deletes every message and private message right away. A room nobody has written in for 24 hours is deleted by an hourly job (`tools/cleanup`), and its code can be reused.
 - **Export and records**: everyone can download what they can see, including their own private messages, as `.json`, `.html` or `.txt`, or keep it in this browser under 「我的聊天記錄」. The `.json` and `.html` files can be imported back and read here, read-only (the `.html` carries the same JSON inside it). Records stay on the device; nothing is uploaded. An imported file is checked field by field, but a file is only as trustworthy as whoever sent it: nothing proves it wasn't edited by hand.
@@ -24,7 +27,7 @@ site/                       the whole app, served as-is by GitHub Pages
   sw.js, manifest.webmanifest, icons/
 database.rules.json         who may read and write what; generated from tools/rules.py
 tools/rules.py              the rules, written readably (npm run rules)
-tools/cleanup/              hourly job that deletes rooms idle for 24 hours
+tools/cleanup/              hourly job that deletes rooms idle for 24 hours; stats.mjs prints the usage counts
 test/rules.test.mjs         rule tests against the Firebase emulator
 ```
 
@@ -32,10 +35,11 @@ Data in the Realtime Database:
 
 ```
 rooms/{code}/meta           owner, title, created, last (last activity), priv, locked,  readable by any signed-in device
-                            mods/{uid} (co-hosts), cap and n (size limit, members counted)
+                            mods/{uid} (co-hosts), cap and n (size limit, members counted),
+                            qa (Q&A open), qmod (review questions first), qnow (the question being answered)
                             encrypted room: enc, kc (key check), xt (sealed title) instead of title
 rooms/{code}/members/{uid}  name, avatar, joined, online, pk (public key for private messages),   members only
-                            ls (when they last posted), lm/lf (the message/photo that post wrote)
+                            ls (when they last posted), lm/lf/lq (the message/photo/question that post wrote)
                             encrypted room: x (sealed name and avatar), h (keyed hash of the name) instead of name, avatar
 rooms/{code}/names/{key}    uid holding that nickname: the lowercased name, or h in an encrypted room   any signed-in device
 rooms/{code}/msgs/{id}      by, name, avatar, text or gif{url,w,h,title}, at, re/{0-5}/{uid}  members only
@@ -44,7 +48,12 @@ rooms/{code}/dm/{uidA_uidB}/{id}  by, to, x (sealed text or gif), at            
 rooms/{code}/keys/{uid}     the password hash a member joined with                     nobody reads it
 rooms/{code}/banned/{uid}   people the owner or a co-host removed
 rooms/{code}/reports/{msg}/{uid}  r (reason 0-3), at                                   owner and co-hosts only
+rooms/{code}/qs/{id}        text, name?, avatar? (left out when anonymous), at, up/{uid}, done   members only
+                            encrypted room: x (sealed text, name, avatar), at, up, done
+rooms/{code}/qq/{id}        a question waiting for review, same fields                 owner, co-hosts and the asker
+rooms/{code}/qby/{id}       who asked                                                 only the asker reads it
 rooms/{code}/typing/{uid}   server time while typing; dmt/{uidA_uidB}/{uid} the same in a private chat
+stats/{YYYY-MM-DD}/{what}   anonymous daily counts, each write adds one              nobody reads it but the admin
 secrets/{code}              a private room's password hash                             nobody reads it; the rules compare against it
 ```
 

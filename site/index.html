@@ -93,6 +93,10 @@
     <button id="peopleBtn" class="icon people" type="button" aria-label="成員" data-i18n-attr="aria-label:members"><span>👥</span><span class="n"></span><i class="dot" hidden></i></button>
     <button class="icon" type="button" data-a="menu" aria-label="更多" data-i18n-attr="aria-label:more">⋯<i class="dot" hidden></i></button>
   </header>
+  <div id="tabs" class="tabs qtabs" role="tablist" hidden>
+    <button class="tab" type="button" role="tab" data-a="all" data-i18n="chatTab">💬 聊天</button>
+    <button class="tab" type="button" role="tab" data-a="qa"><span data-i18n="qaTabIcon">❓ 提問</span><span class="n"></span><i class="dot" hidden></i></button>
+  </div>
   <div id="dmBar" class="dmbar" hidden>
     <button class="link" type="button" data-a="all" data-i18n="backAll">‹ 回到大家</button>
     <span class="dmwho"></span>
@@ -113,6 +117,10 @@
     <button class="icon small" type="button" data-a="noreply" aria-label="取消回覆" data-i18n-attr="aria-label:cancelReply">✕</button>
   </div>
   <div id="mentionBar" class="mentionbar" hidden></div>
+  <div id="askBar" class="askbar" hidden>
+    <label><input type="checkbox" id="askAnon" checked> <span data-i18n="askAnon">匿名提問</span></label>
+    <small data-i18n="askAnonHint">不顯示暱稱，主持人也看不到是誰問的</small>
+  </div>
   <div id="picker" class="picker" hidden></div>
   <form id="composer" class="composer" autocomplete="off">
     <button class="tool" type="button" data-a="more" aria-label="照片、投票、抽籤" data-i18n-attr="aria-label:moreAria" aria-pressed="false">＋</button>
@@ -122,6 +130,21 @@
     <button class="send" type="submit" aria-label="送出" data-i18n-attr="aria-label:sendAria">➤</button>
   </form>
   <input id="photoFile" type="file" accept="image/*" multiple hidden>
+</main>
+
+<!-- ---------- the projector screen (?show) ---------- -->
+<main id="show" class="show" hidden>
+  <section class="smain"></section>
+  <aside class="sside">
+    <b class="stitle"></b>
+    <div class="sqr"></div>
+    <p class="sjoin"></p>
+    <div class="shost"></div>
+    <div class="scode"></div>
+    <p class="sppl"></p>
+    <div class="spoll"></div>
+  </aside>
+  <button class="icon sexit" type="button" data-a="exitShow" aria-label="離開投影畫面" data-i18n-attr="aria-label:showExit">✕</button>
 </main>
 
 <!-- ---------- a saved record, read-only ---------- -->
