@@ -15,7 +15,7 @@ room_write = o(
     j("!newData.exists()", o("data.child('meta/owner').val() === auth.uid", stale)),
     # creating (or taking over a stale code): the creator is inside, and no old content comes along
     j(fresh_room, "newData.child('meta/owner').val() === auth.uid", "newData.child('members/' + auth.uid).exists()",
-      "!newData.child('msgs').exists()", "!newData.child('dm').exists()", "!newData.child('banned').exists()"),
+      "!newData.child('msgs').exists()", "!newData.child('files').exists()", "!newData.child('dm').exists()", "!newData.child('banned').exists()"),
 )
 
 member_join = j(
@@ -72,6 +72,45 @@ GIF = {
     "h": {".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 2000"},
     "title": {".validate": S(120)},
     "$other": NO,
+}
+NOT_ENC = " && !" + ENC(MEMBER_ROOM)   # from rooms/$code/msgs/$id/<field>
+NONEMPTY = lambda n: S(n) + " && newData.val().length > 0"
+# a list kept as an object with keys 0, 1, 2, ... (what the SDK writes for an array)
+LIST = lambda key_re, item: {"$i": {".validate": f"$i.matches({key_re}) && " + item}}
+# a photo: the message points at its picture, kept apart under files/ so the message list stays small
+IMG = {
+    ".validate": "newData.hasChildren(['f', 'w', 'h'])" + NOT_ENC,
+    # the picture is already there (written in the same update) and is the author's own
+    "f": {".validate": PUSH_ID + " && newData.parent().parent().parent().parent().child('files/' + newData.val() + '/by').val() === auth.uid"},
+    "w": {".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 4000"},
+    "h": {".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 4000"},
+    "$other": NO,
+}
+# a poll: a question, 2 to 10 options, and whether each person may pick more than one (m)
+POLL = {
+    ".validate": "newData.hasChildren(['q', 'o', 'm']) && newData.child('o/1').exists()" + NOT_ENC,
+    "q": {".validate": NONEMPTY(200)},
+    "o": LIST("/^[0-9]$/", NONEMPTY(80)),
+    "m": {".validate": "newData.isBoolean()"},
+    "$other": NO,
+}
+# a draw: who took part (p) and who was drawn (w), as member ids, and what it was for (t)
+DRAW = {
+    ".validate": "newData.hasChildren(['p', 'w'])" + NOT_ENC,
+    "t": {".validate": S(60)},
+    "p": LIST("/^[0-9]{1,3}$/", S(128)),
+    "w": LIST("/^[0-9]{1,3}$/", S(128)),
+    "$other": NO,
+}
+MSG_ROOM = "newData.parent().parent().parent().parent()"   # from rooms/$code/msgs/$id/votes/$uid
+# a vote: the options picked, as "0" or "0,2"; sealed in an encrypted room. Only one option unless the poll allows more.
+VOTE = {
+    ".write": j("auth != null", "auth.uid === $uid", is_member("data.parent().parent().parent().parent()"),
+                "data.parent().parent().child('closed').val() !== true"),
+    ".validate": o(j(ENC(MSG_ROOM), SEALED(200)),
+                   j("!" + ENC(MSG_ROOM), "newData.parent().parent().child('poll').exists()",
+                     o(r"newData.isString() && newData.val().matches(/^[0-9]$/)",
+                       j("newData.parent().parent().child('poll/m').val() === true", r"newData.isString() && newData.val().matches(/^[0-9](,[0-9]){1,9}$/)")))),
 }
 rules = {"rules": {
     ".read": False, ".write": False,
@@ -130,19 +169,36 @@ rules = {"rules": {
                     ".write": msg_write,
                     ".validate": j("newData.hasChildren(['by', 'at'])", o(
                         j(ENC("newData.parent().parent()"), "newData.hasChild('x')"),
-                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", "newData.hasChild('text') || newData.hasChild('gif')"))),
+                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", o(*[f"newData.hasChild('{k}')" for k in ("text", "gif", "img", "poll", "draw")])))),
                     "by": {".validate": "newData.isString()"},
                     "name": {".validate": S(24) + " && !" + ENC(MEMBER_ROOM)},
                     "avatar": {".validate": S(8) + " && !" + ENC(MEMBER_ROOM)},
                     "text": {".validate": S(1000) + " && newData.val().length > 0 && !" + ENC(MEMBER_ROOM)},
                     "gif": dict(GIF, **{".validate": GIF[".validate"] + " && !" + ENC(MEMBER_ROOM)}),
-                    "x": {".validate": SEALED(4000)},
+                    "img": IMG, "poll": POLL, "draw": DRAW,
+                    "x": {".validate": SEALED(12000)},
                     "rp": {".validate": PUSH_ID + " && !" + ENC(MEMBER_ROOM)},   # the message this one replies to (sealed inside x when encrypted)
                     "at": {".validate": "newData.val() === now || newData.val() === data.val()"},
                     "re": {"$k": {
                         ".validate": "$k.matches(/^[0-5]$/)",
                         "$uid": {".write": "auth != null && auth.uid === $uid && " + is_member("data.parent().parent().parent().parent().parent()"),
                                  ".validate": "newData.val() === true"}}},
+                    "votes": {"$uid": VOTE},
+                    # the poll's author closes it; votes stop
+                    "closed": {".write": "auth != null && data.parent().child('by').val() === auth.uid", ".validate": "newData.val() === true"},
+                    "$other": NO,
+                },
+            },
+            # photos, one per node: JPEG bytes as base64url, or sealed with the room key in an encrypted room.
+            # Compressed on the device first (about 1280px, a few hundred KB), so this limit is generous.
+            "files": {
+                ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
+                "$id": {
+                    ".write": msg_write,
+                    ".validate": "newData.hasChildren(['by', 'd', 'at'])",
+                    "by": {".validate": "newData.isString()"},
+                    "d": {".validate": S(450000)},
+                    "at": {".validate": "newData.val() === now"},
                     "$other": NO,
                 },
             },
