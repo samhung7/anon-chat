@@ -18,7 +18,7 @@
      lobby.js     opening and joining          home.js     screens and the home page
      records.js   export, import, saved records (archive.js: the record format)
      identity.js  nickname and animal          notify.js   notifications    pickers.js emoji, GIF, ＋ */
-import { KLIPY_KEY, params } from "./constants.js?v=dev";
+import { KLIPY_KEY, IDLE_MS, params } from "./constants.js?v=dev";
 import { $ } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend, asParam } from "./backend.js?v=dev";
@@ -110,6 +110,16 @@ $("#composer").addEventListener("submit", async (e) => {
   if (!(await (room?.ui.view === "qa" ? ask(text) : send(text))) && !ta.value) { ta.value = text; grow(); } // not sent: give the text back
   else if (pickerOpen() === "emoji") closePicker();
   ta.focus();
+});
+
+// a page left in the background with no room on screen lets go of its database connection, and takes it back on
+// showing again (a room on screen keeps it, for notifications)
+let idle;
+const roomless = () => !room || room.gone;
+document.addEventListener("visibilitychange", () => {
+  clearTimeout(idle);
+  if (!document.hidden) backend.resume();
+  else if (roomless()) idle = setTimeout(() => { if (document.hidden && roomless()) backend.pause(); }, IDLE_MS);
 });
 
 /* ---------- start ---------- */

@@ -480,3 +480,17 @@ test("theme, and a code that doesn't exist", async () => {
   assert.equal(await alice.locator("#home").isVisible(), true);
   noErrors();
 });
+
+test("a link opened while the database can't be reached says so, instead of spinning on", async () => {
+  const bob = await person("b");
+  // what a full free plan (every connection taken) or a blocked network looks like: the database never answers
+  await bob.context().routeWebSocket(/127\.0\.0\.1:9000/, (ws) => ws.close());
+  await bob.context().route(/127\.0\.0\.1:9000/, (r) => r.abort());
+  await bob.goto(`${base}/?emu&as=b&room=ABCD`);
+  await bob.locator(".toast", { hasText: "Can't reach the server" }).waitFor({ timeout: 30000 });
+  assert.equal(await bob.locator("body.busy").count(), 0, "the spinner stops");
+  assert.equal(await bob.locator("#home").isVisible(), true);
+  assert.equal(await bob.locator("#joinCode").inputValue(), "ABCD", "the code waits in the box for another try");
+  errors = errors.filter((e) => !/timeout/.test(e));
+  noErrors();
+});

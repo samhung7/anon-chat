@@ -86,6 +86,7 @@ I18N.add("ja", {
   // connection
   noDb: "データベースがまだ設定されていません",
   netErr: "接続に問題があります。もう一度お試しください",
+  serverBusy: "サーバーに接続できないか混み合っています。少し待ってからお試しください",
   offline: "インターネットに接続されていません",
 
   // creating and joining

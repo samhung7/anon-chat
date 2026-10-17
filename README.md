@@ -117,4 +117,4 @@ give it a CORS policy allowing `GET`/`HEAD` from `https://stoatalk.app`. In GitH
 deploy the service to `api.stoatalk.app`, and `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` (an R2 token with object read
 and write on the bucket), which the cleanup uses.
 
-Capacity on the free (Spark) plan: 100 people online at once across all rooms, 1 GB stored, 10 GB downloaded a month. A lecture with more than 100 people needs the pay-as-you-go (Blaze) plan; chat text is small, so the cost is usually tiny.
+Capacity on the free (Spark) plan: 100 people online at once across all rooms, 1 GB stored, 10 GB downloaded a month. A lecture with more than 100 people needs the pay-as-you-go (Blaze) plan; chat text is small, so the cost is usually tiny. When all 100 connections are taken, the database turns new ones away without an error; the page then gives up after 20 seconds and says the server can't be reached, and a page left in the background with no room on screen lets go of its connection after a minute.

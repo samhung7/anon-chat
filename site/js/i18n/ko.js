@@ -86,6 +86,7 @@ I18N.add("ko", {
   // connection
   noDb: "아직 데이터베이스가 설정되지 않았어요",
   netErr: "연결에 문제가 있어요. 다시 시도해 주세요",
+  serverBusy: "지금 서버에 연결할 수 없거나 혼잡해요. 잠시 후 다시 시도해 주세요",
   offline: "인터넷에 연결되어 있지 않아요",
 
   // creating and joining
