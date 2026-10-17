@@ -86,6 +86,7 @@ I18N.add("zh-TW", {
   // connection
   noDb: "還沒有設定資料庫",
   netErr: "連線出了問題，請再試一次",
+  serverBusy: "伺服器現在連不上或太忙，請稍等一下再試",
   offline: "沒有網路連線",
 
   // creating and joining

@@ -1,9 +1,9 @@
 /* Opening a room and joining one: with the code, a pasted link, or an encrypted room's invite link. */
-import { CODE_CHARS, DAY, LIMITS } from "./constants.js?v=dev";
+import { CODE_CHARS, DAY, LIMITS, CONNECT_MS } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
 import { $, el, toast, sheet, busy, enterPressesOk } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
-import { backend, isDenied } from "./backend.js?v=dev";
+import { backend, isDenied, isBusy, within } from "./backend.js?v=dev";
 import { RoomCipher, deviceKeys, b64u, KEY_RE, RAW_KEY_RE } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { me, ensureMe, askMe, memberRecord } from "./identity.js?v=dev";
@@ -15,7 +15,8 @@ import { roomPath, showChat, backdrop, forgetRoom, showResume } from "./home.js?
 export function failed(e) {
   console.error(e);
   if (e?.message === "no-config") toast(t("noDb"));
-  else toast(t(navigator.onLine ? "netErr" : "offline"));
+  else if (!navigator.onLine) toast(t("offline"));
+  else toast(t(isBusy(e) ? "serverBusy" : "netErr"));
 }
 const newCode = () => Array.from({ length: 4 }, () => CODE_CHARS[(Math.random() * CODE_CHARS.length) | 0]).join("");
 // my member record as I join or open a room
@@ -42,7 +43,7 @@ export async function create() {
   if (await sheet(t("newRoom"), body, [["no", t("cancel")], ["yes", t("start"), "primary"]]) !== "yes") return;
   busy(true);
   try {
-    await backend.connect();
+    await within(backend.connect(), CONNECT_MS);
     const raw = enc ? crypto.getRandomValues(new Uint8Array(32)) : null;
     const cipher = raw && (await RoomCipher.fromRaw(raw));
     const name = title.value.trim().slice(0, LIMITS.roomTitle), uid = backend.uid, T = backend.stamp();
@@ -52,7 +53,7 @@ export async function create() {
       if (cipher) { meta.enc = true; meta.kc = await cipher.keyCheck(); if (name) meta.xt = await cipher.seal({ t: name }, "t"); }
       else if (name) meta.title = name;
       try {
-        await backend.update({ [`rooms/${code}`]: { meta, members: { [uid]: await joining(cipher, m) }, names: { [await nameClaim(cipher, m.name)]: uid } } });
+        await within(backend.update({ [`rooms/${code}`]: { meta, members: { [uid]: await joining(cipher, m) }, names: { [await nameClaim(cipher, m.name)]: uid } } }), CONNECT_MS);
       } catch (e) { if (isDenied(e)) continue; throw e; } // code in use: draw another
       if (raw) store.set(KEYS.roomKey(code), b64u(raw));
       backend.stat(cipher ? "salons" : "rooms");
@@ -84,9 +85,9 @@ export async function join(raw) {
   if (room?.code === code && !room.gone) { roomPath(code); showChat(); return; }
   busy(true);
   try {
-    await backend.connect();
+    await within(backend.connect(), CONNECT_MS);
     const ref = (path) => backend.roomRef(code, path), uid = backend.uid;
-    const meta = (await backend.fb.get(ref("meta"))).val();
+    const meta = (await within(backend.fb.get(ref("meta")), CONNECT_MS)).val();
     if (!meta || meta.last < backend.now() - DAY) {
       toast(t("notFound"));
       if (meta) backend.update({ [`rooms/${code}`]: null }).catch(() => {}); // expired: clear it out
@@ -125,7 +126,10 @@ export async function join(raw) {
       }
     }
     await enter(code, cipher);
-  } catch (e) { failed(e); } finally { busy(false); }
+  } catch (e) {
+    failed(e);
+    if (isBusy(e)) $("#joinCode").value = code; // one tap to try again, even when they came by a link
+  } finally { busy(false); }
 }
 // the room's key if this device has the right one, asking for the invite link when it doesn't; false if they give up
 async function unlock(code, meta) {

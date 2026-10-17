@@ -20,10 +20,12 @@ class Backend {
   user = null;   // the signed-in user, for an ID token (not with the emulator)
   offset = 0;    // server time minus this device's clock
   #connecting = null;
+  #paused = false;
 
   get configured() { return !!FB?.databaseURL; }
   connect() {
     if (!this.configured) return Promise.reject(new Error("no-config"));
+    this.resume();
     if (!this.#connecting) this.#connecting = (async () => {
       const fb = (this.fb = await import(SDK));
       const app = fb.initializeApp(FB);
@@ -37,6 +39,10 @@ class Backend {
     })().catch((e) => { this.#connecting = null; throw e; });
     return this.#connecting;
   }
+  /* Every open page holds a connection, and the free plan allows only 100 at once: when they're all taken, the
+     database turns new ones away and the SDK keeps retrying without ever failing, so a page nothing needs lets go. */
+  pause() { if (this.db && !this.#paused) { this.#paused = true; this.fb.goOffline(this.db); } }
+  resume() { if (this.#paused) { this.#paused = false; this.fb.goOnline(this.db); } }
   now() { return Date.now() + this.offset; }
   // proof of who this is for our own server (the photo service); the emulator's is unsigned, like the SDK's mock token
   idToken() {
@@ -60,3 +66,7 @@ class Backend {
 }
 export const backend = new Backend();
 export const isDenied = (e) => /permission/i.test(e?.message || "");
+// p, or a "timeout" error once ms go by: the SDK waits for the server forever (the work itself carries on)
+export const within = (p, ms) => new Promise((ok, no) => { const id = setTimeout(() => no(new Error("timeout")), ms); p.then((v) => { clearTimeout(id); ok(v); }, (e) => { clearTimeout(id); no(e); }); });
+// the server is out of reach or turning people away (all connections taken, too many new sign-ins from one network)
+export const isBusy = (e) => e?.message === "timeout" || e?.code === "auth/too-many-requests" || e?.code === "auth/quota-exceeded";

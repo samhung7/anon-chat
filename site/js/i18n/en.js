@@ -86,6 +86,7 @@ I18N.add("en", {
   // connection
   noDb: "The database isn't set up yet",
   netErr: "Connection problem. Please try again",
+  serverBusy: "Can't reach the server right now. Please try again in a moment",
   offline: "No internet connection",
 
   // creating and joining

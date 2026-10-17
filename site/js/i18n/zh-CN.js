@@ -86,6 +86,7 @@ I18N.add("zh-CN", {
   // connection
   noDb: "尚未配置数据库",
   netErr: "网络连接出错，请重试",
+  serverBusy: "服务器暂时连不上或太忙，请稍后再试",
   offline: "网络未连接",
 
   // creating and joining

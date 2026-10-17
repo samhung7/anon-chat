@@ -22,6 +22,8 @@ export const MAX_LOAD = 2000;      // the most messages loaded on entering a roo
 export const GROUP_MS = 180000;    // messages from one person this close together share one header
 export const FRESH_MS = 60000;     // a message this new still notifies (older ones are history loading)
 export const POST_GAP_MS = 1000;   // posts from this device go out at least this far apart (the rules allow 800 ms)
+export const CONNECT_MS = 20000;   // opening or joining a room gives up on a server this slow to answer, instead of spinning on
+export const IDLE_MS = 60000;      // a hidden page with no room on screen lets go of its connection after this long
 
 // GIFs come from the KLIPY search and only from KLIPY's servers (database.rules.json checks the same)
 export const KLIPY_KEY = CFG.klipyKey;
