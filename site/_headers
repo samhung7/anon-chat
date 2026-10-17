@@ -1,0 +1,5 @@
+# Response headers on Cloudflare Pages (GitHub Pages ignores this file).
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin

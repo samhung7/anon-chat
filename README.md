@@ -19,7 +19,7 @@ Made for lecture Q&A, anonymous reading groups, workshops and team projects. Int
 ## Layout
 
 ```
-site/                       the whole app, served as-is by GitHub Pages
+site/                       the whole app, served as-is by Cloudflare Pages (GitHub Pages until the move)
   index.html, css/app.css
   js/app/                   the page itself, as ES modules served as they are (no build step); main.js starts it.
                             room.js keeps one room live (Room, its data and events), api.js is every write to it,
@@ -90,7 +90,12 @@ The page tests need Chromium: `npx playwright install chromium` once.
 A module in `site/js/app/` imports the others as `./name.js?v=dev`; the deploy stamps the commit there too, and `site/sw.js` lists each module (the unit tests check both).
 After editing `tools/rules.py`, run `npm run rules` and commit the new `database.rules.json` (CI checks they match).
 
-Live at https://stoatalk.app. Pushing to `main` deploys `site/` to GitHub Pages (`.github/workflows/pages.yml`); the custom domain is set in the repository's Settings > Pages, with the apex `A`/`AAAA` records pointing at GitHub Pages and `www` as a `CNAME` to `<user>.github.io`. The share card (`og:image` in `index.html`) uses an absolute URL on that domain.
+Live at https://stoatalk.app. Pushing to `main` deploys `site/` to Cloudflare Pages (`.github/workflows/cloudflare-pages.yml`, project `stoatalk`, also at `stoatalk.pages.dev`), after `tools/stamp.sh` ties the page to the commit; `site/_headers` sets the response headers there. Until the domain moves, GitHub Pages (`pages.yml`) still serves stoatalk.app.
+
+Moving the domain to Cloudflare Pages, once (the `stoatalk.app` zone is already on Cloudflare for the photo service):
+1. Give the `CLOUDFLARE_API_TOKEN` secret's token the extra permission Account > Cloudflare Pages > Edit, run `cloudflare-pages.yml` (Actions > Run workflow) and try the site at `stoatalk.pages.dev`. Photos can't be sent from there (the photo service only accepts `https://stoatalk.app`); everything else works.
+2. In Cloudflare, Workers & Pages > `stoatalk` > Custom domains: add `stoatalk.app`. Cloudflare offers to replace the apex `A`/`AAAA` records that point at GitHub Pages; accept. Then send `www.stoatalk.app` to the apex with a Redirect Rule (Rules > Redirect Rules, 301, keep the query string) in place of its `CNAME` to GitHub.
+3. When stoatalk.app answers from Cloudflare (response header `server: cloudflare`, no `x-github-request-id`), remove the custom domain under the repository's Settings > Pages and delete `pages.yml`.
 
 ## Setting up Firebase
 
@@ -98,7 +103,7 @@ Live at https://stoatalk.app. Pushing to `main` deploys `site/` to GitHub Pages 
 2. **Authentication** > Sign-in method: enable **Anonymous**.
 3. **Realtime Database** > Create database (Singapore, `asia-southeast1`, is closest to Taiwan), start in locked mode, then paste `database.rules.json` into the **Rules** tab and publish. Or: `npx firebase deploy --only database --project <project-id>`.
 4. Project settings > Your apps > add a **Web app**, and copy its config (`apiKey`, `authDomain`, `databaseURL`, `projectId`, `appId`) into `site/js/config.js`.
-5. Authentication > Settings > Authorized domains: add your site's domain (`stoatalk.app`, or `<user>.github.io`).
+5. Authentication > Settings > Authorized domains: add your site's domain (`stoatalk.app`, and `stoatalk.pages.dev` for trying a deploy).
 6. For the 24-hour cleanup and for publishing rule changes automatically: Project settings > Service accounts > Generate new private key, then in the GitHub repository add the secrets `FIREBASE_SERVICE_ACCOUNT` (the whole JSON file) and `FIREBASE_DATABASE_URL`. Without them the cleanup job skips itself, and idle rooms stay until someone tries to open them or their code is reused. With them, `deploy-rules.yml` publishes `database.rules.json` whenever it changes on `main`.
 7. GIF search: create a key at https://klipy.com/developers and put it in `site/js/config.js` as `klipyKey`. Without one the GIF button is hidden. GIFs are only accepted from `*.klipy.com` (checked in the rules too).
 
