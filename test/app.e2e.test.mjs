@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { readFile, readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { chromium } from "playwright";
+import { startPhotoStub } from "./photo-stub.mjs";
 
 const NS = "demo-anon-chat";
 const EMU = "http://127.0.0.1:9000";
@@ -16,7 +17,7 @@ const asOwner = { Authorization: "Bearer owner" };
 const dbUrl = (path) => `${EMU}/${path}.json?ns=${NS}`;
 const dbGet = (path) => fetch(dbUrl(path), { headers: asOwner }).then((r) => r.json());
 
-let server, base, browser, errors;
+let server, base, browser, errors, photos;
 
 before(async () => {
   // the rules the live database runs, so the page meets the same refusals it would in production
@@ -34,11 +35,13 @@ before(async () => {
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch();
+  photos = await startPhotoStub(); // the page sends photos to :8787 with ?emu
 });
-after(async () => { await browser?.close(); server?.close(); });
+after(async () => { await browser?.close(); server?.close(); await photos?.close(); });
 beforeEach(async () => {
   errors = [];
   await fetch(dbUrl(""), { method: "DELETE", headers: asOwner });
+  photos?.bucket.objects.clear();
 });
 
 // someone with their own browser (their own device storage and anonymous id)
@@ -329,6 +332,8 @@ test("pins, reports, typing, mentions, photos, blocking", async () => {
   await alice.locator("#list .imgbub img.photo[src^='blob:']").waitFor();
   assert.equal(Object.keys(await dbGet(`rooms/${code}/files`)).length, 1);
 
+  assert.equal(photos.bucket.objects.size, 1);
+
   // Bob blocks Alice: her messages fold away on his device only
   await bob.locator("#list .msg", { hasText: "read the rules" }).locator(".more").click();
   await press(bob, "block");
@@ -336,6 +341,44 @@ test("pins, reports, typing, mentions, photos, blocking", async () => {
   await bob.locator("#list .msg.folded").first().waitFor();
   noErrors();
 });
+
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR4nGP4z8DwHwyBDAYGBgYGAFHkCPuk1IufAAAAAElFTkSuQmCC", "base64");
+for (const priv of [false, true]) test(`photos live in R2 (${priv ? "sealed, in a Private Salon" : "as JPEG, in an Open Stoa"}), and go with their message and their room`, async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv });
+  await joinByLink(bob, url, "Bob");
+  const send = () => bob.locator("#photoFile").setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: PNG });
+  await send();
+  await alice.locator("#list .imgbub img.photo[src^='blob:']").waitFor(); // fetched from the bucket and, if sealed, opened
+  await send();
+  await alice.locator("#list .imgbub img.photo[src^='blob:']").nth(1).waitFor();
+  const keys = [...photos.bucket.objects.keys()];
+  assert.equal(keys.length, 2);
+  for (const k of keys) assert.match(k, new RegExp(`^${code}/emu[a-z0-9]+/[A-Za-z0-9_-]+\\.${priv ? "bin" : "jpg"}$`));
+  const body = photos.bucket.objects.get(keys[0]).body;
+  assert.equal(body[0] === 0xff && body[1] === 0xd8, !priv, "plain photos are JPEG, sealed ones aren't readable");
+  const files = await dbGet(`rooms/${code}/files`);
+  assert.equal(Object.keys(files).length, 2);
+  for (const f of Object.values(files)) assert.ok(!("d" in f), "only a marker in the database");
+
+  // Bob deletes one: its marker and its picture go
+  await bob.locator("#list .msg.mine .more").first().click();
+  await press(bob, "del");
+  await press(bob, "yes");
+  await alice.locator("#list .imgbub").nth(1).waitFor({ state: "detached" });
+  await waitUntil(() => photos.bucket.objects.size === 1);
+  assert.equal(Object.keys(await dbGet(`rooms/${code}/files`)).length, 1);
+
+  // the owner ends the room: the other picture goes too
+  await menuPick(alice, "end");
+  await press(alice, "yes");
+  await alice.locator("#home").waitFor();
+  await waitUntil(() => photos.bucket.objects.size === 0);
+  noErrors();
+});
+async function waitUntil(ok, ms = 5000) {
+  for (const end = Date.now() + ms; !ok(); await new Promise((r) => setTimeout(r, 50))) if (Date.now() > end) assert.fail("timed out");
+}
 
 test("owner settings: rename, size limit, hand over; coming back after a reload; language", async () => {
   const alice = await person("a"), bob = await person("b");

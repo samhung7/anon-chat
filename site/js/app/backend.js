@@ -8,6 +8,8 @@ if (params.has("emu")) store.set(KEYS.emu, params.get("emu") === "0" ? null : "1
 export const EMU = !!store.get(KEYS.emu);
 const FB = EMU ? { apiKey: "demo-key", projectId: "demo-anon-chat", databaseURL: `http://${location.hostname}:9000?ns=demo-anon-chat` } : CFG.firebase;
 const SDK = new URL("js/vendor/firebase.js", location.href).href;
+// where photos go: our upload service and the public host it stores them on (a local stand-in with the emulator)
+export const PHOTOS = EMU ? { api: `http://${location.hostname}:8787`, host: `http://${location.hostname}:8787` } : CFG.photos || null;
 // with the emulator, ?as= gives each tab its own person; links keep it
 export const asParam = (sep) => (EMU && params.get("as") ? sep + "as=" + params.get("as") : "");
 
@@ -15,6 +17,7 @@ class Backend {
   fb = null;     // the SDK's functions
   db = null;
   uid = null;    // this device's anonymous id
+  user = null;   // the signed-in user, for an ID token (not with the emulator)
   offset = 0;    // server time minus this device's clock
   #connecting = null;
 
@@ -29,12 +32,20 @@ class Backend {
         const k = KEYS.emuUid(params.get("as"));
         this.uid = store.get(k) || "emu" + Math.random().toString(36).slice(2, 12); store.set(k, this.uid);
         fb.connectDatabaseEmulator(this.db, location.hostname, 9000, { mockUserToken: { sub: this.uid, user_id: this.uid } });
-      } else this.uid = (await fb.signInAnonymously(fb.getAuth(app))).user.uid;
+      } else { this.user = (await fb.signInAnonymously(fb.getAuth(app))).user; this.uid = this.user.uid; }
       fb.onValue(fb.ref(this.db, ".info/serverTimeOffset"), (s) => (this.offset = s.val() || 0));
     })().catch((e) => { this.#connecting = null; throw e; });
     return this.#connecting;
   }
   now() { return Date.now() + this.offset; }
+  // proof of who this is for our own server (the photo service); the emulator's is unsigned, like the SDK's mock token
+  idToken() {
+    if (this.user) return this.user.getIdToken();
+    const enc = (o) => btoa(JSON.stringify(o)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const iat = Math.floor(Date.now() / 1000);
+    return Promise.resolve(enc({ alg: "none", type: "JWT" }) + "." + enc({ iss: `https://securetoken.google.com/${FB.projectId}`, aud: FB.projectId,
+      iat, exp: iat + 3600, auth_time: iat, sub: this.uid, user_id: this.uid, firebase: { sign_in_provider: "anonymous", identities: {} } }) + ".");
+  }
   // "the server's time" in a write
   stamp() { return this.fb.serverTimestamp(); }
   ref(path) { return path ? this.fb.ref(this.db, path) : this.fb.ref(this.db); }

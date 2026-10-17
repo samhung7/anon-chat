@@ -20,16 +20,21 @@ export const RAW_KEY_RE = /^[A-Za-z0-9_-]{43}$/;
 const hkdf = async (bits, info, alg, use) => SUB.deriveKey({ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: TE.encode(info) },
   await SUB.importKey("raw", bits, "HKDF", false, ["deriveKey"]), alg, false, use);
 
-// sealed: base64url of a 12-byte IV followed by the AES-GCM ciphertext; null when it doesn't open
-export async function sealBytes(key, bytes, aad) {
+// sealed bytes: a 12-byte IV followed by the AES-GCM ciphertext (photos are stored like this, as they are)
+export async function sealRaw(key, bytes, aad) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = new Uint8Array(await SUB.encrypt({ name: "AES-GCM", iv, additionalData: TE.encode(aad) }, key, bytes));
   const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
-  return b64u(out);
+  return out;
 }
-export async function unsealBytes(key, s, aad) {
-  try { const b = unb64u(s); return new Uint8Array(await SUB.decrypt({ name: "AES-GCM", iv: b.slice(0, 12), additionalData: TE.encode(aad) }, key, b.slice(12))); }
+export async function unsealRaw(key, b, aad) {
+  try { return new Uint8Array(await SUB.decrypt({ name: "AES-GCM", iv: b.slice(0, 12), additionalData: TE.encode(aad) }, key, b.slice(12))); }
   catch (e) { return null; }
+}
+// sealed: the same as base64url text; null when it doesn't open
+export const sealBytes = async (key, bytes, aad) => b64u(await sealRaw(key, bytes, aad));
+export async function unsealBytes(key, s, aad) {
+  try { return await unsealRaw(key, unb64u(s), aad); } catch (e) { return null; }
 }
 export const seal = (key, obj, aad) => sealBytes(key, TE.encode(JSON.stringify(obj)), aad);
 export async function unseal(key, s, aad) {
@@ -50,6 +55,8 @@ export class RoomCipher {
   unseal(s, aad) { return unseal(this.aes, s, aad); }
   sealBytes(bytes, aad) { return sealBytes(this.aes, bytes, aad); }
   unsealBytes(s, aad) { return unsealBytes(this.aes, s, aad); }
+  sealRaw(bytes, aad) { return sealRaw(this.aes, bytes, aad); }
+  unsealRaw(b, aad) { return unsealRaw(this.aes, b, aad); }
   async mac(s) { return hex(await SUB.sign("HMAC", this.macKey, TE.encode(s))).slice(0, 24); }
   // lets a joiner tell a wrong link from a right one without the server learning the key
   async keyCheck() { return (await this.mac("key-check")).slice(0, 16); }

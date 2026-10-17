@@ -263,15 +263,15 @@ rules = {"rules": {
                     "$other": NO,
                 },
             },
-            # photos, one per node: JPEG bytes as base64url, or sealed with the room key in an encrypted room.
-            # Compressed on the device first (about 1280px, a few hundred KB), so this limit is generous.
+            # photos, one marker per picture: who sent it and when. The picture itself is in R2, put there by the photo
+            # service (worker/), which only takes one from a member and only deletes one whose marker is gone.
+            # Older markers also carry the bytes (d); they're still read and deleted, but no new one can be written.
             "files": {
                 ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
                 "$id": {
                     ".write": file_write,
-                    ".validate": "newData.hasChildren(['by', 'd', 'at'])",
+                    ".validate": "newData.hasChildren(['by', 'at'])",
                     "by": {".validate": "newData.isString()"},
-                    "d": {".validate": S(450000)},
                     "at": {".validate": "newData.val() === now"},
                     "$other": NO,
                 },

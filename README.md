@@ -31,10 +31,13 @@ site/                       the whole app, served as-is by GitHub Pages
   sw.js, manifest.webmanifest, icons/
 database.rules.json         who may read and write what; generated from tools/rules.py
 tools/rules.py              the rules, written readably (npm run rules)
-tools/cleanup/              hourly job that deletes rooms idle for 24 hours; stats.mjs prints the usage counts
+tools/cleanup/              hourly job that deletes rooms idle for 24 hours, and photos no room points at;
+                            stats.mjs prints the usage counts
+worker/                     the photo service, a Cloudflare Worker at api.stoatalk.app: puts photos into R2 and deletes them
 test/rules.test.mjs         rule tests against the Firebase emulator
 test/app.e2e.test.mjs       the page in a real browser (Playwright), two or three people at once, against the emulator
 test/unit.test.mjs          the record format, encryption, kinds of message, translations and module wiring
+test/worker.test.mjs        the photo service and the cleanup's choice of stray photos (photo-stub.mjs runs it locally)
 ```
 
 Data in the Realtime Database:
@@ -50,6 +53,7 @@ rooms/{code}/members/{uid}  name, avatar, joined, online, pk (public key for pri
 rooms/{code}/names/{key}    uid holding that nickname: the lowercased name, or h in an encrypted room   any signed-in device
 rooms/{code}/msgs/{id}      by, name, avatar, text or gif{url,w,h,title}, at, re/{0-5}/{uid}  members only
                             encrypted room: by, x (sealed text or gif, name, avatar), at, re
+rooms/{code}/files/{id}     by, at: the marker of a photo; the picture is in R2      members only
 rooms/{code}/dm/{uidA_uidB}/{id}  by, to, x (sealed text or gif), at                    those two only
 rooms/{code}/banned/{uid}   people the owner or a co-host removed
 rooms/{code}/reports/{msg}/{uid}  r (reason 0-3), at                                   owner and co-hosts only
@@ -97,5 +101,20 @@ Live at https://stoatalk.app. Pushing to `main` deploys `site/` to GitHub Pages 
 5. Authentication > Settings > Authorized domains: add your site's domain (`stoatalk.app`, or `<user>.github.io`).
 6. For the 24-hour cleanup and for publishing rule changes automatically: Project settings > Service accounts > Generate new private key, then in the GitHub repository add the secrets `FIREBASE_SERVICE_ACCOUNT` (the whole JSON file) and `FIREBASE_DATABASE_URL`. Without them the cleanup job skips itself, and idle rooms stay until someone tries to open them or their code is reused. With them, `deploy-rules.yml` publishes `database.rules.json` whenever it changes on `main`.
 7. GIF search: create a key at https://klipy.com/developers and put it in `site/js/config.js` as `klipyKey`. Without one the GIF button is hidden. GIFs are only accepted from `*.klipy.com` (checked in the rules too).
+
+## Photos (Cloudflare R2)
+
+A photo is compressed on the device, sealed with the room key in a Private Salon, and sent to the photo service
+(`worker/`), which checks the person's Firebase ID token and that they're in the room, then stores it in the R2
+bucket `stoatalk-photos` at `{code}/{uid}/{id}.jpg` (`.bin` when sealed). Everyone downloads it from
+`https://files.stoatalk.app/...`, the bucket's public domain, through Cloudflare's cache: R2 charges nothing for
+downloads, where the database charges for every copy. Deleting the message, or ending the room, asks the service to
+delete the picture; the hourly cleanup removes any the page missed.
+
+Setup, once: in Cloudflare create the bucket `stoatalk-photos`, connect the custom domain `files.stoatalk.app`, and
+give it a CORS policy allowing `GET`/`HEAD` from `https://stoatalk.app`. In GitHub add the secrets
+`CLOUDFLARE_API_TOKEN` (an "Edit Cloudflare Workers" token) and `CLOUDFLARE_ACCOUNT_ID`, which `worker.yml` uses to
+deploy the service to `api.stoatalk.app`, and `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` (an R2 token with object read
+and write on the bucket), which the cleanup uses.
 
 Capacity on the free (Spark) plan: 100 people online at once across all rooms, 1 GB stored, 10 GB downloaded a month. A lecture with more than 100 people needs the pay-as-you-go (Blaze) plan; chat text is small, so the cost is usually tiny.
