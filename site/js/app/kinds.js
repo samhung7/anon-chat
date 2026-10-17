@@ -12,7 +12,7 @@ import { str, num, arr, listOf, isObj, clamp, PUSH_ID } from "./clean.js?v=dev";
 import { linkify } from "./richtext.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { backend } from "./backend.js?v=dev";
-import { photoUrl, photoImg, viewPhoto } from "./photos.js?v=dev";
+import { photoUrl, photoImg, viewPhoto, dropPhoto } from "./photos.js?v=dev";
 import { livePoll, livePollView, pollView, pollVoters } from "./polls.js?v=dev";
 import { liveDraw, drawView } from "./draws.js?v=dev";
 
@@ -43,7 +43,7 @@ const cleanGif = (g) => ({ url: g.url.slice(0, LIMITS.gifUrl), w: Math.min(+g.w 
    preview(v)                shown at the top of its ⋯ menu; pinned(v) in the pinned bar
    notice(v)                 a notification's text
    actions                   more entries for its ⋯ menu: [action, label, when(v), run(id, v)]
-   removes(v)                more paths deleted with it
+   removes(v)                more paths deleted with it; removed(v) what else to do once it's gone
    toSaved(v, pics)          its fields in an exported record; readSaved(m) the same, from an untrusted file
    savedText(m), savedHtml(m, src), savedBubble(m)   a saved one in a .txt file, an .html file, and on screen */
 const text = {
@@ -93,6 +93,7 @@ const photo = {
   pinned: (v) => photoImg(v, true),
   actions: [["save", "savePhoto", () => true, (id, v) => photoUrl(v.img.f, v.by).then((u) => (u ? saveFile(u, `photo-${room.code}-${id}.jpg`) : toast(t("photoGone"))))]],
   removes: (v) => ({ ["files/" + v.img.f]: null }), // the picture goes with its message
+  removed: (v) => dropPhoto(room.code, v.by, v.img.f),
   toSaved: (v, pics, m) => { if (!v.img) return {}; pics.push([m, v]); return { photo: { w: v.img.w, h: v.img.h } }; },
   readSaved: (m) => { const p = m?.photo; return { photo: isObj(p) ? { w: Math.min(num(p.w), 4000) || 300, h: Math.min(num(p.h), 4000) || 300 } : undefined }; },
   savedText: () => "📷 " + t("photo"),

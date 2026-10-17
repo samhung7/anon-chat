@@ -1,0 +1,17 @@
+# The photo service (src/index.js): a Cloudflare Worker at api.stoatalk.app in front of the R2 bucket stoatalk-photos,
+# which is public at files.stoatalk.app. Deployed by .github/workflows/worker.yml with the CLOUDFLARE_API_TOKEN and
+# CLOUDFLARE_ACCOUNT_ID secrets.
+name = "stoatalk-photos"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = false
+routes = [{ pattern = "api.stoatalk.app", custom_domain = true }]
+
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "stoatalk-photos"
+
+[vars]
+PROJECT_ID = "anon-chat-2792b"
+DATABASE_URL = "https://anon-chat-2792b-default-rtdb.asia-southeast1.firebasedatabase.app"
+ORIGINS = "https://stoatalk.app"

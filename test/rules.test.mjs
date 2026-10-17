@@ -337,15 +337,15 @@ test("ciphertext only in encrypted rooms", async () => {
   await assertSucceeds(set(ref(db("bob"), `rooms/${C}/members/bob/pk`), "cGs")); // publishing a public key
 });
 
-test("photos: the picture sits under files/, the message points at it", async () => {
+test("photos: a marker sits under files/, the message points at it", async () => {
   await createRoom("alice"); await join("bob");
-  const pic = (uid, f, d = "_9j_4AAQ") => update(ref(db(uid)), {
-    [`rooms/${C}/files/${f}`]: { by: uid, d, at: T },
+  const pic = (uid, f, extra = {}) => update(ref(db(uid)), {
+    [`rooms/${C}/files/${f}`]: { by: uid, at: T, ...extra },
     [`rooms/${C}/msgs/m${f}`]: { by: uid, name: "x", avatar: "🦊", img: { f, w: 800, h: 600 }, at: T },
     [`rooms/${C}/members/${uid}/ls`]: T, [`rooms/${C}/members/${uid}/lm`]: "m" + f, [`rooms/${C}/members/${uid}/lf`]: f,
   }).finally(() => admin((d) => remove(ref(d, `rooms/${C}/members/${uid}/ls`))));
   await assertSucceeds(pic("bob", "f1"));
-  await assertFails(pic("bob", "f2", "a".repeat(450001))); // too big
+  await assertFails(pic("bob", "f2", { d: "_9j_4AAQ" })); // the picture itself goes to R2, not into the database
   await assertFails(post("bob", `msgs/mx`, { by: "bob", name: "x", avatar: "🦊", img: { f: "nothere", w: 1, h: 1 }, at: T }));
   await assertFails(post("alice", `msgs/my`, { by: "alice", name: "x", avatar: "🦊", img: { f: "f1", w: 1, h: 1 }, at: T })); // someone else's picture
   await assertFails(set(ref(db("carol"), `rooms/${C}/files/f1`), null)); // only the author (or the owner) deletes it
@@ -353,7 +353,7 @@ test("photos: the picture sits under files/, the message points at it", async ()
   await assertSucceeds(get(ref(db("alice"), `rooms/${C}/files/f1`)));
   await assertSucceeds(update(ref(db("bob"), `rooms/${C}`), { "msgs/mf1": null, "files/f1": null }));
   // a new room can't come with pictures already in it
-  await assertFails(update(ref(db("dave")), { [`rooms/ABCD`]: { meta: { owner: "dave", created: T, last: T, priv: false }, members: { dave: member("d") }, names: { d: "dave" }, files: { f: { by: "dave", d: "x", at: T } } } }));
+  await assertFails(update(ref(db("dave")), { [`rooms/ABCD`]: { meta: { owner: "dave", created: T, last: T, priv: false }, members: { dave: member("d") }, names: { d: "dave" }, files: { f: { by: "dave", at: T } } } }));
 });
 
 test("polls: one vote or several, only while open", async () => {
@@ -384,7 +384,7 @@ test("draws: who took part and who was drawn", async () => {
 
 test("encrypted room: photos, polls and votes are sealed", async () => {
   await createEnc("alice"); await joinEnc("bob", H("b"));
-  await assertSucceeds(update(ref(db("bob"), `rooms/${C}`), { "files/f1": { by: "bob", d: "c2VhbGVk", at: T }, "msgs/m1": { by: "bob", x: "c2VhbGVk", at: T }, "members/bob/ls": T, "members/bob/lm": "m1", "members/bob/lf": "f1" }));
+  await assertSucceeds(update(ref(db("bob"), `rooms/${C}`), { "files/f1": { by: "bob", at: T }, "msgs/m1": { by: "bob", x: "c2VhbGVk", at: T }, "members/bob/ls": T, "members/bob/lm": "m1", "members/bob/lf": "f1" }));
   await assertFails(post("bob", `msgs/m2`, { by: "bob", x: "c2VhbGVk", poll: { q: "明文", o: ["a", "b"], m: false }, at: T }));
   await assertSucceeds(set(ref(db("alice"), `rooms/${C}/msgs/m1/votes/alice`), "c2VhbGVk"));
   await assertFails(set(ref(db("alice"), `rooms/${C}/msgs/m1/votes/alice`), "0,1"));

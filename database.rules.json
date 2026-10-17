@@ -263,12 +263,9 @@
           ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
           "$id": {
             ".write": "(auth != null) && (data.parent().parent().child('members/' + auth.uid).exists()) && (((!data.exists()) && (newData.child('by').val() === auth.uid) && ((newData.parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().child('members/' + auth.uid + '/lf').val() === $id))) || ((!newData.exists()) && ((data.child('by').val() === auth.uid) || ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true)))))",
-            ".validate": "newData.hasChildren(['by', 'd', 'at'])",
+            ".validate": "newData.hasChildren(['by', 'at'])",
             "by": {
               ".validate": "newData.isString()"
-            },
-            "d": {
-              ".validate": "newData.isString() && newData.val().length <= 450000"
             },
             "at": {
               ".validate": "newData.val() === now"

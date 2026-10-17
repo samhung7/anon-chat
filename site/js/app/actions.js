@@ -47,7 +47,7 @@ export async function msgActions(id, v, dm) {
 // the author deletes a message, or the owner or a co-host takes it down (with any reports on it)
 export function removeMsg(id, v) {
   const more = { ...(kindOf(v).removes?.(v) || {}), ...(room.isStaff() ? { ["reports/" + id]: null } : {}) };
-  return room.api.remove(id, more).then(() => v.by !== backend.uid && toast(t("removedToast")), () => toast(t("delFail")));
+  return room.api.remove(id, more).then(() => { kindOf(v).removed?.(v); if (v.by !== backend.uid) toast(t("removedToast")); }, () => toast(t("delFail")));
 }
 async function editMsg(id, v) {
   const input = el("textarea", { class: "field", maxlength: LIMITS.text, rows: 4, id: "editText", "aria-label": t("msgAria") });

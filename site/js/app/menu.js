@@ -15,6 +15,7 @@ import { notifyOn, setNotify } from "./notify.js?v=dev";
 import { exportSheet } from "./records.js?v=dev";
 import { roomUrl, home } from "./home.js?v=dev";
 import { failed } from "./lobby.js?v=dev";
+import { dropRoomPhotos } from "./photos.js?v=dev";
 
 const owner = () => room.isOwner(), staff = () => room.isStaff(), always = () => true;
 // a meta setting the owner flips, with what the toast says after
@@ -92,6 +93,6 @@ async function endRoom() {
   if (a !== "yes") return;
   const r = room;
   r.gone = true; stopRoom(r);
-  try { await r.api.end(); toast(t("endedToast")); } catch (e) { failed(e); }
+  try { await r.api.end(); dropRoomPhotos(r.code); toast(t("endedToast")); } catch (e) { failed(e); }
   closeRoom(r);
 }

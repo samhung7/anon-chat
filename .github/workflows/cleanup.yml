@@ -1,5 +1,6 @@
 # Deletes rooms nobody has written in for 24 hours. Needs two repository secrets:
 # FIREBASE_SERVICE_ACCOUNT (service account JSON) and FIREBASE_DATABASE_URL. Without them the job does nothing.
+# With CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY it also deletes photos in R2 no room points at.
 name: Delete expired rooms
 on:
   schedule:
@@ -13,6 +14,9 @@ jobs:
     env:
       FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     steps:
       - if: env.FIREBASE_SERVICE_ACCOUNT == ''
         run: echo "FIREBASE_SERVICE_ACCOUNT is not set; skipping."
