@@ -93,7 +93,7 @@ export function renderHeader() {
   if (!room) return;
   const meta = room.meta || {}, ui = room.ui;
   $("#roomTitle").textContent = meta.title || t("room");
-  $("#codeBtn").textContent = (meta.enc ? "🔐 " : "") + (meta.priv ? "🔒 " : "") + room.code + (meta.locked ? " · " + t("lockedTag") : "");
+  $("#codeBtn").textContent = (meta.enc ? "🔐 " : "") + room.code + (meta.locked ? " · " + t("lockedTag") : "");
   $("#peopleBtn .n").textContent = Object.values(room.members || {}).filter((m) => m.online !== false).length;
   $("#peopleBtn .dot").hidden = !Object.values(ui.unread).some((n) => n > 0);
   $("#chat .bar [data-a=menu] .dot").hidden = !room.reportCount();

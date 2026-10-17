@@ -22,7 +22,7 @@ export const roomPath = (code) => history.replaceState(null, "", "?room=" + code
 /* ---------- screens ---------- */
 const SCREENS = ["#home", "#chat", "#show", "#record"];
 const only = (screen) => SCREENS.forEach((s) => ($(s).hidden = s !== screen));
-// opening a room's link starts with no screen showing; a question on the way in (nickname, link, password) shows the home page behind it
+// opening a room's link starts with no screen showing; a question on the way in (nickname, invite link) shows the home page behind it
 export function backdrop() { if ($("#home").hidden && $("#chat").hidden && $("#record").hidden) { $("#home").hidden = false; showResume(); } }
 export function showChat() {
   $("#home").hidden = true; $("#record").hidden = true;
@@ -75,7 +75,7 @@ async function resumeRow(code, seen) {
   if (!inside) { forgetRoom(code); return null; }
   let title = meta.title || "";
   if (meta.enc) { try { title = (await (await RoomCipher.fromLink(store.get(KEYS.roomKey(code)))).unseal(meta.xt, "t"))?.t || ""; } catch (e) { title = ""; } }
-  return { code, t: title, enc: !!meta.enc, priv: !!meta.priv };
+  return { code, t: title, enc: !!meta.enc };
 }
 function renderResume() {
   const box = $("#resume"), rows = resumeRows, pages = Math.ceil(rows.length / PAGE);
@@ -86,7 +86,7 @@ function renderResume() {
   $(".roomlist", box).replaceChildren(...rows.slice(resumePage * PAGE, resumePage * PAGE + PAGE).map((r) => el("li", {},
     el("button", { type: "button", class: "roomrow", "data-code": r.code },
       // laid out like the room's own header: its name, then the code on a chip
-      el("span", { class: "txt" }, el("b", { text: r.t || t("room") }), el("span", { class: "codechip", text: (r.enc ? "🔐 " : "") + (r.priv ? "🔒 " : "") + r.code })),
+      el("span", { class: "txt" }, el("b", { text: r.t || t("room") }), el("span", { class: "codechip", text: (r.enc ? "🔐 " : "") + r.code })),
       el("span", { class: "go", text: t("backToRoom") })))));
   $(".pager", box).hidden = pages < 2;
   $(".pager .pg", box).textContent = `${resumePage + 1} / ${pages}`;

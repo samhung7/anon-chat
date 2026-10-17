@@ -102,11 +102,7 @@ I18N.add("ko", {
   notFound: "채팅방을 찾을 수 없어요. 이미 종료되었을 수 있어요",
   bannedToast: "방장이 이 채팅방에서 내보냈어요",
   lockedToast: "방장이 채팅방을 잠갔어요. 지금은 참여할 수 없어요",
-  wrongPw: "비밀번호가 틀렸어요",
   cantJoin: "이 채팅방에 참여할 수 없어요",
-  pwAria: "비밀번호",
-  pwBody: "“{title}”에 들어가려면 비밀번호가 필요해요. 방장에게 받은 비밀번호를 입력해 주세요.",
-  pwTitle: "🔒 비밀번호가 필요해요",
 
   // inside a room
   joinedToast: "{who}님이 들어왔어요",
@@ -154,7 +150,6 @@ I18N.add("ko", {
   // sharing
   shareEnc: "🔐 프라이빗 살롱이에요. 이 링크나 QR 코드로만 참여할 수 있고, 4자리 코드만으로는 들어올 수 없어요.",
   shareOpen: "코드나 링크를 모두에게 보내 주세요. 열기만 하면 참여할 수 있어요.",
-  sharePw: " 설정한 비밀번호도 입력해야 해요.",
   linkAriaShort: "링크",
   copyLink: "링크 복사",
   shareDots: "공유…",
@@ -190,7 +185,6 @@ I18N.add("ko", {
   unlockedDone: "잠금을 해제했어요",
   leaveTitle: "채팅방을 나갈까요?",
   leaveBody: "나가면 새 메시지를 볼 수 없어요.",
-  leavePw: " 다시 들어오려면 비밀번호를 다시 입력해야 해요.",
   leave: "나가기",
   renameEnc: "프라이빗 살롱의 이름도 암호화되어 서버는 볼 수 없어요.",
   renameOpen: "모두에게 새 이름이 보여요.",

@@ -102,11 +102,7 @@ I18N.add("pt", {
   notFound: "Sala não encontrada. Talvez ela já tenha sido encerrada",
   bannedToast: "O anfitrião removeu você desta sala",
   lockedToast: "O anfitrião trancou esta sala. Não é possível entrar agora",
-  wrongPw: "Senha incorreta",
   cantJoin: "Não foi possível entrar nesta sala",
-  pwAria: "Senha",
-  pwBody: "“{title}” exige uma senha. Digite a que o anfitrião passou para você.",
-  pwTitle: "🔒 É preciso uma senha",
 
   // inside a room
   joinedToast: "{who} entrou",
@@ -154,7 +150,6 @@ I18N.add("pt", {
   // sharing
   shareEnc: "🔐 Este é um Salão Privado: as pessoas entram com este link ou o QR code. Só o código de 4 caracteres não basta.",
   shareOpen: "Envie o código ou o link para todo mundo. É só abrir para entrar.",
-  sharePw: " Também vão precisar da senha que você definiu.",
   linkAriaShort: "Link",
   copyLink: "Copiar link",
   shareDots: "Compartilhar…",
@@ -190,7 +185,6 @@ I18N.add("pt", {
   unlockedDone: "Destrancada",
   leaveTitle: "Sair da sala?",
   leaveBody: "Depois de sair, você não verá novas mensagens.",
-  leavePw: " Para voltar, vai precisar da senha de novo.",
   leave: "Sair",
   renameEnc: "O nome de um Salão Privado também é criptografado; o servidor não consegue vê-lo.",
   renameOpen: "Todos vão ver o novo nome.",

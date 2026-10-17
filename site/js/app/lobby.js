@@ -4,7 +4,7 @@ import { t } from "./text.js?v=dev";
 import { $, el, toast, sheet, busy, enterPressesOk } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend, isDenied } from "./backend.js?v=dev";
-import { RoomCipher, deviceKeys, b64u, hashPw, KEY_RE, RAW_KEY_RE } from "./crypto.js?v=dev";
+import { RoomCipher, deviceKeys, b64u, KEY_RE, RAW_KEY_RE } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { me, ensureMe, askMe, memberRecord } from "./identity.js?v=dev";
 import { nameClaim } from "./room.js?v=dev";
@@ -48,7 +48,7 @@ export async function create() {
     const name = title.value.trim().slice(0, LIMITS.roomTitle), uid = backend.uid, T = backend.stamp();
     for (let i = 0; i < 30; i++) {
       const code = newCode();
-      const meta = { owner: uid, created: T, last: T, priv: false };
+      const meta = { owner: uid, created: T, last: T };
       if (cipher) { meta.enc = true; meta.kc = await cipher.keyCheck(); if (name) meta.xt = await cipher.seal({ t: name }, "t"); }
       else if (name) meta.title = name;
       try {
@@ -89,7 +89,7 @@ export async function join(raw) {
     const meta = (await backend.fb.get(ref("meta"))).val();
     if (!meta || meta.last < backend.now() - DAY) {
       toast(t("notFound"));
-      if (meta) backend.update({ [`rooms/${code}`]: null, [`secrets/${code}`]: null }).catch(() => {}); // expired: clear it out
+      if (meta) backend.update({ [`rooms/${code}`]: null }).catch(() => {}); // expired: clear it out
       store.set(KEYS.roomKey(code), null);
       forgetRoom(code); if (!$("#home").hidden) showResume();
       return;
@@ -103,18 +103,11 @@ export async function join(raw) {
     if (meta.cap && (meta.n || 0) >= meta.cap) { toast(t("capFull")); return; }
     let m = await asking(ensureMe, !me());
     if (!m) return;
-    let key = null;
-    if (meta.priv) { // an old password room
-      const pw = await asking(() => askPassword(meta, code));
-      if (pw == null) return;
-      key = await hashPw(code, pw);
-    }
     for (let tries = 0; ; tries++) {
       const k = await nameClaim(cipher, m.name);
       const holder = await backend.val(ref("names/" + k));
       const at = (path) => `rooms/${code}/${path}`;
       const upd = { [at(`members/${uid}`)]: await joining(cipher, m), [at(`names/${k}`)]: uid, [at("meta/last")]: backend.stamp() };
-      if (key) upd[at(`keys/${uid}`)] = key;
       // a room with a size limit counts its members: joining adds one (and fails, to try again, if someone got in first)
       if (meta.cap) {
         const counted = await backend.val(ref("meta/n"));
@@ -126,18 +119,13 @@ export async function join(raw) {
         if (!isDenied(e)) throw e;
         const taken = holder && holder !== uid; // someone here already goes by this name
         if (meta.cap && tries < 3 && !taken) continue;
-        if (!taken) { toast(t(meta.priv ? "wrongPw" : "cantJoin")); return; }
+        if (!taken) { toast(t("cantJoin")); return; }
         m = await asking(() => askMe(false, t("nameTakenJoin", { name: m.name }), false));
         if (!m) return;
       }
     }
     await enter(code, cipher);
   } catch (e) { failed(e); } finally { busy(false); }
-}
-function askPassword(meta, code) {
-  const input = enterPressesOk(el("input", { class: "field", maxlength: 40, type: "password", id: "joinPw", autocomplete: "off", "aria-label": t("pwAria") }));
-  const body = el("div", {}, el("p", { class: "muted", text: t("pwBody", { title: meta.title || code }) }), input);
-  return sheet(t("pwTitle"), body, [["no", t("cancel")], ["yes", t("join"), "primary"]], { onOpen: () => input.focus() }).then((a) => (a === "yes" && input.value.trim() ? input.value.trim() : null));
 }
 // the room's key if this device has the right one, asking for the invite link when it doesn't; false if they give up
 async function unlock(code, meta) {
