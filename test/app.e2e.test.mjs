@@ -85,6 +85,8 @@ async function menuPick(page, a) {
   await page.locator("#chat .bar [data-a=menu]").click();
   await press(page, a);
 }
+// the header shows "Room" until the room's details arrive from the database, so wait for the title
+const titleIs = (page, title) => page.locator("#roomTitle", { hasText: new RegExp(`^${title}$`) }).waitFor();
 const noErrors = () => assert.deepEqual(errors, []);
 async function until(check, ms = 10000) {
   for (const end = Date.now() + ms; !(await check()); await new Promise((ok) => setTimeout(ok, 100))) if (Date.now() > end) throw new Error("timed out");
@@ -95,7 +97,7 @@ test("open room: create, join with the code, talk, react, reply, edit, delete", 
   const { code, url } = await createRoom(alice, "Alice", { title: "Book club" });
   assert.match(code, /^[2-9A-HJKMNP-Z]{4}$/);
   assert.ok(!url.includes("#k="), "an open room's link has no key");
-  assert.equal(await alice.locator("#roomTitle").textContent(), "Book club");
+  await titleIs(alice, "Book club");
 
   // the code alone is enough for an open room
   await bob.locator("#joinCode").fill(code.toLowerCase());
@@ -148,7 +150,7 @@ test("private salon: only ciphertext on the server, the link is needed, private 
   assert.equal(meta.title, undefined, "the title is only kept sealed");
 
   await joinByLink(bob, url, "Bob");
-  assert.equal(await bob.locator("#roomTitle").textContent(), "Secret");
+  await titleIs(bob, "Secret");
   await say(alice, "top secret words");
   await bubble(bob, "top secret words").waitFor();
   const msgs = Object.values(await dbGet(`rooms/${code}/msgs`));
@@ -363,7 +365,7 @@ test("owner settings: rename, size limit, hand over; coming back after a reload;
   // a reload comes back into the room; home lists it
   await bob.reload();
   await bob.locator("#chat").waitFor();
-  assert.equal(await bob.locator("#roomTitle").textContent(), "New name");
+  await titleIs(bob, "New name");
   await bob.locator("#chat .bar [data-a=home]").click();
   await bob.locator("#resume .roomrow", { hasText: "New name" }).waitFor();
 
