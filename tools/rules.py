@@ -33,9 +33,7 @@ member_join = j(
     # a room with a size limit (meta/cap) counts its members in meta/n: joining adds one, within the limit
     o(f"!{ROOM}.child('meta/cap').exists()",
       j(f"{NEWROOM}.child('meta/n').val() === {ROOM}.child('meta/n').val() + 1", f"{NEWROOM}.child('meta/n').val() <= {ROOM}.child('meta/cap').val()")),
-    o(f"{ROOM}.child('meta/priv').val() !== true",
-      j("root.child('secrets/' + $code).exists()",
-        "newData.parent().parent().child('keys/' + $uid).val() === root.child('secrets/' + $code).val()")),
+    f"{ROOM}.child('meta/priv').val() !== true",   # an old password room, while it lasts: nobody new gets in
 )
 member_write = o(
     j("auth.uid === $uid", f"!{ROOM}.child('banned/' + $uid).exists()", o("data.exists()", member_join)),
@@ -182,7 +180,7 @@ rules = {"rules": {
                 ".read": "auth != null",
                 ".write": "auth != null && data.child('owner').val() === auth.uid",
                 # once encrypted, a room stays encrypted (until its code is reused after 24 idle hours)
-                ".validate": j("newData.hasChildren(['owner', 'created', 'last', 'priv'])",
+                ".validate": j("newData.hasChildren(['owner', 'created', 'last'])",
                                o("!data.child('enc').exists()", "newData.child('enc').val() === data.child('enc').val()", f"data.child('last').val() < now - {DAY}")),
                 # the owner can hand the room to someone in it
                 "owner": {".validate": "newData.isString() && " + o("newData.val() === auth.uid", "newData.val() === data.val()",
@@ -190,7 +188,7 @@ rules = {"rules": {
                 "created": {".validate": "newData.isNumber()"},
                 "last": {".write": f"auth != null && newData.parent().parent().child('members/' + auth.uid).exists()",
                          ".validate": "newData.val() === now"},
-                "priv": {".validate": "newData.isBoolean()"},
+                "priv": {".validate": "newData.val() === false"},   # true only on old password rooms; pages from before still send false
                 "locked": {".validate": "newData.isBoolean()"},
                 "title": {".validate": S(40) + " && newData.parent().child('enc').val() !== true"},
                 "enc": {".validate": "newData.isBoolean()"},
@@ -232,7 +230,8 @@ rules = {"rules": {
                 ".read": "auth != null",
                 ".write": names_write,
                 ".validate": "newData.isString() && $key.length <= 24"}},
-            "keys": {"$uid": {".write": "auth != null && auth.uid === $uid", ".validate": S(128)}},
+            # what's left of password rooms can only be cleared (pages from before still clear it as they leave or end a room)
+            "keys": {"$uid": {".write": "auth != null && auth.uid === $uid && !newData.exists()"}},
             "banned": {"$uid": {
                 ".read": "auth != null && auth.uid === $uid",
                 ".write": "auth != null && " + can_manage(ROOM, "$uid"),
@@ -343,12 +342,11 @@ rules = {"rules": {
                     "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports)$/)",
                     o(j("!data.exists()", "newData.val() === 1"), "newData.val() === data.val() + 1")),
         ".validate": "newData.isNumber()"}}},
-    # private-room passwords (a hash), never readable; only the rules compare against them
+    # old password rooms' passwords: never readable, and can only be cleared (the daily cleanup removes them)
     "secrets": {"$code": {
-        ".write": j("auth != null", o(
-            "newData.parent().parent().child('rooms/' + $code + '/meta/owner').val() === auth.uid",
-            "!newData.exists() && !newData.parent().parent().child('rooms/' + $code).exists()")),
-        ".validate": S(128)}},
+        ".write": j("auth != null", "!newData.exists()", o(
+            "data.parent().parent().child('rooms/' + $code + '/meta/owner').val() === auth.uid",
+            "!newData.parent().parent().child('rooms/' + $code).exists()"))}},
 }}
 out = pathlib.Path(__file__).parent.parent / "database.rules.json"
 out.write_text(json.dumps(rules, indent=2, ensure_ascii=False) + "\n")

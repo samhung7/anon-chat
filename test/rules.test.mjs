@@ -9,16 +9,14 @@ const C = "K7QM";
 const T = serverTimestamp();
 const member = (name) => ({ name, avatar: "🦊", joined: T, online: true });
 const db = (uid) => env.authenticatedContext(uid).database();
-const createRoom = (uid, { priv = false, secret = null, code = C } = {}) =>
+const createRoom = (uid, { code = C } = {}) =>
   update(ref(db(uid)), {
-    [`rooms/${code}`]: { meta: { owner: uid, created: T, last: T, priv }, members: { [uid]: member("房主") }, names: { "房主": uid } },
-    [`secrets/${code}`]: secret,
+    [`rooms/${code}`]: { meta: { owner: uid, created: T, last: T }, members: { [uid]: member("房主") }, names: { "房主": uid } },
   });
-const join = (uid, key, name = uid) => update(ref(db(uid)), {
+const join = (uid, name = uid) => update(ref(db(uid)), {
   [`rooms/${C}/members/${uid}`]: member(name),
   [`rooms/${C}/names/${name.toLowerCase()}`]: uid,
   [`rooms/${C}/meta/last`]: T,
-  ...(key != null ? { [`rooms/${C}/keys/${uid}`]: key } : {}),
 });
 // a message as the app sends it: the same update stamps when this person last posted (ls) and names the message (lm).
 // Tests post faster than the rate limit allows, so the stamp is cleared first unless fast is set.
@@ -54,7 +52,7 @@ test("a room idle for 24 hours can be taken over or cleared by anyone", async ()
   await assertFails(join("bob")); // can't join an expired room
   await assertSucceeds(createRoom("bob"));
   await admin((d) => update(ref(d, `rooms/${C}/meta`), { last: Date.now() - 86400000 - 60000 }));
-  await assertSucceeds(update(ref(db("carol")), { [`rooms/${C}`]: null, [`secrets/${C}`]: null }));
+  await assertSucceeds(update(ref(db("carol")), { [`rooms/${C}`]: null }));
 });
 
 test("public room: anyone with the code joins, reads and talks; outsiders read nothing", async () => {
@@ -79,14 +77,18 @@ test("messages: no impersonation, length limit, server time", async () => {
   await assertSucceeds(say("bob", "a".repeat(1000)));
 });
 
-test("private room needs the password", async () => {
-  await createRoom("alice", { priv: true, secret: "hash-of-pw" });
+test("password rooms are gone: none can be made, an old one lets nobody new in, and its leftovers can only be cleared", async () => {
+  await assertFails(update(ref(db("alice")), { [`rooms/${C}`]: { meta: { owner: "alice", created: T, last: T, priv: true }, members: { alice: member("房主") }, names: { "房主": "alice" } } }));
+  await createRoom("alice");
+  await assertFails(set(ref(db("alice"), `secrets/${C}`), "hash"));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/keys/alice`), "hash"));
+  // an old password room from before, with its password and a member's hash
+  await admin((d) => update(ref(d), { [`rooms/${C}/meta/priv`]: true, [`secrets/${C}`]: "h", [`rooms/${C}/keys/alice`]: "h" }));
   await assertFails(join("bob"));
-  await assertFails(join("bob", "wrong"));
-  await assertSucceeds(join("bob", "hash-of-pw"));
   await assertFails(get(ref(db("bob"), `secrets/${C}`)));
-  await assertFails(get(ref(db("bob"), `rooms/${C}/keys/alice`)));
-  await assertFails(set(ref(db("bob"), `secrets/${C}`), "mine"));
+  await assertFails(update(ref(db("bob")), { [`secrets/${C}`]: null }));
+  await assertSucceeds(update(ref(db("alice")), { [`rooms/${C}/keys/alice`]: null }));
+  await assertSucceeds(update(ref(db("alice")), { [`secrets/${C}`]: null }));
 });
 
 test("locked room lets nobody new in, but members stay", async () => {
@@ -250,11 +252,12 @@ test("private messages: only the two people read them", async () => {
   await assertFails(get(ref(db("alice"), `rooms/${C}/dm`)));
 });
 
-test("ending: only the owner deletes the room and its password", async () => {
-  await createRoom("alice", { priv: true, secret: "h" }); await join("bob", "h");
+test("ending: only the owner deletes the room (and an old password with it)", async () => {
+  await createRoom("alice"); await join("bob");
+  await admin((d) => set(ref(d, `secrets/${C}`), "h"));
+  await assertFails(update(ref(db("bob")), { [`rooms/${C}`]: null }));
   await assertFails(update(ref(db("bob")), { [`rooms/${C}`]: null, [`secrets/${C}`]: null }));
   await assertSucceeds(update(ref(db("alice")), { [`rooms/${C}`]: null, [`secrets/${C}`]: null }));
-  await admin(async (d) => { if ((await get(ref(d, `secrets/${C}`))).exists()) throw new Error("password left behind"); });
 });
 
 test("members leave on their own", async () => {
@@ -265,19 +268,19 @@ test("members leave on their own", async () => {
 });
 
 test("nicknames are unique in a room, ignoring case", async () => {
-  await createRoom("alice"); await join("bob", null, "Sam");
-  await assertFails(join("carol", null, "Sam"));
-  await assertFails(join("carol", null, "SAM"));
+  await createRoom("alice"); await join("bob", "Sam");
+  await assertFails(join("carol", "Sam"));
+  await assertFails(join("carol", "SAM"));
   await assertFails(update(ref(db("carol")), { [`rooms/${C}/members/carol`]: member("Sam"), [`rooms/${C}/names/sam-2`]: "carol" })); // name must match its claim
   await assertFails(update(ref(db("carol")), { [`rooms/${C}/members/carol`]: member("a/b"), [`rooms/${C}/names/ab`]: "carol" })); // characters a key can't hold
-  await assertSucceeds(join("carol", null, "Ray"));
+  await assertSucceeds(join("carol", "Ray"));
   // renaming: claim the new name and give back the old one
   await assertFails(update(ref(db("carol"), `rooms/${C}`), { "members/carol/name": "Sam" }));
   await assertSucceeds(update(ref(db("carol"), `rooms/${C}`), { "members/carol/name": "Ray2", "names/ray2": "carol", "names/ray": null }));
   await assertFails(set(ref(db("carol"), `rooms/${C}/names/sam`), null)); // can't free someone else's name
   // when the holder has left, the name is free again
   await admin((d) => remove(ref(d, `rooms/${C}/members/bob`)));
-  await assertSucceeds(join("dave", null, "Sam"));
+  await assertSucceeds(join("dave", "Sam"));
 });
 
 test("GIFs: only images hosted by KLIPY", async () => {

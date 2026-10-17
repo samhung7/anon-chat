@@ -102,11 +102,7 @@ I18N.add("de", {
   notFound: "Raum nicht gefunden. Vielleicht wurde er schon beendet",
   bannedToast: "Der Host hat dich aus diesem Raum entfernt",
   lockedToast: "Der Host hat diesen Raum gesperrt. Du kannst gerade nicht beitreten",
-  wrongPw: "Falsches Passwort",
   cantJoin: "Beitritt zu diesem Raum nicht möglich",
-  pwAria: "Passwort",
-  pwBody: "„{title}“ ist passwortgeschützt. Gib das Passwort ein, das du vom Host bekommen hast.",
-  pwTitle: "🔒 Passwort nötig",
 
   // inside a room
   joinedToast: "{who} ist beigetreten",
@@ -154,7 +150,6 @@ I18N.add("de", {
   // sharing
   shareEnc: "🔐 Das ist ein Privater Salon: Beigetreten wird per Link oder QR-Code. Der 4-stellige Code allein reicht nicht.",
   shareOpen: "Schick allen den Code oder den Link. Wer ihn öffnet, ist dabei.",
-  sharePw: " Außerdem brauchen sie das Passwort, das du festgelegt hast.",
   linkAriaShort: "Link",
   copyLink: "Link kopieren",
   shareDots: "Teilen…",
@@ -190,7 +185,6 @@ I18N.add("de", {
   unlockedDone: "Entsperrt",
   leaveTitle: "Raum verlassen?",
   leaveBody: "Nach dem Verlassen siehst du keine neuen Nachrichten mehr.",
-  leavePw: " Um zurückzukommen, brauchst du das Passwort erneut.",
   leave: "Verlassen",
   renameEnc: "Auch der Name eines Privaten Salons ist verschlüsselt; der Server kann ihn nicht sehen.",
   renameOpen: "Alle sehen den neuen Namen.",

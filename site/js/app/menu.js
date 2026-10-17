@@ -53,7 +53,7 @@ export function share() {
   const qrBox = el("div", { class: "qr", "aria-label": "QR Code" }); qrBox.innerHTML = qrSvg(url, 4);
   const body = el("div", { class: "share" },
     el("div", { class: "bigcode", text: room.code }),
-    el("p", { class: "muted", text: t(room.cipher ? "shareEnc" : "shareOpen") + (room.meta?.priv ? t("sharePw") : "") }),
+    el("p", { class: "muted", text: t(room.cipher ? "shareEnc" : "shareOpen") }),
     el("div", { class: "linkrow" }, el("input", { class: "field", readonly: true, value: url, "aria-label": t("linkAriaShort"), onfocus: (e) => e.target.select() })),
     qrBox);
   const btns = [["copy", t("copyLink"), "primary"]];
@@ -80,7 +80,7 @@ async function renameRoom() {
 // this device is done with the room on screen: stop following it, forget it, go home
 function closeRoom(r) { setRoom(null); leaveDevice(r.code); home(); }
 async function leaveRoom() {
-  if (!(await confirmSheet(t("leaveTitle"), t("leaveBody") + (room.meta?.priv ? t("leavePw") : ""), t("leave")))) return;
+  if (!(await confirmSheet(t("leaveTitle"), t("leaveBody"), t("leave")))) return;
   const r = room;
   r.gone = true; stopRoom(r);
   await r.api.leave({ claim: await ownClaim(backend.uid), count: countAfterLeaving() }).catch(() => {}); // same reason as in askMe; a place frees up

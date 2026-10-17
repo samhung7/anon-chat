@@ -75,5 +75,3 @@ export async function sharedKey(theirPub, info) {
   return hkdf(bits, info, AES, ["encrypt", "decrypt"]);
 }
 
-// an old password room's password, as the rules compare it
-export const hashPw = async (code, pw) => hex(await SUB.digest("SHA-256", TE.encode(`anon-chat:${code}:${pw}`)));

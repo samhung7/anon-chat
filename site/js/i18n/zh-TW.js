@@ -102,11 +102,7 @@ I18N.add("zh-TW", {
   notFound: "找不到這個聊天室，可能已經結束了",
   bannedToast: "你已經被房主移出這個聊天室",
   lockedToast: "房主已經鎖住聊天室，暫時不能加入",
-  wrongPw: "密碼不對",
   cantJoin: "加入不了這個聊天室",
-  pwAria: "密碼",
-  pwBody: "「{title}」需要密碼，請輸入房主給你的密碼。",
-  pwTitle: "🔒 需要密碼",
 
   // inside a room
   joinedToast: "{who} 加入了",
@@ -154,7 +150,6 @@ I18N.add("zh-TW", {
   // sharing
   shareEnc: "🔐 這是私人沙龍：要用這個連結或 QR code 才能加入，光輸入 4 碼進不來。",
   shareOpen: "把 4 碼或連結傳給大家，打開就能加入。",
-  sharePw: "對方還需要輸入你設定的密碼。",
   linkAriaShort: "連結",
   copyLink: "複製連結",
   shareDots: "分享…",
@@ -190,7 +185,6 @@ I18N.add("zh-TW", {
   unlockedDone: "已解除鎖定",
   leaveTitle: "離開聊天室？",
   leaveBody: "離開後就看不到新的訊息了。",
-  leavePw: "要回來得再輸入一次密碼。",
   leave: "離開",
   renameEnc: "私人沙龍的名稱也會加密，伺服器看不到。",
   renameOpen: "所有人都會看到新的名稱。",

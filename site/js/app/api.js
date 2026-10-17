@@ -24,7 +24,7 @@ export class RoomApi {
   }
   // count: the room's size count after I go, if it keeps one
   leave({ claim, count }) {
-    return backend.update({ [this.root(`members/${this.uid}`)]: null, [this.root(`keys/${this.uid}`)]: null,
+    return backend.update({ [this.root(`members/${this.uid}`)]: null,
       ...(claim ? { [this.root(`names/${claim}`)]: null } : {}), ...(count != null ? { [this.root("meta/n")]: count } : {}) });
   }
   holderOf(claim) { return backend.val(this.ref("names/" + claim)); }
@@ -57,7 +57,7 @@ export class RoomApi {
     if (unmod) upd[`meta/mods/${id}`] = null;
     return this.update(upd);
   }
-  end() { return backend.update({ [`rooms/${this.code}`]: null, [`secrets/${this.code}`]: null }); }
+  end() { return backend.update({ [`rooms/${this.code}`]: null }); }
 
   /* ---------- lecture Q&A ---------- */
   upvote(id, on) { return this.set(`qs/${id}/up/${this.uid}`, on ? true : null); }

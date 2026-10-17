@@ -102,11 +102,7 @@ I18N.add("fr", {
   notFound: "Salon introuvable. Il est peut-être terminé",
   bannedToast: "L’hôte vous a retiré de ce salon",
   lockedToast: "L’hôte a verrouillé ce salon. Impossible de le rejoindre pour le moment",
-  wrongPw: "Mot de passe incorrect",
   cantJoin: "Impossible de rejoindre ce salon",
-  pwAria: "Mot de passe",
-  pwBody: "« {title} » nécessite un mot de passe. Saisissez celui que l’hôte vous a donné.",
-  pwTitle: "🔒 Mot de passe requis",
 
   // inside a room
   joinedToast: "{who} a rejoint le salon",
@@ -154,7 +150,6 @@ I18N.add("fr", {
   // sharing
   shareEnc: "🔐 Ceci est un Salon Privé : on le rejoint avec ce lien ou le QR code. Le code à 4 caractères seul ne suffit pas.",
   shareOpen: "Envoyez le code ou le lien à tout le monde. Il suffit de l’ouvrir pour rejoindre.",
-  sharePw: " Il faudra aussi le mot de passe que vous avez défini.",
   linkAriaShort: "Lien",
   copyLink: "Copier le lien",
   shareDots: "Partager…",
@@ -190,7 +185,6 @@ I18N.add("fr", {
   unlockedDone: "Déverrouillé",
   leaveTitle: "Quitter le salon ?",
   leaveBody: "Vous ne verrez plus les nouveaux messages après votre départ.",
-  leavePw: " Pour revenir, il vous faudra de nouveau le mot de passe.",
   leave: "Quitter",
   renameEnc: "Le nom d’un Salon Privé est lui aussi chiffré ; le serveur ne peut pas le voir.",
   renameOpen: "Tout le monde verra le nouveau nom.",
