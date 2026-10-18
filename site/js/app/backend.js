@@ -34,7 +34,10 @@ class Backend {
         const k = KEYS.emuUid(params.get("as"));
         this.uid = store.get(k) || "emu" + Math.random().toString(36).slice(2, 12); store.set(k, this.uid);
         fb.connectDatabaseEmulator(this.db, location.hostname, 9000, { mockUserToken: { sub: this.uid, user_id: this.uid } });
-      } else { this.user = (await fb.signInAnonymously(fb.getAuth(app))).user; this.uid = this.user.uid; }
+      } else { // the same places getAuth keeps the sign-in, so every device keeps its id (and with it its rooms)
+        const auth = fb.initializeAuth(app, { persistence: [fb.indexedDBLocalPersistence, fb.browserLocalPersistence, fb.browserSessionPersistence] });
+        this.user = (await fb.signInAnonymously(auth)).user; this.uid = this.user.uid;
+      }
       fb.onValue(fb.ref(this.db, ".info/serverTimeOffset"), (s) => (this.offset = s.val() || 0));
     })().catch((e) => { this.#connecting = null; throw e; });
     return this.#connecting;

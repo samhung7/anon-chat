@@ -179,13 +179,18 @@ export class Room extends Emitter {
       this.qs.forEach((q, id) => this.justAsked.delete(id));
       this.emit("qs");
     }), () => {}));
-    // online / offline
+    // online / offline: the server marks me offline when my connection drops, and I mark myself online on connecting
     const online = api.ref("members/" + uid + "/online");
-    on(fb.onValue(backend.ref(".info/connected"), (s) => {
-      if (!s.val() || !this.current || this.gone) return;
+    let connected = false;
+    const here = () => {
+      if (!connected || !this.current || this.gone) return;
       fb.onDisconnect(online).set(false).catch(() => {});
       fb.set(online, true).catch(() => {});
-    }));
+    };
+    on(fb.onValue(backend.ref(".info/connected"), (s) => { connected = !!s.val(); here(); }));
+    // ...but a dropped connection the server only notices late (a phone that slept), or this room open in another tab
+    // that closes, sets me offline while I'm still here: I'm connected, so I'm online again
+    on(fb.onValue(online, (s) => { if (s.val() === false) here(); }, () => {}));
     on(() => fb.onDisconnect(online).cancel().catch(() => {}));
   }
   async takeMembers(raw) {

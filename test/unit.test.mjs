@@ -31,14 +31,15 @@ test("every language has the same keys, and every t(\"key\") the page uses exist
   }
 });
 
-test("each module is imported with ?v=dev and kept by the service worker", () => {
-  const sw = readFileSync(new URL("sw.js", SITE), "utf8");
+test("each module is imported with ?v=dev, preloaded by the page and kept by the service worker", () => {
+  const sw = readFileSync(new URL("sw.js", SITE), "utf8"), page = readFileSync(new URL("index.html", SITE), "utf8");
   for (const f of MODULES) {
     const src = readFileSync(new URL(f, APP), "utf8");
     for (const [, spec] of src.matchAll(/\bfrom "([^"]+)"/g)) assert.match(spec, /^\.\/[\w-]+\.js\?v=dev$/, `${f} imports ${spec}`);
     assert.ok(sw.includes(`"js/app/${f}"`), `sw.js keeps js/app/${f}`);
+    assert.ok(page.includes(`<link rel="modulepreload" href="js/app/${f}?v=dev">`), `index.html preloads js/app/${f}`);
   }
-  assert.match(readFileSync(new URL("index.html", SITE), "utf8"), /<script type="module" src="js\/app\/main\.js\?v=dev"><\/script>/);
+  assert.match(page, /<script type="module" src="js\/app\/main\.js\?v=dev"><\/script>/);
 });
 
 test("a record read back from a file keeps only what it knows, within the limits", () => {

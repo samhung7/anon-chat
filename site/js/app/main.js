@@ -125,7 +125,6 @@ document.addEventListener("visibilitychange", () => {
 /* ---------- start ---------- */
 const start = params.get("room");
 if (start && backend.configured) { // an encrypted room's key rides after the #
-  $("#home").hidden = true; // straight into the room, without the home page showing first
-  document.documentElement.classList.remove("opening");
+  $("#home").hidden = true; // straight into the room, without the home page showing first: the loading screen until then
   join(start + location.hash).finally(() => { if (!room || room.gone) home(); else if ($("#chat").hidden) backdrop(); });
-} else { document.documentElement.classList.remove("opening"); home(); }
+} else home();

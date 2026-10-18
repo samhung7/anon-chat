@@ -208,6 +208,25 @@ test("lecture Q&A: ask anonymously, upvote, answer, projector screen", async () 
   // the projector screen follows the room
   const [show] = await Promise.all([alice.context().waitForEvent("page"), menuPick(alice, "show")]);
   await show.locator("#show .sqr svg").waitFor();
+  // on a phone the projector screen scrolls all the way to the last question
+  await show.setViewportSize({ width: 390, height: 640 });
+  for (let i = 0; i < 4; i++) await say(bob, `Question ${i} ` + "and a long one ".repeat(12));
+  await show.locator("#show .slist li", { hasText: "Question 3" }).waitFor();
+  await show.locator("#show").evaluate((e) => e.scrollTo(0, e.scrollHeight));
+  const last = await show.locator("#show .smain > :last-child").boundingBox();
+  assert.ok(last.y + last.height <= 640, "the bottom of the list can be scrolled into view");
+  noErrors();
+});
+
+test("someone set offline while still connected is back online at once", async () => {
+  const alice = await person("a");
+  const { code } = await createRoom(alice, "Host");
+  const uid = await alice.evaluate(() => localStorage.getItem("chat-emu-uida"));
+  await until(async () => (await dbGet(`rooms/${code}/members/${uid}/online`)) === true);
+  // what a connection the server notices dropped only late (a phone that slept) does: its leftover goodbye lands
+  await fetch(dbUrl(`rooms/${code}/members/${uid}/online`), { method: "PUT", headers: asOwner, body: "false" });
+  await until(async () => (await dbGet(`rooms/${code}/members/${uid}/online`)) === true);
+  await alice.locator("#peopleBtn .n", { hasText: "1" }).waitFor();
   noErrors();
 });
 
@@ -487,7 +506,9 @@ test("a link opened while the database can't be reached says so, instead of spin
   await bob.context().routeWebSocket(/127\.0\.0\.1:9000/, (ws) => ws.close());
   await bob.context().route(/127\.0\.0\.1:9000/, (r) => r.abort());
   await bob.goto(`${base}/?emu&as=b&room=ABCD`);
+  await bob.locator("#splash").waitFor(); // the loading screen, not a blank page
   await bob.locator(".toast", { hasText: "Can't reach the server" }).waitFor({ timeout: 30000 });
+  assert.equal(await bob.locator("#splash").isVisible(), false);
   assert.equal(await bob.locator("body.busy").count(), 0, "the spinner stops");
   assert.equal(await bob.locator("#home").isVisible(), true);
   assert.equal(await bob.locator("#joinCode").inputValue(), "ABCD", "the code waits in the box for another try");

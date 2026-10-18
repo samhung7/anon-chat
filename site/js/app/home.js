@@ -21,15 +21,18 @@ export const roomPath = (code) => history.replaceState(null, "", "?room=" + code
 
 /* ---------- screens ---------- */
 const SCREENS = ["#home", "#chat", "#show", "#record"];
-const only = (screen) => SCREENS.forEach((s) => ($(s).hidden = s !== screen));
+// opening a room's link shows the loading screen (html.opening, set by js/i18n.js) until one of these screens is up
+const opened = () => document.documentElement.classList.remove("opening");
+const only = (screen) => { SCREENS.forEach((s) => ($(s).hidden = s !== screen)); opened(); };
 // opening a room's link starts with no screen showing; a question on the way in (nickname, invite link) shows the home page behind it
-export function backdrop() { if ($("#home").hidden && $("#chat").hidden && $("#record").hidden) { $("#home").hidden = false; showResume(); } }
+export function backdrop() { if ($("#home").hidden && $("#chat").hidden && $("#record").hidden) { $("#home").hidden = false; showResume(); } opened(); }
 export function showChat() {
+  opened();
   $("#home").hidden = true; $("#record").hidden = true;
   if (SHOW()) { $("#chat").hidden = true; $("#show").hidden = false; renderShow(); return; }
   $("#chat").hidden = false; renderView();
 }
-export function showRecordScreen() { $("#home").hidden = true; $("#chat").hidden = true; $("#record").hidden = false; }
+export function showRecordScreen() { opened(); $("#home").hidden = true; $("#chat").hidden = true; $("#record").hidden = false; }
 export function home() {
   only("#home");
   closeRecord(); closePicker(); endShow();
