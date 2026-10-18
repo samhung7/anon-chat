@@ -1,6 +1,7 @@
 /* The interface in several languages. Each js/i18n/<lang>.js adds one dictionary with I18N.add; this file loads
-   first (in <head>) so the page knows its language before anything paints. The language is the one picked in the
-   home menu (chat-lang), or else the device's own language, or else English. */
+   first (in <head>) so the page knows its language before anything paints. The language is the one in the link
+   (?lang=ja, the address search engines list each language under), or else the one picked in the home menu
+   (chat-lang), or else the device's own language, or else English. */
 (() => {
   const LANGS = [["zh-TW", "繁體中文"], ["zh-CN", "简体中文"], ["en", "English"], ["ja", "日本語"], ["ko", "한국어"],
     ["es", "Español"], ["fr", "Français"], ["de", "Deutsch"], ["pt", "Português"]];
@@ -8,6 +9,7 @@
   const dicts = {};
   let saved = null;
   try { saved = localStorage.getItem("chat-lang"); } catch (e) {}
+  const linked = new URLSearchParams(location.search).get("lang");
   // the device's first language only: zh-TW / zh-HK / zh-Hant read Traditional, any other Chinese Simplified
   function deviceLang() {
     const l = String((navigator.languages && navigator.languages[0]) || navigator.language || "en").toLowerCase();
@@ -17,7 +19,7 @@
   }
   const I18N = {
     LANGS,
-    lang: has(saved) ? saved : deviceLang(),
+    lang: has(linked) ? linked : has(saved) ? saved : deviceLang(),
     add: (lang, d) => { dicts[lang] = d; },
     // a string with {name} slots filled in; a missing translation falls back to English, then Traditional Chinese
     t(key, vars) {
@@ -28,6 +30,8 @@
     // pick a language for good (null: follow the device again)
     set(lang) {
       try { lang ? localStorage.setItem("chat-lang", lang) : localStorage.removeItem("chat-lang"); } catch (e) {}
+      // a choice made here outlasts the ?lang= the page was opened with
+      if (has(linked)) { const u = new URL(location.href); u.searchParams.delete("lang"); history.replaceState(history.state, "", u); }
       I18N.lang = has(lang) ? lang : deviceLang();
       I18N.apply();
     },
@@ -45,6 +49,14 @@
   // the page is written in Traditional Chinese; in any other language keep it out of sight until it's translated
   document.documentElement.lang = I18N.lang;
   if (I18N.lang !== "zh-TW") document.documentElement.classList.add("l10n");
+  // search engines: the home page in one language is https://stoatalk.app/?lang=<lang> (the bare address is the
+  // pick-by-device x-default); index.html lists them all as hreflang alternates, and this names the one shown
+  if (!/[?&]room=/.test(location.search)) {
+    const c = document.createElement("link");
+    c.rel = "canonical";
+    c.href = "https://stoatalk.app/" + (has(linked) ? "?lang=" + linked : "");
+    document.head.appendChild(c);
+  }
   // a room's link opens straight into the room: keep the home page off screen until the app (js/app/main.js) decides
   if (/[?&]room=/.test(location.search)) document.documentElement.classList.add("opening");
 })();

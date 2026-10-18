@@ -3,3 +3,10 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
+
+# the same site at the Pages addresses (stoatalk.pages.dev and its preview deployments) stays out of search results,
+# so Google lists stoatalk.app only
+https://stoatalk.pages.dev/*
+  X-Robots-Tag: noindex
+https://:deploy.stoatalk.pages.dev/*
+  X-Robots-Tag: noindex

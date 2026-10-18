@@ -38,7 +38,8 @@ export function home() {
   closeRecord(); closePicker(); endShow();
   $("#composer").classList.remove("off");
   document.title = t("docTitle");
-  history.replaceState(null, "", location.pathname + asParam("?"));
+  const lang = new URLSearchParams(location.search).get("lang"); // the language a search result linked to stays in the address
+  history.replaceState(null, "", location.pathname + (lang ? "?lang=" + encodeURIComponent(lang) + asParam("&") : asParam("?")));
   showResume();
 }
 

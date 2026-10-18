@@ -1,0 +1,6 @@
+# Room links (?room=) are short-lived private rooms: keep them out of search results.
+User-agent: *
+Disallow: /*?room=
+Disallow: /*&room=
+
+Sitemap: https://stoatalk.app/sitemap.xml
