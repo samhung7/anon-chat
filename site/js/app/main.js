@@ -24,7 +24,7 @@ import { store, KEYS } from "./storage.js?v=dev";
 import { backend, asParam } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { showMe } from "./identity.js?v=dev";
-import { create, join } from "./lobby.js?v=dev";
+import { create, join, cleanCode } from "./lobby.js?v=dev";
 import { LIST, setView, markSeen, showJump } from "./chat.js?v=dev";
 import { send, cancelReply, typing, renderTyping, mentionBar, box } from "./composer.js?v=dev";
 import { ask } from "./qa.js?v=dev";
@@ -46,8 +46,23 @@ if (!backend.configured) { $("#setupNote").hidden = false; document.body.classLi
 $("#meBtn").addEventListener("click", homeMenu);
 $("#createBtn").addEventListener("click", create);
 $("#logoBtn").addEventListener("click", create);
-$("#joinForm").addEventListener("submit", (e) => { e.preventDefault(); join($("#joinCode").value); });
-$("#joinCode").addEventListener("input", (e) => { const v = e.target.value; if (!/[/?]/.test(v)) e.target.value = v.toUpperCase(); });
+// the box takes the 4-character code only; a pasted invite link leaves its code there, and joining uses the whole link
+// (a Private Salon's key rides in it)
+let pastedLink = null;
+$("#joinForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const code = $("#joinCode").value;
+  join(pastedLink && cleanCode(pastedLink) === code ? pastedLink : code);
+});
+$("#joinCode").addEventListener("input", (e) => { if (!e.isComposing) e.target.value = cleanCode(e.target.value).slice(0, 4); });
+// what's pasted is cleaned whole, before the 4-character limit would cut it (a link, or "ab cd")
+$("#joinCode").addEventListener("paste", (e) => {
+  const text = (e.clipboardData?.getData("text") || "").trim();
+  if (!text) return;
+  e.preventDefault();
+  pastedLink = /[?&]room=/.test(text) ? text : null;
+  e.target.value = cleanCode(text).slice(0, 4);
+});
 $("#resume").addEventListener("click", (e) => {
   const b = e.target.closest("[data-code], [data-a]"); if (!b) return;
   if (b.dataset.code) join(b.dataset.code);

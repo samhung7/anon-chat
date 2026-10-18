@@ -24,6 +24,7 @@ const flip = (fields, done) => () => room.api.setMeta(fields).then(() => toast(t
 const ENTRIES = [
   ["share", () => t("invite"), always, () => share()],
   ["title", () => t("renameRoom"), owner, () => renameRoom()],
+  ["desc", () => t("editDesc"), staff, () => editDesc()],
   ["me", () => t("editMe"), always, () => askMe(false)],
   ["mute", () => t("muteRoom"), () => notifyOn(room.code), () => setNotify(false)],
   ["notify", () => t("notifyRoom"), () => !notifyOn(room.code), () => setNotify(true)],
@@ -76,6 +77,22 @@ async function renameRoom() {
     // an encrypted room keeps only the sealed title (xt); a plain one only the readable one
     await room.api.setMeta(room.cipher ? { xt: title ? await room.cipher.seal({ t: title }, "t") : null } : { title: title || null });
     toast(title ? t("renamedToast", { t: title }) : t("titleCleared"));
+  } catch (e) { failed(e); }
+}
+// what the room is for, shown under its name to everyone in it; the owner and co-hosts write it
+export async function editDesc() {
+  const input = el("textarea", { class: "field", rows: 6, maxlength: LIMITS.roomDesc, placeholder: t("descPh"), id: "roomDesc" });
+  input.value = room.meta?.desc || "";
+  const body = el("div", {}, el("label", { class: "lbl", for: "roomDesc", text: t("roomDesc") }), input,
+    el("p", { class: "muted small", text: t(room.cipher ? "descEnc" : "descOpen") }));
+  const a = await sheet(t("editDesc"), body, [["no", t("cancel")], ["yes", t("save"), "primary"]], { onOpen: () => input.focus() });
+  if (a !== "yes" || !room) return;
+  const desc = input.value.trim().slice(0, LIMITS.roomDesc);
+  if (desc === (room.meta?.desc || "")) return;
+  try {
+    // like the title: an encrypted room keeps only the sealed description (xd), a plain one only the readable one
+    await room.api.setMeta(room.cipher ? { xd: desc ? await room.cipher.seal({ t: desc }, "d") : null } : { desc: desc || null });
+    toast(t(desc ? "descSaved" : "descCleared"));
   } catch (e) { failed(e); }
 }
 // this device is done with the room on screen: stop following it, forget it, go home

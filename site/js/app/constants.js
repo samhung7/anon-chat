@@ -13,7 +13,7 @@ export const ANIMALS = ["🐻", "🦊", "🐼", "🐯", "🦁", "🐸", "🐵", 
 // longest texts, in characters (the rules check the same)
 export const LIMITS = {
   text: 1000, question: 300, answer: 2000,
-  name: 12, shownName: 24, avatar: 8, roomTitle: 40, recordTitle: 60,
+  name: 12, shownName: 24, avatar: 8, roomTitle: 40, roomDesc: 500, recordTitle: 60,
   pollQ: 200, pollOpt: 80, pollOpts: 10, drawTitle: 60, gifUrl: 500, gifTitle: 120,
   cap: 1000,
 };

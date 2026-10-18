@@ -194,6 +194,12 @@ rules = {"rules": {
                 "enc": {".validate": "newData.isBoolean()"},
                 "kc": {".validate": S(32)},   # lets a joiner tell a wrong key from a right one
                 "xt": {".validate": SEALED(400) + " && newData.parent().child('enc').val() === true"},
+                # what the room is for, shown under its name; the owner or a co-host writes it (sealed as xd in an encrypted room;
+                # 500 characters sealed take at most about 4,100)
+                "desc": {".write": "auth != null && (" + is_staff("data.parent().parent()") + ")",
+                         ".validate": S(500) + " && newData.val().length > 0 && newData.parent().child('enc').val() !== true"},
+                "xd": {".write": "auth != null && (" + is_staff("data.parent().parent()") + ")",
+                       ".validate": SEALED(4200) + " && newData.parent().child('enc').val() === true"},
                 # up to three messages the owner pins as announcements, one per slot
                 "pins": {"$slot": {".validate": "$slot.matches(/^[0-2]$/) && " + PUSH_ID}},
                 "mods": {"$uid": {".validate": "newData.val() === true"}},

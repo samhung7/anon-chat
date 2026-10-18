@@ -7,7 +7,7 @@ Made for lecture Q&A, anonymous reading groups, workshops and team projects. Int
 - **End-to-end encryption**: private messages are always end-to-end encrypted. A room can also be opened as encrypted: its key travels only in the invite link and QR code (after the `#`, which browsers never send to a server), so the database holds the title, nicknames and messages only as ciphertext. People need the full link to join; the 4-character code alone isn't enough. See below.
 - **Identity**: a nickname and an animal, kept on the device. Nicknames are unique within a room (ignoring case). Behind the scenes each device gets an anonymous Firebase id.
 - **Chat**: live messages, replies that quote and jump to the original, links, @mentions (typing @ offers names; a mention notifies even a muted room), editing your own messages (marked 已編輯), "someone is typing", a line above the messages that came since you last read and a ↓ button back to the newest, an emoji picker, GIF search (KLIPY), six reactions, who's here and who's online, private messages between two people (the owner can't read those either).
-- **Owner**: rename the room, pin up to three messages as announcements (one line at the top, tap to open), cap how many people can be in it, lock it to newcomers, name co-hosts, hand the room to someone else (and stay on as a co-host), end the room. The owner and co-hosts remove anyone's message and remove people (co-hosts can't remove the owner or each other); removed people can't come back from that device.
+- **Owner**: rename the room, describe what it's for (owner and co-hosts; up to 500 characters, shown under the room's name: two lines, the rest on a tap), pin up to three messages as announcements (one line at the top, tap to open), cap how many people can be in it, lock it to newcomers, name co-hosts, hand the room to someone else (and stay on as a co-host), end the room. The owner and co-hosts remove anyone's message and remove people (co-hosts can't remove the owner or each other); removed people can't come back from that device.
 - **Safety**: anyone can report a message to the owner and co-hosts with a reason (they see why and how many, never who), and block someone on their own device, which folds that person's messages away. The rules let each person post at most every 800 ms, one message per write. Terms and privacy policy: `site/legal.html` (Chinese and English).
 - **Lecture Q&A**: the owner opens a ❓ tab where people ask, by name or anonymously, and upvote each other's questions, which sort by votes. The owner and co-hosts mark the one being answered now and the ones answered, write a text answer under any question (shown on the projector and kept in exports), take any down, and can turn on review so new questions wait until they publish them. Anonymous means anonymous to the owner too: who asked is kept where only the asker can read it.
 - **Projector screen** (`?room={code}&show=1`, from the owner's ⋯ menu): the QR Code and code to join beside the question being answered, the most upvoted ones and the latest poll, live and in large type.
@@ -43,10 +43,10 @@ test/worker.test.mjs        the photo service and the cleanup's choice of stray 
 Data in the Realtime Database:
 
 ```
-rooms/{code}/meta           owner, title, created, last (last activity), locked,        readable by any signed-in device
+rooms/{code}/meta           owner, title, desc, created, last (last activity), locked,  readable by any signed-in device
                             mods/{uid} (co-hosts), cap and n (size limit, members counted),
                             qa (Q&A open), qmod (review questions first), qnow (the question being answered)
-                            encrypted room: enc, kc (key check), xt (sealed title) instead of title
+                            encrypted room: enc, kc (key check), xt, xd (sealed title, description) instead of title, desc
 rooms/{code}/members/{uid}  name, avatar, joined, online, pk (public key for private messages),   members only
                             ls (when they last posted), lm/lf/lq (the message/photo/question that post wrote)
                             encrypted room: x (sealed name and avatar), h (keyed hash of the name) instead of name, avatar

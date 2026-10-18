@@ -41,6 +41,14 @@
           "xt": {
             ".validate": "newData.isString() && newData.val().length <= 400 && newData.val().matches(/^[A-Za-z0-9_-]+$/) && newData.parent().child('enc').val() === true"
           },
+          "desc": {
+            ".write": "auth != null && ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true))",
+            ".validate": "newData.isString() && newData.val().length <= 500 && newData.val().length > 0 && newData.parent().child('enc').val() !== true"
+          },
+          "xd": {
+            ".write": "auth != null && ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true))",
+            ".validate": "newData.isString() && newData.val().length <= 4200 && newData.val().matches(/^[A-Za-z0-9_-]+$/) && newData.parent().child('enc').val() === true"
+          },
           "pins": {
             "$slot": {
               ".validate": "$slot.matches(/^[0-2]$/) && newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{1,32}$/)"

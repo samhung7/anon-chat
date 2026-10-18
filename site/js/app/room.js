@@ -155,7 +155,10 @@ export class Room extends Emitter {
     on(fb.onValue(api.ref("meta"), (s) => this.queue(async () => {
       if (!s.exists()) return this.emit("ended");
       const meta = s.val();
-      if (this.cipher) meta.title = meta.xt ? (await this.cipher.unseal(meta.xt, "t"))?.t || "" : "";
+      if (this.cipher) {
+        meta.title = meta.xt ? (await this.cipher.unseal(meta.xt, "t"))?.t || "" : "";
+        meta.desc = meta.xd ? (await this.cipher.unseal(meta.xd, "d"))?.t || "" : "";
+      }
       this.meta = meta;
       this.emit("meta");
       this.followStaffFeeds();

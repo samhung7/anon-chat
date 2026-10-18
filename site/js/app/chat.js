@@ -8,7 +8,7 @@ import { backend } from "./backend.js?v=dev";
 import { room, setRoom } from "./session.js?v=dev";
 import { Room } from "./room.js?v=dev";
 import { kindOf, snippet } from "./kinds.js?v=dev";
-import { mentionsMe } from "./richtext.js?v=dev";
+import { mentionsMe, linkify } from "./richtext.js?v=dev";
 import { isBlocked } from "./blocking.js?v=dev";
 import { cancelReply, typing, renderTyping, box } from "./composer.js?v=dev";
 import { msgActions } from "./actions.js?v=dev";
@@ -18,6 +18,7 @@ import { watchShow, SHOW } from "./show.js?v=dev";
 import { noteNew, offerNotify, hiddenUnread } from "./notify.js?v=dev";
 import { rememberRoom, forgetRoom, roomPath, showChat, home } from "./home.js?v=dev";
 import { archive, saveRecord, openRecord, exportSheet } from "./records.js?v=dev";
+import { editDesc } from "./menu.js?v=dev";
 
 export const LIST = () => $("#list");
 
@@ -38,7 +39,7 @@ export function enter(code, cipher) {
 }
 function watchChat(r) {
   const inRoomView = () => r.ui.view === "all";
-  r.on("meta", () => { renderHeader(); renderPins(); refreshNames(); })
+  r.on("meta", () => { renderHeader(); renderDesc(); renderPins(); refreshNames(); })
     .on("ended", () => gone("ended"))
     .on("lost", checkGone)
     .on("arrivals", ({ joined, left }) => {
@@ -217,7 +218,7 @@ export function renderView() {
     ta.value = ui.drafts[ui.view] || ""; ta.dispatchEvent(new Event("input"));
     ui.shown = ui.view; cancelReply(); typing.stop();
   }
-  renderPins();
+  renderDesc(); renderPins();
   const list = LIST();
   list.replaceChildren();
   $("#dmBar").hidden = !ui.isDm;
@@ -252,6 +253,29 @@ export function openDm(other) {
   if (other === backend.uid) return;
   room.watchDm(other);
   setView(other); box().focus();
+}
+
+/* ---------- the room's description (meta/desc), under its name: one line, and the rest on a tap ---------- */
+let descOpen = null; // the code of the room whose description is open
+export function renderDesc() {
+  const box = $("#desc");
+  if (!room) return;
+  const desc = room.meta?.desc || "";
+  box.hidden = !desc || room.ui.isDm;
+  if (box.hidden) return box.replaceChildren();
+  const open = descOpen === room.code;
+  const toggle = () => { descOpen = open ? null : room.code; renderDesc(); };
+  const text = el("div", { class: "dtext" }, linkify(desc));
+  const more = el("button", { type: "button", class: "link dmore", "aria-expanded": String(open), text: t(open ? "descLess" : "descMore"), onclick: toggle });
+  box.classList.toggle("open", open);
+  // closed: the first line, with 更多 at its end; open: all of it, then 收起 (and 編輯 for the owner and co-hosts)
+  if (!open) box.replaceChildren(text, more);
+  else box.replaceChildren(text, el("div", { class: "drow" }, more,
+    room.isStaff() ? el("button", { type: "button", class: "link", text: t("editDesc"), onclick: () => editDesc() }) : null));
+  // a link in it opens; a tap anywhere else on a closed one opens it
+  text.onclick = (e) => { if (!open && !more.hidden && !e.target.closest("a")) toggle(); };
+  // short enough to show whole: nothing to open
+  if (!open) requestAnimationFrame(() => { more.hidden = !desc.includes("\n") && text.scrollWidth <= text.clientWidth + 1; });
 }
 
 /* ---------- pinned announcements (meta/pins, owner only, at most 3) ---------- */

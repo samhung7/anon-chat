@@ -166,8 +166,11 @@ code { font-size: .9em; }
 .sheet p { margin: 0 0 10px; }
 .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 @media (min-width: 600px) { .actions { flex-direction: row-reverse; flex-wrap: wrap; } .actions .btn { flex: 1; } }
-/* a menu of many choices: two columns on a wide screen, in reading order, the destructive one across the bottom */
-@media (min-width: 600px) { .actions.many { display: grid; grid-template-columns: 1fr 1fr; } .actions.many .btn.danger { grid-column: 1 / -1; } .sheet:has(.actions.many) { max-width: 600px; } }
+/* a menu of many choices: two columns of compact buttons, in reading order, the destructive one across the bottom */
+.actions.many { display: grid; grid-template-columns: 1fr 1fr; }
+.actions.many .btn { padding: 8px 10px; font-size: 14px; line-height: 1.3; }
+.actions.many .btn.danger { grid-column: 1 / -1; }
+@media (min-width: 600px) { .sheet:has(.actions.many) { max-width: 600px; } .actions.many .btn { font-size: inherit; } }
 .avatars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin: 10px 0; }
 .avbtn { font-size: 24px; aspect-ratio: 1; border: 2px solid transparent; background: var(--surface-2); border-radius: 12px; padding: 0; }
 .avbtn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-2); }
@@ -238,6 +241,15 @@ ul.plist small { color: var(--muted); }
 .bub.ro { cursor: default; }
 .rofoot { margin: 0; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); text-align: center; font-size: 13px; color: var(--muted); background: var(--surface); border-top: 1px solid var(--line); }
 
+/* the room's description: one line under the header with 更多 at its end, all of it when opened */
+.desc { display: flex; align-items: baseline; gap: 10px; background: var(--surface); border-bottom: 1px solid var(--line); padding: 8px 14px; font-size: 14px; }
+.desc .dtext { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.desc > .dmore { flex: none; padding: 0; font-size: 13px; }
+.desc.open { display: block; padding-bottom: 6px; }
+.desc.open .dtext { white-space: pre-wrap; word-break: break-word; max-height: 40dvh; overflow-y: auto; cursor: auto; }
+.desc a { color: inherit; text-decoration: underline; }
+.desc .drow { display: flex; gap: 16px; font-size: 13px; }
+.desc .drow .link { padding: 2px 0; }
 /* pinned announcements: one line until opened */
 .pins { background: var(--surface); border-bottom: 1px solid var(--line); font-size: 14px; }
 .pins .pinhead { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; color: inherit; font: inherit; padding: 8px 14px; text-align: left; cursor: pointer; }

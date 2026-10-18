@@ -88,6 +88,11 @@ async function menuPick(page, a) {
   await page.locator("#chat .bar [data-a=menu]").click();
   await press(page, a);
 }
+async function setDesc(page, text) {
+  await menuPick(page, "desc");
+  await page.locator("#roomDesc").fill(text);
+  await press(page, "yes");
+}
 // the header shows "Room" until the room's details arrive from the database, so wait for the title
 const titleIs = (page, title) => page.locator("#roomTitle", { hasText: new RegExp(`^${title}$`) }).waitFor();
 const noErrors = () => assert.deepEqual(errors, []);
@@ -102,12 +107,26 @@ test("open room: create, join with the code, talk, react, reply, edit, delete", 
   assert.ok(!url.includes("#k="), "an open room's link has no key");
   await titleIs(alice, "Book club");
 
+  // the box keeps only a code's 4 characters; a pasted link leaves its code
+  await bob.locator("#joinCode").fill("ab-cdef");
+  assert.equal(await bob.locator("#joinCode").inputValue(), "ABC");
+  await bob.locator("#joinCode").evaluate((input, link) => {
+    const data = new DataTransfer(); data.setData("text/plain", link);
+    input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  }, url);
+  assert.equal(await bob.locator("#joinCode").inputValue(), code);
   // the code alone is enough for an open room
   await bob.locator("#joinCode").fill(code.toLowerCase());
   await bob.locator("#joinForm button").click();
   await pickName(bob, "Bob");
   await bob.locator("#chat").waitFor();
   await alice.locator("#peopleBtn .n", { hasText: "2" }).waitFor();
+
+  // the owner describes the room, and everyone sees it under its name
+  await setDesc(alice, "What we read this week\nand the rules");
+  await bob.locator("#desc .dtext", { hasText: "What we read this week" }).waitFor();
+  assert.equal((await dbGet(`rooms/${code}/meta`)).desc, "What we read this week\nand the rules");
+  assert.ok(await bob.locator("#desc").getByText("Edit room description").count() === 0, "only the owner and co-hosts edit it");
 
   await say(alice, "hello @Bob");
   await bubble(bob, "hello @Bob").waitFor();
@@ -154,6 +173,10 @@ test("private salon: only ciphertext on the server, the link is needed, private 
 
   await joinByLink(bob, url, "Bob");
   await titleIs(bob, "Secret");
+  await setDesc(alice, "Salon rules");
+  await bob.locator("#desc .dtext", { hasText: "Salon rules" }).waitFor();
+  const sealed = await dbGet(`rooms/${code}/meta`);
+  assert.ok(sealed.xd && !sealed.desc, "the description is only kept sealed");
   await say(alice, "top secret words");
   await bubble(bob, "top secret words").waitFor();
   const msgs = Object.values(await dbGet(`rooms/${code}/msgs`));
