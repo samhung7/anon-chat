@@ -257,21 +257,26 @@ export function openDm(other) {
 
 /* ---------- the room's description (meta/desc), under its name: one line, and the rest on a tap ---------- */
 let descOpen = null; // the code of the room whose description is open
+// hidden on this device until the owner writes a new one; the ⋯ menu still shows it
+export const descHidden = () => !!room?.meta?.desc && store.get(KEYS.descHidden(room.code)) === room.meta.desc;
+export function setDescHidden(on) { store.set(KEYS.descHidden(room.code), on ? room.meta?.desc : null); renderDesc(); }
 export function renderDesc() {
   const box = $("#desc");
   if (!room) return;
   const desc = room.meta?.desc || "";
-  box.hidden = !desc || room.ui.isDm;
+  box.hidden = !desc || room.ui.isDm || descHidden();
   if (box.hidden) return box.replaceChildren();
   const open = descOpen === room.code;
   const toggle = () => { descOpen = open ? null : room.code; renderDesc(); };
   const text = el("div", { class: "dtext" }, linkify(desc));
   const more = el("button", { type: "button", class: "link dmore", "aria-expanded": String(open), text: t(open ? "descLess" : "descMore"), onclick: toggle });
   box.classList.toggle("open", open);
-  // closed: the first line, with 更多 at its end; open: all of it, then 收起 (and 編輯 for the owner and co-hosts)
-  if (!open) box.replaceChildren(text, more);
+  const hide = el("button", { type: "button", class: "link dhide", text: t("descHide"), onclick: () => { setDescHidden(true); toast(t("descHiddenToast")); } });
+  // closed: the first line, with 更多 and 隱藏 at its end; open: all of it, then 收起 (and 編輯 for the owner and
+  // co-hosts) with 隱藏 at the far right
+  if (!open) box.replaceChildren(text, more, hide);
   else box.replaceChildren(text, el("div", { class: "drow" }, more,
-    room.isStaff() ? el("button", { type: "button", class: "link", text: t("editDesc"), onclick: () => editDesc() }) : null));
+    room.isStaff() ? el("button", { type: "button", class: "link", text: t("editDesc"), onclick: () => editDesc() }) : null, hide));
   // a link in it opens; a tap anywhere else on a closed one opens it
   text.onclick = (e) => { if (!open && !more.hidden && !e.target.closest("a")) toggle(); };
   // short enough to show whole: nothing to open

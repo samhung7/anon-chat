@@ -24,6 +24,7 @@ export const KEYS = {
   record: (id) => "chat-record:" + id,
   roomKey: (code) => "chat-key:" + code,   // an encrypted room's key
   mute: (code) => "chat-mute:" + code,
+  descHidden: (code) => "chat-desc-hidden:" + code, // the room description this device hid from above the chat
   read: (code) => "chat-read:" + code,     // read up to here in the room
   dmRead: (code, other) => `chat-dmread:${code}:${other}`,
   myQs: (code) => "chat-myq:" + code,      // questions this device asked

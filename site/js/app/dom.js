@@ -27,12 +27,13 @@ export function toast(text) {
 export const orToast = (promise, key = "tryAgain") => promise.catch(() => toast(t(key)));
 
 // a bottom sheet; resolves with the data-a of the button pressed (or null when dismissed)
-export function sheet(title, body, buttons = [], { onOpen } = {}) {
+// cols: 3 lays a long menu out three to a row
+export function sheet(title, body, buttons = [], { onOpen, cols } = {}) {
   return new Promise((res) => {
     const ov = el("div", { class: "overlay" });
     const box = el("div", { class: "sheet", role: "dialog", "aria-label": title },
       title ? el("h2", { text: title }) : null, body,
-      buttons.length ? el("div", { class: "actions" + (buttons.length > 3 ? " many" : "") }, buttons.map(([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a, text: label }))) : null);
+      buttons.length ? el("div", { class: "actions" + (buttons.length > 3 ? " many" + (cols === 3 ? " three" : "") : "") }, buttons.map(([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a, text: label }))) : null);
     ov.append(box);
     const done = (v) => { ov.remove(); document.removeEventListener("keydown", esc); res(v); };
     const esc = (e) => { if (e.key === "Escape") done(null); };

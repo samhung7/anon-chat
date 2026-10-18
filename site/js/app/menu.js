@@ -6,7 +6,8 @@ import { el, toast, sheet, confirmSheet, qrSvg } from "./dom.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room, setRoom } from "./session.js?v=dev";
 import { askMe } from "./identity.js?v=dev";
-import { stopRoom, leaveDevice } from "./chat.js?v=dev";
+import { stopRoom, leaveDevice, descHidden, setDescHidden } from "./chat.js?v=dev";
+import { linkify } from "./richtext.js?v=dev";
 import { reportsSheet } from "./actions.js?v=dev";
 import { people, capSheet, ownClaim, countAfterLeaving } from "./people.js?v=dev";
 import { setQa } from "./qa.js?v=dev";
@@ -45,8 +46,16 @@ const ENTRIES = [
 export async function menu() {
   if (!room) return;
   const shown = ENTRIES.filter(([, , who]) => who());
-  const a = await sheet(room.meta?.title || t("roomN", { code: room.code }), null, shown.map(([act, label, , , cls]) => [act, label(), cls]));
+  const a = await sheet(room.meta?.title || t("roomN", { code: room.code }), descBox(), shown.map(([act, label, , , cls]) => [act, label(), cls]), { cols: 3 });
+  if (a === "showdesc") return setDescHidden(false);
   shown.find(([act]) => act === a)?.[3]();
+}
+// the room's description at the top of the menu, all of it; one hidden from above the chat can come back from here
+function descBox() {
+  const desc = room.meta?.desc;
+  if (!desc) return null;
+  return el("div", { class: "mdesc" }, el("div", { class: "dtext" }, linkify(desc)),
+    descHidden() ? el("div", { class: "actions inline" }, el("button", { type: "button", class: "link", "data-a": "showdesc", text: t("descShow") })) : null);
 }
 
 export function share() {

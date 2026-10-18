@@ -127,6 +127,13 @@ test("open room: create, join with the code, talk, react, reply, edit, delete", 
   await bob.locator("#desc .dtext", { hasText: "What we read this week" }).waitFor();
   assert.equal((await dbGet(`rooms/${code}/meta`)).desc, "What we read this week\nand the rules");
   assert.ok(await bob.locator("#desc").getByText("Edit room description").count() === 0, "only the owner and co-hosts edit it");
+  // hidden from above the chat on this device, it stays at the top of the ⋯ menu, and comes back from there
+  await bob.locator("#desc .dhide").click();
+  await bob.locator("#desc").waitFor({ state: "hidden" });
+  await bob.locator("#chat .bar [data-a=menu]").click();
+  await sheet(bob).locator(".mdesc .dtext", { hasText: "What we read this week" }).waitFor();
+  await press(bob, "showdesc");
+  await bob.locator("#desc .dtext").waitFor();
 
   await say(alice, "hello @Bob");
   await bubble(bob, "hello @Bob").waitFor();
