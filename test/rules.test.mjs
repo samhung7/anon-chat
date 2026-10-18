@@ -108,6 +108,19 @@ test("only the owner renames the room", async () => {
   await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { title: null }));
 });
 
+test("the room's description: the owner and co-hosts write it, in plain text up to 500 characters", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { desc: "bob 寫的" }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { desc: "每週三晚上的讀書會\n請先讀第一章" }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { desc: "x".repeat(501) }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { desc: 42 }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { xd: "c2VhbGVk" })); // sealed only in a Private Salon
+  await set(ref(db("alice"), `rooms/${C}/meta/mods/carol`), true);
+  await assertSucceeds(update(ref(db("carol"), `rooms/${C}/meta`), { desc: "x".repeat(500) }));
+  await assertFails(update(ref(db("carol"), `rooms/${C}/meta`), { title: "co-hosts don't rename" }));
+  await assertSucceeds(update(ref(db("carol"), `rooms/${C}/meta`), { desc: null }));
+});
+
 test("pins: the owner pins up to three messages; replies point at a message", async () => {
   await createRoom("alice"); await join("bob");
   await assertFails(set(ref(db("bob"), `rooms/${C}/meta/pins/0`), "-Nabc123"));
@@ -325,6 +338,11 @@ test("encrypted room: only ciphertext and hashed nicknames", async () => {
   await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { xt: "bmV3" }));
   await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { xt: "bmV3" }));
   await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { xt: null }));
+  // and so does the description
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { desc: "明文" }));
+  await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { xd: "c2VhbGVk" }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { xd: "c2VhbGVk" }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { xd: "not base64!" }));
   // after 24 idle hours the code can become an ordinary room again
   await admin((d) => update(ref(d, `rooms/${C}/meta`), { last: Date.now() - 86400000 - 60000 }));
   await assertSucceeds(createRoom("carol"));

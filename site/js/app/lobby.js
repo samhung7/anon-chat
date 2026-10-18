@@ -67,7 +67,7 @@ export async function create() {
 
 /* ---------- joining ---------- */
 // a pasted link works as well as the code
-const cleanCode = (c) => {
+export const cleanCode = (c) => {
   c = String(c || "");
   c = c.match(/[?&]room=([0-9A-Za-z]{4})/)?.[1] || c.replace(/#.*/, "");
   return c.toUpperCase().replace(/[^0-9A-Z]/g, "");
