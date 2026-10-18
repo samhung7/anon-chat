@@ -170,7 +170,15 @@ code { font-size: .9em; }
 .actions.many { display: grid; grid-template-columns: 1fr 1fr; }
 .actions.many .btn { padding: 8px 10px; font-size: 14px; line-height: 1.3; }
 .actions.many .btn.danger { grid-column: 1 / -1; }
-@media (min-width: 600px) { .sheet:has(.actions.many) { max-width: 600px; } .actions.many .btn { font-size: inherit; } }
+.actions.three { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+.actions.three .btn { padding: 6px 4px; font-size: 13px; border-radius: 10px; word-break: break-word; }
+@media (min-width: 600px) { .sheet:has(.actions.many) { max-width: 600px; } .actions.many .btn { font-size: inherit; } .actions.three .btn { font-size: 14px; } }
+/* the room's description at the top of its ⋯ menu */
+.mdesc { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+.mdesc .dtext { white-space: pre-wrap; word-break: break-word; max-height: 30dvh; overflow-y: auto; }
+.mdesc a { color: inherit; text-decoration: underline; }
+.mdesc .actions.inline { display: block; margin: 6px 0 0; }
+.mdesc .actions.inline .link { font-size: 13px; padding: 2px 0; }
 .avatars { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin: 10px 0; }
 .avbtn { font-size: 24px; aspect-ratio: 1; border: 2px solid transparent; background: var(--surface-2); border-radius: 12px; padding: 0; }
 .avbtn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-2); }
@@ -244,7 +252,9 @@ ul.plist small { color: var(--muted); }
 /* the room's description: one line under the header with 更多 at its end, all of it when opened */
 .desc { display: flex; align-items: baseline; gap: 10px; background: var(--surface); border-bottom: 1px solid var(--line); padding: 8px 14px; font-size: 14px; }
 .desc .dtext { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-.desc > .dmore { flex: none; padding: 0; font-size: 13px; }
+.desc > .dmore, .desc > .dhide { flex: none; padding: 0; font-size: 13px; }
+.desc .dhide { color: var(--muted); }
+.desc .drow .dhide { margin-left: auto; }
 .desc.open { display: block; padding-bottom: 6px; }
 .desc.open .dtext { white-space: pre-wrap; word-break: break-word; max-height: 40dvh; overflow-y: auto; cursor: auto; }
 .desc a { color: inherit; text-decoration: underline; }
