@@ -70,12 +70,23 @@ export function mention(name) {
 
 /* ---------- reports ----------
    Anyone can report a message to the room's owner and co-hosts, with a reason; they see how many reported it and
-   why, never who. Reports go with the message, and with the room. */
+   why, never who. Reports go with the message, and with the room. Each report also goes to StoaTalk's operator
+   (site/admin.html) with the message as the reporter sees it, so it can be acted on in an encrypted room too. */
 const REASONS = [0, 1, 2, 3];
+// what the operator gets of a message: its words (or what kind it is), the name it came under, a plain room's photo
+function seenOf(v) {
+  const seen = { who: v.by, t: String(typeof v.text === "string" && v.text ? v.text : snippet(v)).slice(0, LIMITS.text), n: String(room.author(v).name || "").slice(0, LIMITS.shownName) };
+  if (room.cipher) seen.enc = true;
+  else if (v.img?.f) seen.f = v.img.f;
+  if (!seen.t) delete seen.t;
+  return seen;
+}
 async function reportMsg(id) {
   const a = await sheet(t("reportTitle"), el("p", { class: "muted", text: t("reportBody") }), REASONS.map((k) => ["r" + k, t("why" + k)]).concat([["no", t("cancel")]]));
   if (!a?.startsWith("r") || !room || room.gone) return;
-  room.api.report(id, +a.slice(1)).then(() => toast(t("reportedToast")), (e) => toast(t(isDenied(e) ? "reportedAlready" : "tryAgain")));
+  const v = room.msgs.get(id);
+  if (!v) return;
+  room.api.report(id, +a.slice(1), seenOf(v)).then(() => toast(t("reportedToast")), (e) => toast(t(isDenied(e) ? "reportedAlready" : "tryAgain")));
 }
 export async function reportsSheet() {
   const items = Object.entries(room.reports || {}).map(([id, by]) => ({ id, v: room.msgs.get(id), n: Object.keys(by || {}).length, why: [...new Set(Object.values(by || {}).map((x) => x?.r))] }));

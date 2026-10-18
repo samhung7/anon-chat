@@ -3,6 +3,7 @@ Run: python3 tools/rules.py"""
 import json, pathlib
 
 DAY = "86400000"
+QUIET = "20000"   # a room's messages are announced by Web Push at most this often (ms; worker/src/index.js agrees)
 GAP = "800"   # the shortest time between two messages from one person (ms): stops a script from flooding a room
 ROOM = "data.parent().parent()"           # from rooms/$code/<x>/$y
 NEWROOM = "newData.parent().parent()"
@@ -12,6 +13,10 @@ def o(*parts): return " || ".join(f"({p})" for p in parts)
 is_owner = lambda room: f"{room}.child('meta/owner').val() === auth.uid"
 is_mod = lambda room: f"{room}.child('meta/mods/' + auth.uid).val() === true"
 is_staff = lambda room: o(is_owner(room), is_mod(room))
+# StoaTalk's operator (ops/admins/{uid} = true, set by hand in the Firebase console) handles reports from every room:
+# takes messages down, removes people, ends rooms, and bans someone everywhere (bans/{uid})
+is_admin = "root.child('ops/admins/' + auth.uid).val() === true"
+not_banned = "!root.child('bans/' + auth.uid).exists()"
 can_manage = lambda room, target: o(is_owner(room), j(is_mod(room), f"{target} !== {room}.child('meta/owner').val()", f"{room}.child('meta/mods/' + {target}).val() !== true"))
 
 stale = f"data.child('meta/last').val() < now - {DAY}"
@@ -19,11 +24,12 @@ fresh_room = o("!data.exists()", stale)
 
 room_write = o(
     # owner ends the room, or anyone clears a room idle for 24 hours
-    j("!newData.exists()", o("data.child('meta/owner').val() === auth.uid", stale)),
+    j("!newData.exists()", o("data.child('meta/owner').val() === auth.uid", stale, is_admin)),
     # creating (or taking over a stale code): the creator is inside, and no old content comes along
-    j(fresh_room, "newData.child('meta/owner').val() === auth.uid", "newData.child('members/' + auth.uid).exists()",
+    j(fresh_room, not_banned, "newData.child('meta/owner').val() === auth.uid", "newData.child('members/' + auth.uid).exists()",
       "!newData.child('msgs').exists()", "!newData.child('files').exists()", "!newData.child('dm').exists()", "!newData.child('banned').exists()",
-      "!newData.child('reports').exists()", "!newData.child('qs').exists()", "!newData.child('qq').exists()", "!newData.child('qby').exists()"),
+      "!newData.child('reports').exists()", "!newData.child('qs').exists()", "!newData.child('qq').exists()", "!newData.child('qby').exists()",
+      "!newData.child('push').exists()"),
 )
 
 member_join = j(
@@ -36,23 +42,24 @@ member_join = j(
     f"{ROOM}.child('meta/priv').val() !== true",   # an old password room, while it lasts: nobody new gets in
 )
 member_write = o(
-    j("auth.uid === $uid", f"!{ROOM}.child('banned/' + $uid).exists()", o("data.exists()", member_join)),
-    j("!newData.exists()", can_manage(ROOM, "$uid")),   # the owner or a co-host removes someone
+    # (someone banned everywhere can still leave)
+    j("auth.uid === $uid", f"!{ROOM}.child('banned/' + $uid).exists()", o("!newData.exists()", not_banned), o("data.exists()", member_join)),
+    j("!newData.exists()", o(can_manage(ROOM, "$uid"), is_admin)),   # the owner or a co-host removes someone
 )
 
 is_member = lambda room: f"{room}.child('members/' + auth.uid).exists()"
 # Posting is rate-limited: the same update must stamp the poster's ls (last sent, at most every GAP ms) and name
 # this message in lm (a photo's picture in lf), so one write can't carry a pile of messages either.
 sent_now = lambda room, field: j(f"{room}.child('members/' + auth.uid + '/ls').val() === now", f"{room}.child('members/' + auth.uid + '/{field}').val() === $id")
-post_write = lambda field: j("auth != null", is_member(ROOM), o(
-    j("!data.exists()", "newData.child('by').val() === auth.uid", sent_now(NEWROOM, field)),
+post_write = lambda field: j("auth != null", o(j(is_member(ROOM), o(
+    j("!data.exists()", not_banned, "newData.child('by').val() === auth.uid", sent_now(NEWROOM, field)),
     # the author deletes a message; so do the owner and co-hosts (free accounts too: every room needs a way to take abuse down)
     j("!newData.exists()", o("data.child('by').val() === auth.uid", is_staff(ROOM))),
-))
+)), j("!newData.exists()", is_admin)))   # StoaTalk's operator takes a message down, acting on a report
 msg_write, file_write = post_write("lm"), post_write("lf")
 DMROOM = "data.parent().parent().parent()"
 dm_write = j(
-    "auth != null", "!data.exists()", "newData.child('by').val() === auth.uid", sent_now("newData.parent().parent().parent()", "lm"),
+    "auth != null", "!data.exists()", not_banned, "newData.child('by').val() === auth.uid", sent_now("newData.parent().parent().parent()", "lm"),
     o("$pair === auth.uid + '_' + newData.child('to').val()", "$pair === newData.child('to').val() + '_' + auth.uid"),
     is_member(DMROOM), f"{DMROOM}.child('members/' + newData.child('to').val()).exists()",
 )
@@ -154,7 +161,7 @@ QROOM = "root.child('rooms/' + $code)"
 # (the owner's and co-hosts' own questions skip review)
 q_on = lambda queued: j(f"{QROOM}.child('meta/qa').val() === true",
                         f"{QROOM}.child('meta/qmod').val() === true" if queued else o(f"{QROOM}.child('meta/qmod').val() !== true", is_staff(QROOM)))
-q_ask = lambda queued: j("!data.exists()", q_on(queued), f"!{QROOM}.child('qby/' + $id).exists()",
+q_ask = lambda queued: j("!data.exists()", not_banned, q_on(queued), f"!{QROOM}.child('qby/' + $id).exists()",
                          "newData.parent().parent().child('qby/' + $id).val() === auth.uid", sent_now("newData.parent().parent()", "lq"))
 q_take_back = j("!newData.exists()", o(is_staff(QROOM), f"{QROOM}.child('qby/' + $id).val() === auth.uid"))
 QUEUED = lambda f: f"newData.child('{f}').val() === {QROOM}.child('qq/' + $id + '/{f}').val()"
@@ -206,6 +213,10 @@ rules = {"rules": {
                 "qa": {".validate": "newData.isBoolean()"}, "qmod": {".validate": "newData.isBoolean()"},
                 # the question being answered now, shown large on the projector; the owner or a co-host picks it
                 "qnow": {".write": "auth != null && (" + is_staff("data.parent().parent()") + ")", ".validate": PUSH_ID},
+                # when a message here was last announced by Web Push: any member stamps it, at most every 20 seconds, before
+                # asking the push service (worker/) to announce theirs, so a busy room sends one push now and then, not one a message
+                "pa": {".write": f"auth != null && data.parent().parent().child('members/' + auth.uid).exists() && (!data.exists() || data.val() < now - {QUIET})",
+                       ".validate": "newData.val() === now"},
                 "cap": {".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 1000"},
                 # members counted while there's a size limit: each person adds or removes themselves; the owner sets it
                 "n": {".write": j("auth != null", o(
@@ -240,7 +251,7 @@ rules = {"rules": {
             "keys": {"$uid": {".write": "auth != null && auth.uid === $uid && !newData.exists()"}},
             "banned": {"$uid": {
                 ".read": "auth != null && auth.uid === $uid",
-                ".write": "auth != null && " + can_manage(ROOM, "$uid"),
+                ".write": "auth != null && (" + o(can_manage(ROOM, "$uid"), is_admin) + ")",
                 ".validate": "newData.val() === true"}},
             "msgs": {
                 ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
@@ -296,7 +307,15 @@ rules = {"rules": {
                 }}},
             "reports": {
                 ".read": "auth != null && (" + is_staff("data.parent()") + ")",
-                "$msg": {".write": "auth != null && !newData.exists() && (" + is_staff("data.parent().parent()") + ")", "$uid": REPORT}},
+                "$msg": {".write": "auth != null && !newData.exists() && (" + o(is_staff("data.parent().parent()"), is_admin) + ")", "$uid": REPORT}},
+            # Web Push: each member who wants notifications while the page is closed leaves their browser's push
+            # subscription here, sealed by the push service (worker/) so other members can't use it; the service reads
+            # them with the sender's own sign-in when a message goes out. Gone when they mute the room or leave.
+            "push": {
+                ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
+                "$uid": {
+                    ".write": j("auth != null", "auth.uid === $uid", o("!newData.exists()", is_member("data.parent().parent()"))),
+                    ".validate": SEALED(2000)}},
             "typing": {
                 ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
                 "$uid": TYPING("data.parent().parent()")},
@@ -348,6 +367,49 @@ rules = {"rules": {
                     "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports)$/)",
                     o(j("!data.exists()", "newData.val() === 1"), "newData.val() === data.val() + 1")),
         ".validate": "newData.isNumber()"}}},
+    # StoaTalk's operator: who it is (set by hand in the Firebase console; each can see only their own entry), and
+    # reports from every room, which come in alongside the room's own (rooms/{code}/reports) for the operator to act
+    # on (site/admin.html). A report carries what the reporter saw (t), so it works in an encrypted room too.
+    "ops": {
+        "admins": {"$uid": {".read": "auth != null && auth.uid === $uid"}},
+        "reports": {
+            ".read": "auth != null && " + is_admin,
+            ".indexOn": ["at"],
+            "$id": {
+                ".write": j("auth != null", o(
+                    j("!data.exists()", "newData.child('by').val() === auth.uid",
+                      "$id === newData.child('code').val() + '_' + newData.child('msg').val() + '_' + auth.uid",
+                      "root.child('rooms/' + newData.child('code').val() + '/members/' + auth.uid).exists()",
+                      "root.child('rooms/' + newData.child('code').val() + '/msgs/' + newData.child('msg').val() + '/by').val() === newData.child('who').val()",
+                      "newData.child('who').val() !== auth.uid"),
+                    j("!newData.exists()", is_admin))),
+                ".validate": "newData.hasChildren(['code', 'msg', 'by', 'who', 'r', 'at'])",
+                "code": {".validate": r"newData.isString() && newData.val().matches(/^[2-9A-HJKMNP-Z]{4}$/)"},
+                "msg": {".validate": PUSH_ID}, "by": {".validate": S(128)}, "who": {".validate": S(128)},
+                "r": {".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"},
+                "at": {".validate": "newData.val() === now"},
+                "t": {".validate": S(1000)},     # the message as the reporter saw it (a photo, poll or GIF as a short label)
+                "n": {".validate": S(24)},       # the name it was sent under
+                "f": {".validate": PUSH_ID},     # a photo's id, in a plain room (its picture is public at files.stoatalk.app)
+                "enc": {".validate": "newData.val() === true"},   # sent in an encrypted room: only the reporter's word for what it said
+                "$other": NO,
+            },
+        },
+        # when the hourly job last told the operator about new reports (tools/cleanup)
+        "told": {".validate": "newData.isNumber()"},
+    },
+    # someone the operator banned: they can't open, join or write in any room (and can see that they're banned)
+    "bans": {
+        ".read": "auth != null && " + is_admin,
+        "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && " + is_admin,
+            ".validate": "newData.hasChild('at')",
+            "at": {".validate": "newData.val() === now || newData.val() === data.val()"},
+            "why": {".validate": S(200)},
+            "$other": NO,
+        },
+    },
     # old password rooms' passwords: never readable, and can only be cleared (the daily cleanup removes them)
     "secrets": {"$code": {
         ".write": j("auth != null", "!newData.exists()", o(

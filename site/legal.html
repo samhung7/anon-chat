@@ -66,7 +66,7 @@ a { color: var(--ink); }
     <p>你對自己傳送的文字、照片、投票和其他內容負責。我們不會事先審查內容。房主和副房主可以移除聊天室裡的訊息和成員，每位使用者也可以在自己的裝置上封鎖別人，或把訊息檢舉給房主。</p>
     <p>私人沙龍和私訊有端對端加密，我們無法讀取內容。公開議廊的內容以一般方式存在伺服器上。</p>
     <h3>5. 檢舉違法或有害內容</h3>
-    <p>聊天室裡的檢舉會先交給房主和副房主處理。如果遇到違法內容、房主不處理的情況，或任何需要我們介入的問題，請寫信到 <a href="mailto:hello@stoatalk.app">hello@stoatalk.app</a>，附上聊天室代碼和情況說明。我們可能會刪除聊天室，或限制違規者使用本服務；法律要求時，我們也會配合主管機關。</p>
+    <p>聊天室裡的檢舉會交給房主和副房主，同時也會送給 StoaTalk 營運方。我們會在 24 小時內審查，並依情況刪除訊息、結束聊天室，或停權違規的裝置（被停權的裝置無法開房、加入或發言）。如果遇到違法內容、房主不處理的情況，或任何需要我們介入的問題，請寫信到 <a href="mailto:hello@stoatalk.app">hello@stoatalk.app</a>，附上聊天室代碼和情況說明。我們可能會刪除聊天室，或限制違規者使用本服務；法律要求時，我們也會配合主管機關。</p>
     <h3>6. 內容什麼時候刪除</h3>
     <ul>
       <li>房主按「結束並刪除聊天室」時，所有訊息、照片和私訊立即刪除。照片的網路快取副本最多再保留 1 小時。</li>
@@ -86,12 +86,14 @@ a { color: var(--ink); }
       <li>一組匿名的帳號 ID，由 Google Firebase 的匿名登入產生，用來辨認同一台裝置。</li>
       <li>你在聊天室裡的暱稱、頭像、加入時間、是否在線上，以及正在輸入的短暫狀態。</li>
       <li>你傳的訊息、照片、投票、抽籤和表情回應。照片在上傳前會在你的裝置上壓縮，並移除拍攝地點等 EXIF 資料。</li>
-      <li>檢舉紀錄：被檢舉的訊息、原因和檢舉人的匿名 ID（房主和副房主看不到是誰檢舉的）。</li>
+      <li>檢舉紀錄：被檢舉的訊息、原因和檢舉人的匿名 ID（房主和副房主看不到是誰檢舉的）。檢舉同時會送一份給 StoaTalk 營運方，內容包含被檢舉訊息的文字和發言者的暱稱與匿名 ID；在私人沙龍裡，這份內容是由檢舉人的裝置解密後送出的，只有被檢舉的那一則。</li>
+      <li>停權紀錄：被營運方停權的裝置的匿名 ID、時間和原因。</li>
+      <li>推播訂閱：如果你開啟通知，瀏覽器提供的推播位址會加密後存在你所在的聊天室，只有我們的推播服務能解開，用來在你沒開著頁面時通知你有新訊息。公開議廊的推播會帶發言者暱稱和訊息開頭；私人沙龍和私訊的推播只說「有新訊息」，不含內容。關閉通知、離開聊天室或聊天室刪除時，訂閱也會刪除。</li>
       <li>講座提問：問題內容、按讚的人，以及你選擇具名時的暱稱。提問者的匿名 ID 另外存放，只有提問者自己讀得到，房主和副房主也看不到匿名提問是誰問的。</li>
     </ul>
     <p>私人沙龍的名稱、暱稱、訊息和照片，以及所有私訊，都在你的裝置上加密後才上傳，伺服器只存密文，我們無法讀取。</p>
     <h3>3. 存多久</h3>
-    <p>聊天室結束或閒置 24 小時後，伺服器上的內容會全部刪除，包含檢舉紀錄和提問。你刪除自己的訊息時也會立刻刪除。</p>
+    <p>聊天室結束或閒置 24 小時後，伺服器上的內容會全部刪除，包含聊天室裡的檢舉紀錄、提問和推播訂閱。你刪除自己的訊息時也會立刻刪除。送給營運方的檢舉在處理後刪除，最多保留 90 天；停權紀錄保留到解除停權為止。</p>
     <h3>使用統計</h3>
     <p>為了了解服務的使用情形，我們會記錄每天的總數，例如開了幾間聊天室、送出幾則訊息、提了幾個問題。這些只是每日加總的數字，不包含任何內容、暱稱、帳號 ID 或聊天室代碼，也無法對應到任何人。</p>
     <h3>4. 存在你裝置上的資料</h3>
@@ -101,6 +103,7 @@ a { color: var(--ink); }
       <li><b>Google Firebase</b>：資料庫和匿名登入。</li>
       <li><b>Cloudflare</b>：網站由 Cloudflare Pages 託管，照片存放在 Cloudflare R2，並透過 Cloudflare 的網路傳送；網域和電子郵件轉寄也由 Cloudflare 處理。Cloudflare 可能會留下一般的連線紀錄（例如 IP 位址）。私人沙龍的照片在 Cloudflare 上只是密文。</li>
       <li><b>KLIPY</b>：只有在你搜尋 GIF 時，搜尋字和你的連線資訊才會傳給 KLIPY。</li>
+      <li><b>瀏覽器的推播服務</b>（例如 Google、Apple、Mozilla）：開啟通知後，推播會經過你瀏覽器廠商的推播服務送達。推播內容在送出前已加密，只有你的瀏覽器能讀。</li>
     </ul>
     <p>我們沒有使用廣告追蹤或分析 Cookie，也不會販售任何資料。</p>
     <h3>6. 你可以做的事</h3>
@@ -133,7 +136,7 @@ a { color: var(--ink); }
     <p>You are responsible for the text, photos, polls and other content you send. We don't review content in advance. A room's owner and co-hosts can remove messages and people, everyone can block others on their own device, and anyone can report a message to the owner.</p>
     <p>Private Salons and private messages are end-to-end encrypted, so we can't read them. Content in Open Stoa rooms is stored on the server in the ordinary way.</p>
     <h3>5. Reporting illegal or harmful content</h3>
-    <p>Reports made in a room go to its owner and co-hosts first. For illegal content, an owner who doesn't act, or anything else that needs us, write to <a href="mailto:hello@stoatalk.app">hello@stoatalk.app</a> with the room code and what happened. We may delete the room or restrict whoever broke these terms, and we cooperate with the authorities where the law requires it.</p>
+    <p>Reports made in a room go to its owner and co-hosts, and also to the StoaTalk team. We review them within 24 hours and, depending on what we find, delete the message, end the room, or suspend the device that broke these terms (a suspended device can't open, join or post in rooms). For illegal content, an owner who doesn't act, or anything else that needs us, write to <a href="mailto:hello@stoatalk.app">hello@stoatalk.app</a> with the room code and what happened. We may delete the room or restrict whoever broke these terms, and we cooperate with the authorities where the law requires it.</p>
     <h3>6. When content is deleted</h3>
     <ul>
       <li>When the owner ends the room, every message, photo and private message is deleted at once. Cached copies of photos on the network may last up to one more hour.</li>
@@ -153,12 +156,14 @@ a { color: var(--ink); }
       <li>An anonymous account ID from Google Firebase's anonymous sign-in, which recognizes the same device.</li>
       <li>Your nickname and avatar in each room, when you joined, whether you're online, and a short-lived "typing" status.</li>
       <li>The messages, photos, polls, draws and reactions you send. Photos are compressed on your device before upload, which also removes EXIF data such as where they were taken.</li>
-      <li>Reports: the reported message, the reason and the reporter's anonymous ID (owners and co-hosts can't see who reported).</li>
+      <li>Reports: the reported message, the reason and the reporter's anonymous ID (owners and co-hosts can't see who reported). A copy goes to the StoaTalk team with the reported message's text and its sender's nickname and anonymous ID; in a Private Salon the reporter's device decrypts that one message and sends it.</li>
+      <li>Suspensions: the anonymous ID of a device the StoaTalk team suspended, when, and why.</li>
+      <li>Push subscriptions: if you turn on notifications, the push address your browser gives us is encrypted and kept in the rooms you're in, where only our push service can open it, to tell you about new messages while the page is closed. Pushes from an Open Stoa room carry the sender's nickname and the start of the message; from a Private Salon or a private message they only say there's something new. Turning notifications off, leaving the room, or the room being deleted removes the subscription.</li>
       <li>Lecture questions: the question, who upvoted it, and your nickname if you chose to ask by name. The asker's anonymous ID is kept apart where only the asker can read it, so not even the owner or co-hosts can see who asked an anonymous question.</li>
     </ul>
     <p>In a Private Salon the room name, nicknames, messages and photos, and every private message anywhere, are encrypted on your device before upload. The server only holds ciphertext, and we can't read it.</p>
     <h3>3. How long it's kept</h3>
-    <p>When a room ends or has been idle for 24 hours, everything about it is deleted from the server, reports and questions included. A message you delete is deleted at once.</p>
+    <p>When a room ends or has been idle for 24 hours, everything about it is deleted from the server, including the room's reports, questions and push subscriptions. A message you delete is deleted at once. Reports sent to the StoaTalk team are deleted once handled, and kept 90 days at most; a suspension is kept until it's lifted.</p>
     <h3>Usage statistics</h3>
     <p>To understand how the service is used, we count daily totals, such as how many rooms were opened, messages sent and questions asked. These are only numbers added up per day. They hold no content, nicknames, account IDs or room codes, and can't be traced to anyone.</p>
     <h3>4. What stays on your device</h3>
@@ -168,6 +173,7 @@ a { color: var(--ink); }
       <li><b>Google Firebase</b>: the database and anonymous sign-in.</li>
       <li><b>Cloudflare</b>: hosts the site on Cloudflare Pages, stores photos in Cloudflare R2 and delivers them over its network, and handles the domain and email forwarding. It may keep ordinary access logs, such as IP addresses. Private Salon photos are only ciphertext there.</li>
       <li><b>KLIPY</b>: only when you search for a GIF are your search words and connection details sent to KLIPY.</li>
+      <li><b>Your browser's push service</b> (such as Google, Apple or Mozilla): with notifications on, pushes reach you through it. They're encrypted before they're sent, so only your browser can read them.</li>
     </ul>
     <p>We use no advertising trackers or analytics cookies, and we never sell any data.</p>
     <h3>6. Your choices</h3>

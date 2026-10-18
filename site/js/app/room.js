@@ -51,6 +51,7 @@ export class Room extends Emitter {
     this.msgs = new Map();
     this.dms = new Map();       // other uid -> Map of private messages
     this.qs = new Map(); this.qq = new Map(); this.qqRaw = {};
+    this.pushSynced = false;    // this device's push subscription is in the room (or isn't wanted), once per visit
     this.myWait = new Set();    // my questions still waiting for review
     this.justAsked = new Set(); // asked from here, not back from the server yet
     this.reports = {}; this.typing = {}; this.dmTyping = {};

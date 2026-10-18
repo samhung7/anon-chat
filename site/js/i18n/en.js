@@ -103,6 +103,7 @@ I18N.add("en", {
   code4: "The code has 4 characters",
   notFound: "Room not found. It may have ended",
   bannedToast: "The host removed you from this room",
+  bannedAll: "StoaTalk has suspended this device for breaking the terms of use: it can't open, join or post in rooms. Questions: hello@stoatalk.app",
   lockedToast: "The host has locked this room. You can't join right now",
   cantJoin: "Couldn't join this room",
 
@@ -323,7 +324,7 @@ I18N.add("en", {
   removedToast: "Message removed",
   report: "🚩 Report",
   reportTitle: "Report this message",
-  reportBody: "Reports go to the owner and co-hosts. They see the reason and how many people reported it, never who.",
+  reportBody: "Reports go to the owner and co-hosts, and to the StoaTalk team with what the message says, so we can review it (in a Private Salon too: your device decrypts it and sends it). The owner sees the reason and how many people reported it, never who.",
   why0: "Harassment or bullying",
   why1: "Spam or advertising",
   why2: "Inappropriate or offensive",

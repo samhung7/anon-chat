@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#e7decd">
+<title>StoaTalk 營運管理</title>
+<link rel="icon" href="icons/stoa2-192.png">
+<!-- StoaTalk's operator page: reports from every room (ops/reports), bans (bans/), and the Web Push key.
+     Only an admin (ops/admins/{uid} = true, added by hand in the Firebase console) can read or act; the database
+     rules decide that, not this page. Chinese only. ?emu&as=<uid> runs it against the local emulator. -->
+<style>
+:root { --bg: #f4efe6; --surface: #fbfaf8; --line: #e4dccc; --text: #3a3128; --muted: #857a6b; --accent: #d9cdb6; --ink: #7d6b52; --danger: #b42318; --ok: #3f7d3a; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1b1916; --surface: #25221e; --line: #3e3a33; --text: #f4efe6; --muted: #b3aa9b; --accent: #e7decd; --ink: #e7decd; --danger: #f08a7e; --ok: #8fc98a; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; }
+main { max-width: 820px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 17px; margin: 28px 0 8px; }
+a { color: var(--ink); }
+.muted { color: var(--muted); font-size: 13px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 10px 0; }
+.card .head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.card .text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: var(--bg); border-radius: 6px; }
+.card img { max-width: 100%; max-height: 260px; border-radius: 8px; display: block; margin: 8px 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+button { font: inherit; color: var(--text); background: var(--accent); border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+button.ghost { background: transparent; border: 1px solid var(--line); }
+button.danger { background: var(--danger); color: #fff; }
+button:disabled { opacity: .5; cursor: progress; }
+code, textarea { font: 13px/1.4 ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
+textarea { width: 100%; min-height: 110px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.tag { font-size: 12px; border-radius: 999px; padding: 0 8px; background: var(--accent); color: #3a3128; }
+.ok { color: var(--ok); } .bad { color: var(--danger); }
+ol li { margin: 4px 0; }
+</style>
+<script src="js/config.js"></script>
+</head>
+<body>
+<main>
+  <h1>StoaTalk 營運管理</h1>
+  <p class="muted">檢舉收件匣、停權與推播設定。<a href="./">回 StoaTalk</a></p>
+  <p id="status">連線中…</p>
+
+  <section id="notAdmin" hidden>
+    <div class="card">
+      <p>這個瀏覽器還不是管理員。把下面這個 ID 加為管理員：</p>
+      <p><code id="myUid"></code> <button type="button" class="ghost" id="copyUid">複製</button></p>
+      <ol>
+        <li>打開 <a href="https://console.firebase.google.com/project/anon-chat-2792b/database" target="_blank" rel="noopener">Firebase 主控台的 Realtime Database</a>。</li>
+        <li>在最上層按「＋」，依序新增 <code>ops</code> → <code>admins</code> → 這個 ID，值填 <code>true</code>。</li>
+        <li>回來重新整理這一頁。</li>
+      </ol>
+      <p class="muted">管理員身分綁在這個瀏覽器的匿名 ID 上。清除網站資料或換瀏覽器後會變成新的 ID，要再加一次。</p>
+    </div>
+  </section>
+
+  <section id="admin" hidden>
+    <h2>待處理的檢舉 <span id="count" class="tag">0</span></h2>
+    <p class="muted">同一則訊息的檢舉合併成一張卡。私人沙龍的內容是檢舉人裝置解密後送來的，伺服器無法驗證。商店要求在 24 小時內處理。</p>
+    <div id="reports"></div>
+
+    <h2>停權名單</h2>
+    <p class="muted">被停權的裝置不能開房、加入或發言，但能離開房間。換裝置或清除瀏覽器資料就能避開，這是免註冊的限制。</p>
+    <div id="bans"></div>
+  </section>
+
+  <section id="pushKey" hidden>
+    <h2>推播金鑰</h2>
+    <div class="card">
+      <p>推播服務：<span id="pushState">檢查中…</span></p>
+      <div id="pushSetup" hidden>
+        <ol>
+          <li>按「產生金鑰」，複製出現的整段文字。金鑰只在你的瀏覽器裡產生，不會傳到任何地方。</li>
+          <li>到 GitHub 的 <a href="https://github.com/samhung7/anon-chat/settings/secrets/actions/new" target="_blank" rel="noopener">samhung7/anon-chat → Settings → Secrets → Actions</a>，新增 secret，名稱 <code>VAPID_KEY</code>，值貼上剛才那段。</li>
+          <li>到 <a href="https://github.com/samhung7/anon-chat/actions/workflows/worker.yml" target="_blank" rel="noopener">Actions → Deploy photo service</a> 按「Run workflow」。完成後重新整理這一頁，這裡會顯示「已啟用」。</li>
+        </ol>
+        <p class="muted">金鑰設好後不要再換：換了之後，每個人的推播訂閱都要等他們重新進房才會更新。</p>
+        <button type="button" id="genKey">產生金鑰</button>
+        <textarea id="keyOut" readonly hidden aria-label="VAPID_KEY"></textarea>
+      </div>
+    </div>
+  </section>
+</main>
+<script type="module">
+const CFG = window.CHAT_CONFIG || {};
+const params = new URLSearchParams(location.search);
+const EMU = params.has("emu");
+const FB = EMU ? { apiKey: "demo-key", projectId: "demo-anon-chat", databaseURL: `http://${location.hostname}:9000?ns=demo-anon-chat` } : CFG.firebase;
+const API = EMU ? `http://${location.hostname}:8787` : CFG.photos?.api;
+const HOST = EMU ? `http://${location.hostname}:8787` : CFG.photos?.host;
+const REASONS = ["騷擾或霸凌", "垃圾訊息或廣告", "不當或冒犯的內容", "其他"];
+const $ = (s) => document.querySelector(s);
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k === "text" ? (n.textContent = v) : n.setAttribute(k, v);
+  n.append(...kids.flat().filter((k) => k != null));
+  return n;
+};
+const when = (ms) => new Date(ms).toLocaleString("zh-TW", { dateStyle: "short", timeStyle: "short" });
+
+const fb = await import("./js/vendor/firebase.js");
+const app = fb.initializeApp(FB);
+const db = fb.getDatabase(app);
+let uid;
+if (EMU) {
+  uid = params.get("as") || "admin-emu";
+  fb.connectDatabaseEmulator(db, location.hostname, 9000, { mockUserToken: { sub: uid, user_id: uid } });
+} else { // the same places the app keeps its sign-in: this browser's id here is the same as in the chat
+  const auth = fb.initializeAuth(app, { persistence: [fb.indexedDBLocalPersistence, fb.browserLocalPersistence, fb.browserSessionPersistence] });
+  uid = (await fb.signInAnonymously(auth)).user.uid;
+}
+const r = (path) => (path ? fb.ref(db, path) : fb.ref(db));
+const write = async (btn, upd, done) => {
+  btn.disabled = true;
+  try { await fb.update(r(""), upd); if (done) $("#status").textContent = done; }
+  catch (e) { $("#status").textContent = "沒有成功：" + e.message; btn.disabled = false; }
+};
+
+checkPush();
+const isAdmin = (await fb.get(r("ops/admins/" + uid)).catch(() => null))?.val() === true;
+$("#status").textContent = isAdmin ? "已登入為管理員。" : "";
+if (!isAdmin) {
+  $("#notAdmin").hidden = false;
+  $("#myUid").textContent = uid;
+  $("#copyUid").onclick = () => navigator.clipboard?.writeText(uid);
+} else {
+  $("#admin").hidden = false;
+  fb.onValue(r("ops/reports"), (s) => showReports(s.val() || {}), (e) => ($("#status").textContent = "讀不到檢舉：" + e.message));
+  fb.onValue(r("bans"), (s) => showBans(s.val() || {}), () => {});
+}
+
+// reports, one card per message: newest first
+function showReports(all) {
+  const groups = new Map();
+  for (const [key, v] of Object.entries(all)) {
+    const id = v.code + "/" + v.msg;
+    if (!groups.has(id)) groups.set(id, { ...v, keys: [], reasons: [], last: 0 });
+    const g = groups.get(id);
+    g.keys.push(key); g.reasons.push(v.r); g.last = Math.max(g.last, v.at || 0);
+    if (!g.t && v.t) g.t = v.t;
+  }
+  const list = [...groups.values()].sort((a, b) => b.last - a.last);
+  $("#count").textContent = list.length;
+  $("#reports").replaceChildren(...(list.length ? list.map(card) : [el("p", { class: "muted", text: "沒有待處理的檢舉。" })]));
+}
+function card(g) {
+  const clear = Object.fromEntries(g.keys.map((k) => ["ops/reports/" + k, null]));
+  const takeDown = { ...clear, [`rooms/${g.code}/msgs/${g.msg}`]: null, [`rooms/${g.code}/reports/${g.msg}`]: null, ...(g.f ? { [`rooms/${g.code}/files/${g.f}`]: null } : {}) };
+  const counts = REASONS.map((name, k) => [name, g.reasons.filter((x) => x === k).length]).filter(([, n]) => n).map(([name, n]) => `${name} ×${n}`).join("、");
+  const btn = (text, cls, fn) => { const b = el("button", { type: "button", class: cls, text }); b.onclick = () => fn(b); return b; };
+  return el("div", { class: "card" },
+    el("div", { class: "head" },
+      el("b", { text: `房間 ${g.code}` }), g.enc ? el("span", { class: "tag", text: "私人沙龍" }) : null,
+      el("span", { text: `${g.keys.length} 人檢舉：${counts}` }), el("span", { class: "muted", text: when(g.last) })),
+    el("div", { class: "muted", text: `發言者：${g.n || "（沒有名字）"}　ID ${g.who}` }),
+    g.t ? el("div", { class: "text", text: g.t }) : null,
+    g.f && HOST ? el("img", { src: `${HOST}/${g.code}/${g.who}/${g.f}.jpg`, alt: "被檢舉的照片", loading: "lazy" }) : null,
+    el("div", { class: "row" },
+      btn("刪除訊息", "", (b) => write(b, takeDown, "訊息已刪除。")),
+      btn("刪除並停權", "danger", async (b) => {
+        if (!confirm(`刪除這則訊息，並停權這個裝置（${g.n || g.who}）？`)) return;
+        // out of the room too, while it's still there (a room that's gone can't take a write)
+        const live = (await fb.get(r(`rooms/${g.code}/meta`)).catch(() => null))?.exists();
+        write(b, { ...takeDown, [`bans/${g.who}`]: { at: fb.serverTimestamp(), why: `${g.code} ${REASONS[g.reasons[0]] || ""}`.trim().slice(0, 200) },
+                   ...(live ? { [`rooms/${g.code}/banned/${g.who}`]: true, [`rooms/${g.code}/members/${g.who}`]: null } : {}) }, "已刪除並停權。");
+      }),
+      btn("結束整個聊天室", "ghost", (b) => confirm(`結束房間 ${g.code}？所有訊息都會刪除。`) && write(b, { ...clear, [`rooms/${g.code}`]: null }, "聊天室已結束。")),
+      btn("沒問題，略過", "ghost", (b) => write(b, clear, "已略過。"))));
+}
+function showBans(all) {
+  const list = Object.entries(all).sort(([, a], [, b]) => (b.at || 0) - (a.at || 0));
+  $("#bans").replaceChildren(...(list.length ? list.map(([who, v]) => {
+    const b = el("button", { type: "button", class: "ghost", text: "解除停權" });
+    b.onclick = () => confirm("解除這個裝置的停權？") && write(b, { ["bans/" + who]: null }, "已解除停權。");
+    return el("div", { class: "card" }, el("div", { class: "head" }, el("code", { text: who }), el("span", { class: "muted", text: when(v.at) + (v.why ? "　" + v.why : "") })), el("div", { class: "row" }, b));
+  }) : [el("p", { class: "muted", text: "沒有人被停權。" })]));
+}
+
+// the push service: on once it has its key (the VAPID_KEY secret); otherwise how to make one
+async function checkPush() {
+  $("#pushKey").hidden = false;
+  let on = false;
+  try { on = !!API && (await fetch(API + "/push/key")).ok; } catch (e) {}
+  $("#pushState").textContent = on ? "已啟用" : API ? "尚未設定金鑰" : "沒有設定服務位址";
+  $("#pushState").className = on ? "ok" : "bad";
+  $("#pushSetup").hidden = on;
+  $("#genKey").onclick = async () => {
+    const k = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"]);
+    const { kty, crv, x, y, d } = await crypto.subtle.exportKey("jwk", k.privateKey);
+    $("#keyOut").value = JSON.stringify({ kty, crv, x, y, d });
+    $("#keyOut").hidden = false; $("#keyOut").select();
+  };
+}
+</script>
+</body>
+</html>

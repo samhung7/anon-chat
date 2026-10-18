@@ -508,3 +508,82 @@ test("usage stats: anonymous daily counts that only go up by one", async () => {
   await assertFails(set(ref(db("bob"), "stats/today/msgs"), 1));
   await assertFails(get(ref(db("bob"), "stats")));
 });
+
+/* ---------- StoaTalk's operator: reports from every room, bans, push subscriptions ---------- */
+const opsReport = (uid, msg, extra = {}) => ({ code: C, msg, by: uid, who: "alice", r: 1, at: T, t: "買粉絲", n: "房主", ...extra });
+const makeAdmin = (uid) => admin((d) => set(ref(d, `ops/admins/${uid}`), true));
+
+test("operator reports: a member reports someone else's message once; only the operator reads or clears them", async () => {
+  await createRoom("alice"); await join("bob");
+  const id = await say("alice", "買粉絲");
+  const key = `${C}_${id}_bob`;
+  await assertFails(set(ref(db("bob"), `ops/reports/${C}_${id}_carol`), opsReport("bob", id)));   // the key names the reporter
+  await assertFails(set(ref(db("bob"), `ops/reports/${key}`), opsReport("bob", id, { who: "bob" }))); // must name the real author
+  await assertFails(set(ref(db("carol"), `ops/reports/${C}_${id}_carol`), opsReport("carol", id))); // not in the room
+  await assertFails(set(ref(db("bob"), `ops/reports/${key}`), opsReport("bob", id, { t: "a".repeat(1001) })));
+  // the room's own report and the operator's go in one write, as the page sends them
+  await assertSucceeds(update(ref(db("bob")), { [`rooms/${C}/reports/${id}/bob`]: { r: 1, at: T }, [`ops/reports/${key}`]: opsReport("bob", id) }));
+  await assertFails(set(ref(db("bob"), `ops/reports/${key}`), opsReport("bob", id, { r: 2 })));   // once
+  await assertFails(get(ref(db("bob"), "ops/reports")));
+  await assertFails(get(ref(db("alice"), "ops/reports")));
+  await assertFails(remove(ref(db("bob"), `ops/reports/${key}`)));
+  await makeAdmin("op");
+  await assertSucceeds(get(ref(db("op"), "ops/reports")));
+  await assertSucceeds(get(ref(db("op"), "ops/admins/op")));
+  await assertFails(get(ref(db("bob"), "ops/admins/op")));
+  await assertFails(set(ref(db("op"), "ops/admins/bob"), true));   // only by hand, in the console
+  await assertSucceeds(remove(ref(db("op"), `ops/reports/${key}`)));
+});
+
+test("operator: takes a message or a photo marker down, removes someone, ends a room", async () => {
+  await createRoom("alice"); await join("bob"); await makeAdmin("op");
+  const id = await say("bob");
+  await assertFails(remove(ref(db("carol"), `rooms/${C}/msgs/${id}`)));
+  await assertSucceeds(update(ref(db("op"), `rooms/${C}`), { [`msgs/${id}`]: null, [`reports/${id}`]: null }));
+  await assertFails(set(ref(db("op"), `rooms/${C}/msgs/x1`), { by: "op", name: "x", avatar: "🦊", text: "hi", at: T }));   // can't post
+  await assertSucceeds(update(ref(db("op"), `rooms/${C}`), { "members/bob": null, "banned/bob": true }));
+  await assertFails(join("bob"));
+  await assertSucceeds(remove(ref(db("op"), `rooms/${C}`)));
+});
+
+test("bans: a banned person can't open, join or write anywhere, can still leave, and can see the ban", async () => {
+  await createRoom("alice"); await join("bob"); await makeAdmin("op");
+  await assertFails(set(ref(db("bob"), "bans/bob"), { at: T }));
+  await assertFails(set(ref(db("alice"), "bans/bob"), { at: T }));
+  await assertSucceeds(set(ref(db("op"), "bans/bob"), { at: T, why: "spam" }));
+  await assertSucceeds(get(ref(db("bob"), "bans/bob")));
+  await assertFails(get(ref(db("carol"), "bans/bob")));
+  await assertFails(say("bob"));
+  await assertFails(createRoom("bob", { code: "K7QN" }));
+  await assertFails(update(ref(db("bob")), { [`rooms/${C}/members/bob/name`]: "bobby", [`rooms/${C}/names/bobby`]: "bob" }));
+  await assertSucceeds(remove(ref(db("bob"), `rooms/${C}/members/bob`)));   // leaving
+  await assertFails(join("bob"));
+  await assertSucceeds(remove(ref(db("op"), "bans/bob")));
+  await assertSucceeds(join("bob"));
+  await assertSucceeds(say("bob"));
+});
+
+test("push subscriptions: each member leaves their own (sealed), members read them, gone with the member", async () => {
+  await createRoom("alice"); await join("bob");
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/push/bob`), "abc_DEF-123"));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/push/alice`), "abc"));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/push/bob`), "not sealed!"));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/push/bob`), "a".repeat(2001)));
+  await assertFails(set(ref(db("carol"), `rooms/${C}/push/carol`), "abc"));   // not in the room
+  await assertSucceeds(get(ref(db("alice"), `rooms/${C}/push`)));
+  await assertFails(get(ref(db("carol"), `rooms/${C}/push`)));
+  // leaving takes it away in the same write
+  await assertSucceeds(update(ref(db("bob"), `rooms/${C}`), { "members/bob": null, "names/bob": null, "push/bob": null }));
+  await assertFails(update(ref(db("bob")), { [`rooms/${C}`]: { meta: { owner: "bob", created: T, last: T }, members: { bob: member("b") }, push: { bob: "x" } } }));
+});
+
+test("push announcements: a member stamps meta/pa, at most every 20 seconds", async () => {
+  await createRoom("alice"); await join("bob");
+  await assertFails(set(ref(db("carol"), `rooms/${C}/meta/pa`), T));
+  await join("carol");
+  await assertFails(set(ref(db("bob"), `rooms/${C}/meta/pa`), 5));
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/meta/pa`), T));
+  await assertFails(set(ref(db("carol"), `rooms/${C}/meta/pa`), T));   // too soon (the owner, who writes meta, isn't held to it)
+  await admin((d) => set(ref(d, `rooms/${C}/meta/pa`), Date.now() - 21000));
+  await assertSucceeds(set(ref(db("carol"), `rooms/${C}/meta/pa`), T));
+});

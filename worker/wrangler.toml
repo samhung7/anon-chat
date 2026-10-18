@@ -1,6 +1,7 @@
 # The photo service (src/index.js): a Cloudflare Worker at api.stoatalk.app in front of the R2 bucket stoatalk-photos,
-# which is public at files.stoatalk.app. Deployed by .github/workflows/worker.yml with the CLOUDFLARE_API_TOKEN and
-# CLOUDFLARE_ACCOUNT_ID secrets.
+# which is public at files.stoatalk.app, and the Web Push sender (src/push.js). Deployed by .github/workflows/worker.yml
+# with the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets; the VAPID_KEY secret (a P-256 JWK, made on
+# site/admin.html) turns push on.
 name = "stoatalk-photos"
 main = "src/index.js"
 compatibility_date = "2025-09-01"

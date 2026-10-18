@@ -18,12 +18,16 @@ export const unsignedUid = async (token) => {
 export const env = (bucket) => ({ PHOTOS: bucket, PROJECT_ID: "demo-anon-chat", DATABASE_URL: "http://127.0.0.1:9000/?ns=demo-anon-chat", ORIGINS: "*" });
 export const handler = makeHandler({ verify: unsignedUid, read: readDb });
 
-// the service and the bucket's public address on one port: PUT/DELETE go to the Worker, GET reads the bucket
+// the service and the bucket's public address on one port: PUT/DELETE go to the Worker, GET reads the bucket.
+// It has a Web Push key of its own; the pushes it would send are kept in `pushed` instead of going out.
 export async function startPhotoStub(port = 8787) {
-  const bucket = new MemoryBucket();
+  const bucket = new MemoryBucket(), pushed = [];
+  const key = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"]);
+  const VAPID_KEY = JSON.stringify(await crypto.subtle.exportKey("jwk", key.privateKey));
+  const push = makeHandler({ verify: unsignedUid, read: readDb, fetcher: async (url, init) => { pushed.push({ url, init }); return new Response(null, { status: 201 }); } });
   const server = createServer(async (req, out) => {
     const origin = req.headers.origin || "*";
-    if (req.method === "GET") {
+    if (req.method === "GET" && !req.url.startsWith("/push/")) {
       const o = bucket.objects.get(decodeURIComponent(new URL(req.url, "http://x").pathname.slice(1)));
       out.writeHead(o ? 200 : 404, { "Access-Control-Allow-Origin": "*", ...(o ? { "Content-Type": o.httpMetadata.contentType } : {}) });
       return out.end(o ? Buffer.from(o.body) : undefined);
@@ -32,10 +36,10 @@ export async function startPhotoStub(port = 8787) {
     for await (const c of req) chunks.push(c);
     const body = chunks.length ? Buffer.concat(chunks) : undefined;
     const headers = Object.fromEntries(Object.entries(req.headers).filter(([, v]) => typeof v === "string"));
-    const res = await handler(new Request(`http://127.0.0.1:${port}${req.url}`, { method: req.method, headers, body, duplex: "half" }), { ...env(bucket), ORIGINS: origin });
+    const res = await push(new Request(`http://127.0.0.1:${port}${req.url}`, { method: req.method, headers, body, duplex: "half" }), { ...env(bucket), ORIGINS: origin, VAPID_KEY });
     out.writeHead(res.status, Object.fromEntries(res.headers));
-    out.end();
+    return out.end(Buffer.from(await res.arrayBuffer()));
   });
   await new Promise((ok) => server.listen(port, "127.0.0.1", ok));
-  return { bucket, close: () => new Promise((ok) => server.close(ok)) };
+  return { bucket, pushed, VAPID_KEY, close: () => new Promise((ok) => server.close(ok)) };
 }

@@ -103,6 +103,7 @@ I18N.add("fr", {
   code4: "Le code comporte 4 caractères",
   notFound: "Salon introuvable. Il est peut-être terminé",
   bannedToast: "L’hôte vous a retiré de ce salon",
+  bannedAll: "StoaTalk a suspendu cet appareil pour non-respect des conditions d'utilisation : il ne peut ni ouvrir de salon, ni rejoindre, ni écrire. Questions : hello@stoatalk.app",
   lockedToast: "L’hôte a verrouillé ce salon. Impossible de le rejoindre pour le moment",
   cantJoin: "Impossible de rejoindre ce salon",
 
@@ -323,7 +324,7 @@ I18N.add("fr", {
   removedToast: "Message retiré",
   report: "🚩 Signaler",
   reportTitle: "Signaler ce message",
-  reportBody: "Les signalements vont à l'hôte et aux co-hôtes. Ils voient le motif et le nombre de signalements, jamais qui a signalé.",
+  reportBody: "Les signalements vont à l'hôte et aux co-hôtes, et à l'équipe StoaTalk avec le contenu du message pour examen (dans un Salon privé aussi : votre appareil le déchiffre et l'envoie). L'hôte voit le motif et le nombre de signalements, jamais qui a signalé.",
   why0: "Harcèlement ou intimidation",
   why1: "Spam ou publicité",
   why2: "Contenu inapproprié ou choquant",
