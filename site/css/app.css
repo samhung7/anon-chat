@@ -283,6 +283,17 @@ ul.plist small { color: var(--muted); }
 /* language: the page is written in Traditional Chinese, so other languages stay hidden until js/i18n.js fills them in */
 html.l10n body { visibility: hidden; }
 html.opening #home { display: none; }
+/* the loading screen, while nothing else can show yet: it fades in only if the wait is noticeable, and says it is
+   connecting once it has been a while (the words wait for the translation) */
+.splash { display: none; }
+html.opening .splash, html.l10n .splash { position: fixed; inset: 0; z-index: 10; visibility: visible; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--bg); color: var(--text); animation: fade .3s .15s both; }
+.splash img { width: 72px; height: 72px; border-radius: 20px; background: var(--accent-2); }
+.splash b { font-size: 22px; letter-spacing: .02em; }
+.splash .spin { width: 26px; height: 26px; margin-top: 8px; border: 3px solid var(--line); border-top-color: var(--accent-ink); border-radius: 50%; animation: spin .8s linear infinite; }
+.splash p { margin: 0; color: var(--muted); font-size: 14px; animation: fade .4s 2.5s both; }
+html.l10n .splash p { visibility: hidden; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .splash .spin { animation-duration: 2.4s; } }
 .hmenu .merow + .merow { margin-top: 8px; }
 .langs { display: flex; flex-direction: column; gap: 6px; }
 .langs .btn[aria-checked="true"] { border-color: var(--accent); background: var(--accent-2); font-weight: 600; }
@@ -404,7 +415,7 @@ textarea.field { resize: vertical; font: inherit; line-height: 1.45; }
 
 /* ---------- the projector screen ---------- */
 .show { position: fixed; inset: 0; display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 3vw; padding: 4vh 4vw; background: var(--bg); overflow: hidden; font-size: clamp(18px, 1.6vw, 34px); }
-.smain { display: flex; flex-direction: column; gap: 2vh; min-height: 0; overflow: hidden; }
+.smain { display: flex; flex-direction: column; gap: 2vh; min-height: 0; overflow-y: auto; }
 .smain h2 { font-size: 1.1em; color: var(--muted); font-weight: 600; }
 .snow { background: var(--surface); border: 3px solid var(--accent-ink); border-radius: 24px; padding: 2.5vh 2vw; }
 .snow p { margin: .3em 0; font-size: 1.7em; font-weight: 700; line-height: 1.3; white-space: pre-wrap; word-break: break-word; }
@@ -419,7 +430,7 @@ textarea.field { resize: vertical; font: inherit; line-height: 1.45; }
 .slist .st small { display: block; color: var(--muted); font-size: .7em; margin-top: .2em; }
 .shint { color: var(--muted); font-size: 1.1em; }
 .shint.big { font-size: 1.6em; margin: auto 0; text-align: center; }
-.sside { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1vh; min-height: 0; overflow: hidden; }
+.sside { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1vh; min-height: 0; overflow-y: auto; }
 .stitle { font-size: 1.2em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sqr { width: min(100%, 30vh); background: #fff; border-radius: 16px; padding: 8px; }
 .sqr svg { display: block; width: 100%; height: auto; }
@@ -435,7 +446,9 @@ textarea.field { resize: vertical; font: inherit; line-height: 1.45; }
 .sexit { position: fixed; top: 10px; right: 10px; opacity: .25; }
 .sexit:hover, .sexit:focus-visible { opacity: 1; }
 @media (max-width: 700px), (orientation: portrait) {
-  .show { grid-template-columns: 1fr; grid-template-rows: auto 1fr; overflow-y: auto; font-size: 18px; }
+  /* one column that scrolls as a whole: each part as tall as its content, so the last question isn't cut off */
+  .show { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: auto; align-content: start; overflow-y: auto; font-size: 18px; padding-bottom: calc(4vh + env(safe-area-inset-bottom)); }
+  .smain, .sside { overflow: visible; }
   .sside { order: -1; }
   .sqr { width: 200px; }
 }

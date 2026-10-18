@@ -28,10 +28,54 @@
 <link rel="icon" href="icons/stoa2-192.png?v=dev">
 <link rel="apple-touch-icon" href="icons/stoa2-touch-180.png?v=dev">
 <link rel="stylesheet" href="css/app.css?v=dev">
+<!-- the app's modules and the database SDK, fetched all at once instead of one import at a time, and the database's
+     address (js/config.js) and sign-in reached early: together they are most of the wait before a room's link opens -->
+<link rel="preconnect" href="https://anon-chat-2792b-default-rtdb.asia-southeast1.firebasedatabase.app">
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com">
+<link rel="preconnect" href="https://securetoken.googleapis.com">
+<link rel="modulepreload" href="js/app/actions.js?v=dev">
+<link rel="modulepreload" href="js/app/api.js?v=dev">
+<link rel="modulepreload" href="js/app/archive.js?v=dev">
+<link rel="modulepreload" href="js/app/backend.js?v=dev">
+<link rel="modulepreload" href="js/app/blocking.js?v=dev">
+<link rel="modulepreload" href="js/app/chat.js?v=dev">
+<link rel="modulepreload" href="js/app/clean.js?v=dev">
+<link rel="modulepreload" href="js/app/composer.js?v=dev">
+<link rel="modulepreload" href="js/app/constants.js?v=dev">
+<link rel="modulepreload" href="js/app/crypto.js?v=dev">
+<link rel="modulepreload" href="js/app/dom.js?v=dev">
+<link rel="modulepreload" href="js/app/draws.js?v=dev">
+<link rel="modulepreload" href="js/app/home.js?v=dev">
+<link rel="modulepreload" href="js/app/identity.js?v=dev">
+<link rel="modulepreload" href="js/app/kinds.js?v=dev">
+<link rel="modulepreload" href="js/app/lobby.js?v=dev">
+<link rel="modulepreload" href="js/app/main.js?v=dev">
+<link rel="modulepreload" href="js/app/menu.js?v=dev">
+<link rel="modulepreload" href="js/app/notify.js?v=dev">
+<link rel="modulepreload" href="js/app/people.js?v=dev">
+<link rel="modulepreload" href="js/app/photos.js?v=dev">
+<link rel="modulepreload" href="js/app/pickers.js?v=dev">
+<link rel="modulepreload" href="js/app/polls.js?v=dev">
+<link rel="modulepreload" href="js/app/qa.js?v=dev">
+<link rel="modulepreload" href="js/app/records.js?v=dev">
+<link rel="modulepreload" href="js/app/richtext.js?v=dev">
+<link rel="modulepreload" href="js/app/room.js?v=dev">
+<link rel="modulepreload" href="js/app/session.js?v=dev">
+<link rel="modulepreload" href="js/app/show.js?v=dev">
+<link rel="modulepreload" href="js/app/storage.js?v=dev">
+<link rel="modulepreload" href="js/app/text.js?v=dev">
+<link rel="modulepreload" href="js/vendor/firebase.js">
 <script src="js/theme.js?v=dev"></script>
 <script src="js/i18n.js?v=dev"></script>
 </head>
 <body>
+<!-- while the page gets ready (a room's link connecting, a translation loading) this shows instead of a blank page -->
+<div id="splash" class="splash" aria-hidden="true">
+  <img src="icons/mark.svg" alt="">
+  <b>StoaTalk</b>
+  <i class="spin"></i>
+  <p data-i18n="connecting">連線中…</p>
+</div>
 
 <!-- ---------- home ---------- -->
 <main id="home" class="home">

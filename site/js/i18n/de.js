@@ -87,6 +87,7 @@ I18N.add("de", {
   noDb: "Die Datenbank ist noch nicht eingerichtet",
   netErr: "Verbindungsproblem. Bitte versuch es noch einmal",
   serverBusy: "Der Server ist gerade nicht erreichbar. Bitte versuch es gleich noch einmal",
+  connecting: "Verbindung wird hergestellt…",
   offline: "Keine Internetverbindung",
 
   // creating and joining

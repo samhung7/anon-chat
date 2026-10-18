@@ -87,7 +87,9 @@ export async function join(raw) {
   try {
     await within(backend.connect(), CONNECT_MS);
     const ref = (path) => backend.roomRef(code, path), uid = backend.uid;
-    const meta = (await within(backend.fb.get(ref("meta")), CONNECT_MS)).val();
+    // the three answers a join needs, asked together rather than one after another
+    const [metaSnap, inside, banned] = await within(Promise.all([backend.fb.get(ref("meta")), backend.val(ref("members/" + uid)), backend.val(ref("banned/" + uid))]), CONNECT_MS);
+    const meta = metaSnap.val();
     if (!meta || meta.last < backend.now() - DAY) {
       toast(t("notFound"));
       if (meta) backend.update({ [`rooms/${code}`]: null }).catch(() => {}); // expired: clear it out
@@ -98,8 +100,8 @@ export async function join(raw) {
     const cipher = await unlock(code, meta);
     if (cipher === false) return;
     // already inside (coming back)?
-    if (await backend.val(ref("members/" + uid))) { await enter(code, cipher); return; }
-    if (await backend.val(ref("banned/" + uid))) { toast(t("bannedToast")); return; }
+    if (inside) { await enter(code, cipher); return; }
+    if (banned) { toast(t("bannedToast")); return; }
     if (meta.locked) { toast(t("lockedToast")); return; }
     if (meta.cap && (meta.n || 0) >= meta.cap) { toast(t("capFull")); return; }
     let m = await asking(ensureMe, !me());
