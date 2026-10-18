@@ -205,6 +205,16 @@ test("lecture Q&A: ask anonymously, upvote, answer, projector screen", async () 
   await press(alice, "yes");
   await bob.locator(".qcard .qans", { hasText: "A covered walkway." }).waitFor({ state: "attached" }); // answered: folded under "answered"
 
+  // a poll too, which the projector shows beside the questions
+  await alice.locator("#tabs [data-a=all]").click();
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn").nth(1).click();
+  await alice.locator("#pollQ").fill("Tea or coffee?");
+  const opts = sheet(alice).locator(".pollopts input");
+  await opts.nth(0).fill("Tea"); await opts.nth(1).fill("Coffee");
+  await press(alice, "yes");
+  await alice.locator(".pollbox", { hasText: "Tea or coffee?" }).waitFor();
+
   // the projector screen follows the room
   const [show] = await Promise.all([alice.context().waitForEvent("page"), menuPick(alice, "show")]);
   await show.locator("#show .sqr svg").waitFor();
@@ -212,9 +222,12 @@ test("lecture Q&A: ask anonymously, upvote, answer, projector screen", async () 
   await show.setViewportSize({ width: 390, height: 640 });
   for (let i = 0; i < 4; i++) await say(bob, `Question ${i} ` + "and a long one ".repeat(12));
   await show.locator("#show .slist li", { hasText: "Question 3" }).waitFor();
+  await show.locator("#show .spoll .pollbox").waitFor();
   await show.locator("#show").evaluate((e) => e.scrollTo(0, e.scrollHeight));
   const last = await show.locator("#show .smain > :last-child").boundingBox();
   assert.ok(last.y + last.height <= 640, "the bottom of the list can be scrolled into view");
+  const poll = await show.locator("#show .spoll").boundingBox(), first = await show.locator("#show .smain > :first-child").boundingBox();
+  assert.ok(poll.y + poll.height <= first.y, "the poll sits above the questions, not over them");
   noErrors();
 });
 

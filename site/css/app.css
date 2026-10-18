@@ -448,7 +448,8 @@ textarea.field { resize: vertical; font: inherit; line-height: 1.45; }
 @media (max-width: 700px), (orientation: portrait) {
   /* one column that scrolls as a whole: each part as tall as its content, so the last question isn't cut off */
   .show { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: auto; align-content: start; overflow-y: auto; font-size: 18px; padding-bottom: calc(4vh + env(safe-area-inset-bottom)); }
-  .smain, .sside { overflow: visible; }
+  /* min-height back to auto: with the base rule's min-height: 0 each row could shrink below its content and the rows overlapped */
+  .smain, .sside { overflow: visible; min-height: auto; }
   .sside { order: -1; }
   .sqr { width: 200px; }
 }
