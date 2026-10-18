@@ -47,6 +47,7 @@ export async function create() {
     const raw = enc ? crypto.getRandomValues(new Uint8Array(32)) : null;
     const cipher = raw && (await RoomCipher.fromRaw(raw));
     const name = title.value.trim().slice(0, LIMITS.roomTitle), uid = backend.uid, T = backend.stamp();
+    if (await backend.val(backend.ref("bans/" + uid))) { toast(t("bannedAll")); return; }
     for (let i = 0; i < 30; i++) {
       const code = newCode();
       const meta = { owner: uid, created: T, last: T };
@@ -88,7 +89,8 @@ export async function join(raw) {
     await within(backend.connect(), CONNECT_MS);
     const ref = (path) => backend.roomRef(code, path), uid = backend.uid;
     // the three answers a join needs, asked together rather than one after another
-    const [metaSnap, inside, banned] = await within(Promise.all([backend.fb.get(ref("meta")), backend.val(ref("members/" + uid)), backend.val(ref("banned/" + uid))]), CONNECT_MS);
+    const [metaSnap, inside, banned, bannedAll] = await within(Promise.all([backend.fb.get(ref("meta")), backend.val(ref("members/" + uid)),
+      backend.val(ref("banned/" + uid)), backend.val(backend.ref("bans/" + uid))]), CONNECT_MS);
     const meta = metaSnap.val();
     if (!meta || meta.last < backend.now() - DAY) {
       toast(t("notFound"));
@@ -101,6 +103,7 @@ export async function join(raw) {
     if (cipher === false) return;
     // already inside (coming back)?
     if (inside) { await enter(code, cipher); return; }
+    if (bannedAll) { toast(t("bannedAll")); return; }
     if (banned) { toast(t("bannedToast")); return; }
     if (meta.locked) { toast(t("lockedToast")); return; }
     if (meta.cap && (meta.n || 0) >= meta.cap) { toast(t("capFull")); return; }

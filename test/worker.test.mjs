@@ -116,3 +116,97 @@ test("cleanup: the bucket listed page by page over R2's S3 API", async () => {
   await bucket.remove("ABCD/bob/f2.bin");
   assert.deepEqual(asked.at(-1), ["DELETE", "https://acct.r2.cloudflarestorage.com/stoatalk-photos/ABCD/bob/f2.bin"]);
 });
+
+/* ---------- Web Push ---------- */
+import { encrypt, vapid, sealSub, openSub, b64u, validSubscription } from "../worker/src/push.js";
+import { makeHandler, readDb } from "../worker/src/index.js";
+import { unsignedUid } from "./photo-stub.mjs";
+
+const hkdfBits = async (ikm, salt, info, n) => new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info },
+  await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]), n * 8));
+const cat = (...p) => Buffer.concat(p.map((x) => Buffer.from(x)));
+// a browser: its subscription keys, and how it opens what arrives (RFC 8291, the receiving side)
+async function browser() {
+  const kp = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const pub = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey)), secret = crypto.getRandomValues(new Uint8Array(16));
+  const sub = { endpoint: "https://fcm.googleapis.com/fcm/send/" + Math.random().toString(36).slice(2), keys: { p256dh: b64u(pub), auth: b64u(secret) } };
+  const open = async (body) => {
+    const salt = body.slice(0, 16), idlen = body[20], asPub = body.slice(21, 21 + idlen), ct = body.slice(21 + idlen);
+    const asKey = await crypto.subtle.importKey("raw", asPub, { name: "ECDH", namedCurve: "P-256" }, false, []);
+    const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: asKey }, kp.privateKey, 256));
+    const ikm = await hkdfBits(shared, secret, cat(Buffer.from("WebPush: info\0"), pub, asPub), 32);
+    const cek = await crypto.subtle.importKey("raw", await hkdfBits(ikm, salt, Buffer.from("Content-Encoding: aes128gcm\0"), 16), "AES-GCM", false, ["decrypt"]);
+    const plain = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: await hkdfBits(ikm, salt, Buffer.from("Content-Encoding: nonce\0"), 12) }, cek, ct));
+    assert.equal(plain.at(-1), 2);
+    return new TextDecoder().decode(plain.slice(0, -1));
+  };
+  return { sub, open };
+}
+const vapidKey = async () => {
+  const k = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"]);
+  return JSON.stringify(await crypto.subtle.exportKey("jwk", k.privateKey));
+};
+
+test("push: the payload opens in the browser it was sealed to, and nowhere else", async () => {
+  const a = await browser(), b = await browser();
+  const body = await encrypt(a.sub, '{"c":"ABCD"}');
+  assert.equal(await a.open(body), '{"c":"ABCD"}');
+  await assert.rejects(b.open(body));
+  assert.ok(validSubscription(a.sub));
+  assert.ok(!validSubscription({ ...a.sub, endpoint: "https://evil.example/x" }));
+  assert.ok(!validSubscription({ ...a.sub, endpoint: "http://fcm.googleapis.com/x" }));
+  assert.ok(!validSubscription({ endpoint: a.sub.endpoint, keys: { p256dh: "abc", auth: a.sub.keys.auth } }));
+});
+
+test("push: a sealed subscription opens only as its owner's", async () => {
+  const keys = await vapid({ VAPID_KEY: await vapidKey() }), { sub } = await browser();
+  const sealed = await sealSub(keys, "bob", sub);
+  assert.match(sealed, /^[A-Za-z0-9_-]+$/);
+  assert.ok(sealed.length < 2000);
+  assert.deepEqual(await openSub(keys, "bob", sealed), sub);
+  assert.equal(await openSub(keys, "eve", sealed), null);
+  assert.equal(await openSub(await vapid({ VAPID_KEY: await vapidKey() }), "bob", sealed), null);
+  assert.equal(await vapid({}), null);
+});
+
+test("push service: announces a message to members with a subscription who aren't online", async () => {
+  const E = { ...env(new MemoryBucket()), VAPID_KEY: await vapidKey() };
+  const pushed = [];
+  const fetcher = async (url, init) => { pushed.push({ url, init }); return new Response(null, { status: 201 }); };
+  const h = makeHandler({ verify: unsignedUid, read: readDb, fetcher });
+  const go = (method, path, uid, body) => h(new Request("https://api.stoatalk.app" + path, { method, body: body && JSON.stringify(body),
+    headers: uid ? { Authorization: "Bearer " + unsigned(uid) } : {} }), E);
+  const key = await (await go("GET", "/push/key")).json();
+  assert.match(key.key, /^B[A-Za-z0-9_-]{86}$/); // an uncompressed P-256 point
+  const alice = await browser(), carol = await browser(), dave = await browser();
+  assert.equal((await go("POST", "/push/seal", "alice", { endpoint: "https://evil.example/x", keys: alice.sub.keys })).status, 400);
+  assert.equal((await go("POST", "/push/seal", null, alice.sub)).status, 401);
+  const seal = async (uid, b) => (await (await go("POST", "/push/seal", uid, b.sub)).json()).sealed;
+  const t = Date.now();
+  await db("rooms/ABCD", {
+    meta: { owner: "alice", created: 1, last: t, title: "讀書會", pa: t },
+    members: { alice: { joined: 1, name: "a", avatar: "🦊", online: false }, bob: { joined: 1, name: "b", avatar: "🐻", online: true },
+               carol: { joined: 1, name: "c", avatar: "🐼", online: true }, dave: { joined: 1, name: "d", avatar: "🐯" } },
+    push: { alice: await seal("alice", alice), carol: await seal("carol", carol), dave: await seal("alice", dave) }, // dave's place holds alice's
+    msgs: { m1: { by: "bob", name: "b", avatar: "🐻", text: "大家好\n今天讀第三章", at: t }, m0: { by: "bob", name: "b", avatar: "🐻", text: "old", at: t - 600000 },
+            m2: { by: "alice", name: "a", avatar: "🦊", text: "hi", at: t } },
+  });
+  assert.equal((await go("POST", "/push/notify/ABCD", "bob", { id: "m2" })).status, 409); // not bob's
+  assert.equal((await go("POST", "/push/notify/ABCD", "bob", { id: "m0" })).status, 409); // not new
+  assert.equal((await go("POST", "/push/notify/ABCD", "eve", { id: "m1" })).status, 403); // not in the room
+  const res = await go("POST", "/push/notify/ABCD", "bob", { id: "m1" });
+  assert.deepEqual(await res.json(), { sent: 1, next: null });
+  assert.equal(pushed.length, 1); // carol is online; dave's place holds someone else's subscription
+  assert.equal(pushed[0].url, alice.sub.endpoint);
+  assert.equal(pushed[0].init.headers.Topic, "ABCD");
+  assert.match(pushed[0].init.headers.Authorization, /^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=B/);
+  assert.deepEqual(JSON.parse(await alice.open(pushed[0].init.body)), { c: "ABCD", k: "m", n: "b", a: "🐻", r: "讀書會", s: "大家好 今天讀第三章" });
+  // the room was just announced: the next message waits
+  assert.deepEqual(await (await go("POST", "/push/notify/ABCD", "bob", { id: "m1" })).json(), { sent: 0, next: null });
+  assert.equal(pushed.length, 1);
+  // a private message: only to the one it's for, and it says nothing of what's in it
+  await db("rooms/ABCD/dm/alice_bob/d1", { by: "bob", to: "alice", x: "sealed", at: Date.now() });
+  assert.equal((await go("POST", "/push/notify/ABCD", "bob", { id: "d1", to: "carol" })).status, 409);
+  assert.deepEqual(await (await go("POST", "/push/notify/ABCD", "bob", { id: "d1", to: "alice" })).json(), { sent: 1, next: null });
+  assert.deepEqual(JSON.parse(await alice.open(pushed[1].init.body)), { c: "ABCD", k: "d" });
+});

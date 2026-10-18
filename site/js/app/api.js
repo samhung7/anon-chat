@@ -24,7 +24,7 @@ export class RoomApi {
   }
   // count: the room's size count after I go, if it keeps one
   leave({ claim, count }) {
-    return backend.update({ [this.root(`members/${this.uid}`)]: null,
+    return backend.update({ [this.root(`members/${this.uid}`)]: null, [this.root(`push/${this.uid}`)]: null,
       ...(claim ? { [this.root(`names/${claim}`)]: null } : {}), ...(count != null ? { [this.root("meta/n")]: count } : {}) });
   }
   holderOf(claim) { return backend.val(this.ref("names/" + claim)); }
@@ -37,7 +37,12 @@ export class RoomApi {
   vote(id, picks) { return this.set(`msgs/${id}/votes/${this.uid}`, picks); }
   closePoll(id) { return this.set(`msgs/${id}/closed`, true); }
   pin(slot, id) { return this.set("meta/pins/" + slot, id); }
-  report(id, reason) { return this.set(`reports/${id}/${this.uid}`, { r: reason, at: backend.stamp() }); }
+  // a report goes to the room's owner and co-hosts, and to StoaTalk's operator with what the reporter saw (seen: t, n, f, enc)
+  report(id, reason, seen) {
+    const at = backend.stamp();
+    return backend.update({ [this.root(`reports/${id}/${this.uid}`)]: { r: reason, at },
+      [`ops/reports/${this.code}_${id}_${this.uid}`]: { code: this.code, msg: id, by: this.uid, r: reason, at, ...seen } });
+  }
   dismissReport(id) { return this.set("reports/" + id, null); }
   dropReports(ids) { return this.update(Object.fromEntries(ids.map((id) => [id, null])), "reports"); }
   // where I say I'm typing: in the room, or in a private chat (pair)

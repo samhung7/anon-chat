@@ -103,6 +103,7 @@ I18N.add("zh-TW", {
   code4: "代碼是 4 個字",
   notFound: "找不到這個聊天室，可能已經結束了",
   bannedToast: "你已經被房主移出這個聊天室",
+  bannedAll: "這個裝置因為違反使用條款，已被 StoaTalk 停用，無法開房、加入或發言。如有疑問請寫信到 hello@stoatalk.app",
   lockedToast: "房主已經鎖住聊天室，暫時不能加入",
   cantJoin: "加入不了這個聊天室",
 
@@ -323,7 +324,7 @@ I18N.add("zh-TW", {
   removedToast: "已移除這則訊息",
   report: "🚩 檢舉",
   reportTitle: "檢舉這則訊息",
-  reportBody: "檢舉會交給房主和副房主處理。他們會看到原因和人數，不會看到是誰檢舉的。",
+  reportBody: "檢舉會交給房主和副房主，也會連同這則訊息的內容送給 StoaTalk 營運方審查（私人沙龍也是，由你的裝置解密後送出）。房主看得到原因和人數，不會看到是誰檢舉的。",
   why0: "騷擾或霸凌",
   why1: "垃圾訊息或廣告",
   why2: "不當或冒犯的內容",

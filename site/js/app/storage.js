@@ -16,6 +16,7 @@ export const KEYS = {
   oldRoom: "chat-room",                // the single room kept before the list
   blocked: "chat-blocked",
   notifyAsked: "chat-notify-asked",
+  push: "chat-push",                   // this browser's push subscription as the push service sealed it
   askAnon: "chat-ask-anon",
   lang: "chat-lang",
   records: "chat-records",

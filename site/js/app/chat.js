@@ -15,7 +15,8 @@ import { msgActions } from "./actions.js?v=dev";
 import { closePicker } from "./pickers.js?v=dev";
 import { renderQa, refreshWait, watchQa } from "./qa.js?v=dev";
 import { watchShow, SHOW } from "./show.js?v=dev";
-import { noteNew, offerNotify, hiddenUnread } from "./notify.js?v=dev";
+import { noteNew, offerNotify, hiddenUnread, notifyOn } from "./notify.js?v=dev";
+import { syncPush } from "./push.js?v=dev";
 import { rememberRoom, forgetRoom, roomPath, showChat, home } from "./home.js?v=dev";
 import { archive, saveRecord, openRecord, exportSheet } from "./records.js?v=dev";
 import { editDesc } from "./menu.js?v=dev";
@@ -46,7 +47,11 @@ function watchChat(r) {
       joined.forEach((m) => toast(t("joinedToast", { who: `${m.avatar} ${m.name}` })));
       left.forEach((m) => toast(t("leftToast", { who: `${m.avatar} ${m.name}` })));
     })
-    .on("members", () => { renderHeader(); refreshNames(); })
+    .on("members", () => {
+      renderHeader(); refreshNames();
+      // once I'm in: this room's push subscription, if this device wants to hear from it while the page is closed
+      if (!r.pushSynced && r.members[backend.uid]) { r.pushSynced = true; if (notifyOn(r.code)) syncPush(r.code, true); }
+    })
     .on("msg", (id, v) => { if (inRoomView()) addMsg(id, v); if (pinIds().includes(id)) renderPins(); noteNew(v, null); })
     .on("msg-changed", (id, v, old) => { if (inRoomView()) updateMsg(id, v, old); })
     .on("msg-removed", (id) => { if (inRoomView()) document.getElementById("m-" + id)?.remove(); renderPins(); })

@@ -103,6 +103,7 @@ I18N.add("de", {
   code4: "Der Code hat 4 Zeichen",
   notFound: "Raum nicht gefunden. Vielleicht wurde er schon beendet",
   bannedToast: "Der Host hat dich aus diesem Raum entfernt",
+  bannedAll: "StoaTalk hat dieses Gerät wegen Verstoßes gegen die Nutzungsbedingungen gesperrt: Es kann keine Räume eröffnen, beitreten oder schreiben. Fragen: hello@stoatalk.app",
   lockedToast: "Der Host hat diesen Raum gesperrt. Du kannst gerade nicht beitreten",
   cantJoin: "Beitritt zu diesem Raum nicht möglich",
 
@@ -323,7 +324,7 @@ I18N.add("de", {
   removedToast: "Nachricht entfernt",
   report: "🚩 Melden",
   reportTitle: "Diese Nachricht melden",
-  reportBody: "Meldungen gehen an den Gastgeber und die Co-Gastgeber. Sie sehen den Grund und wie viele gemeldet haben, aber nie wer.",
+  reportBody: "Meldungen gehen an den Gastgeber und die Co-Gastgeber und mit dem Inhalt der Nachricht an das StoaTalk-Team zur Prüfung (auch in einem Privaten Salon: dein Gerät entschlüsselt sie und sendet sie). Der Gastgeber sieht den Grund und wie viele gemeldet haben, aber nie wer.",
   why0: "Belästigung oder Mobbing",
   why1: "Spam oder Werbung",
   why2: "Unangemessen oder anstößig",

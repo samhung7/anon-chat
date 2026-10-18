@@ -558,3 +558,75 @@ test("a link opened while the database can't be reached says so, instead of spin
   errors = errors.filter((e) => !/timeout/.test(e));
   noErrors();
 });
+
+test("reports reach StoaTalk's operator, who takes the message down and bans the sender everywhere", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  await say(alice, "buy followers here");
+  await bubble(bob, "buy followers here").waitFor();
+  await bob.locator("#list .msg .more").first().click();
+  await press(bob, "report");
+  await press(bob, "r1");
+  // the operator gets what Bob saw, though the room is end-to-end encrypted
+  await until(async () => await dbGet("ops/reports"));
+  const reports = Object.values(await dbGet("ops/reports"))[0];
+  assert.equal(reports.code, code);
+  assert.equal(reports.t, "buy followers here");
+  assert.equal(reports.n, "Alice");
+  assert.equal(reports.enc, true);
+  const aliceId = reports.who;
+
+  // someone who isn't an admin sees their id and how to become one
+  const ctx = await browser.newContext({ locale: "zh-TW" }), op = await ctx.newPage();
+  op.on("pageerror", (e) => errors.push(`op: ${e.message}`));
+  await op.goto(`${base}/admin.html?emu&as=op`);
+  await op.locator("#myUid", { hasText: "op" }).waitFor();
+  await fetch(dbUrl("ops/admins/op"), { method: "PUT", headers: asOwner, body: "true" });
+  await op.reload();
+  const card = op.locator("#reports .card", { hasText: "buy followers here" });
+  await card.waitFor();
+  op.on("dialog", (d) => d.accept());
+  await card.locator("button", { hasText: "刪除並停權" }).click();
+  await op.locator("#reports", { hasText: "沒有待處理的檢舉" }).waitFor();
+  await op.locator("#bans .card", { hasText: aliceId }).waitFor();
+  await bubble(bob, "buy followers here").waitFor({ state: "detached" });
+  assert.ok((await dbGet(`bans/${aliceId}`)).at > 0);
+  assert.equal(await dbGet(`rooms/${code}/members/${aliceId}`), null);
+
+  // Alice can't open another room anywhere, and is told why
+  await alice.goto(`${base}/?emu&as=a`);
+  await alice.locator("#createBtn").click();
+  await press(alice, "yes");
+  await alice.locator(".toast", { hasText: "suspended" }).waitFor();
+  noErrors();
+});
+
+test("Web Push: a message is announced to a member whose page is closed, once in a while", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  const bobId = Object.entries(await dbGet(`rooms/${code}/members`)).find(([, m]) => m.name === "Bob")[0];
+  // Bob's browser subscribed (a made-up subscription: a headless browser has no push service), then he closes the page
+  const ua = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const sub = { endpoint: "https://fcm.googleapis.com/fcm/send/bob", keys: {
+    p256dh: Buffer.from(await crypto.subtle.exportKey("raw", ua.publicKey)).toString("base64url"), auth: Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("base64url") } };
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url"), t = Math.floor(Date.now() / 1000);
+  const token = b64({ alg: "none" }) + "." + b64({ sub: bobId, aud: NS, iss: "https://securetoken.google.com/" + NS, iat: t, exp: t + 3600, auth_time: t }) + ".";
+  const { sealed } = await (await fetch("http://127.0.0.1:8787/push/seal", { method: "POST", body: JSON.stringify(sub), headers: { Authorization: "Bearer " + token } })).json();
+  await fetch(dbUrl(`rooms/${code}/push/${bobId}`), { method: "PUT", headers: asOwner, body: JSON.stringify(sealed) });
+  await bob.context().close();
+  await until(async () => (await dbGet(`rooms/${code}/members/${bobId}/online`)) === false);
+  photos.pushed.length = 0;
+  await say(alice, "see you at 7");
+  await until(() => photos.pushed.length === 1);
+  assert.equal(photos.pushed[0].url, sub.endpoint);
+  assert.equal(photos.pushed[0].init.headers.Topic, code);
+  assert.ok((await dbGet(`rooms/${code}/meta/pa`)) > 0);
+  // the next one, moments later, isn't announced again
+  await say(alice, "bring the book");
+  await bubble(alice, "bring the book").waitFor();
+  await new Promise((ok) => setTimeout(ok, 1500));
+  assert.equal(photos.pushed.length, 1);
+  noErrors();
+});

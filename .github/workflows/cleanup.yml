@@ -1,5 +1,6 @@
 # Deletes rooms nobody has written in for 24 hours. Needs two repository secrets:
 # FIREBASE_SERVICE_ACCOUNT (service account JSON) and FIREBASE_DATABASE_URL. Without them the job does nothing.
+# New reports for the operator open a GitHub issue (no content, just how many).
 # With CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY it also deletes photos in R2 no room points at.
 name: Delete expired rooms
 on:
@@ -8,6 +9,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  issues: write   # an issue when new reports come in, so GitHub emails the owner
 jobs:
   cleanup:
     runs-on: ubuntu-latest
@@ -17,6 +19,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - if: env.FIREBASE_SERVICE_ACCOUNT == ''
         run: echo "FIREBASE_SERVICE_ACCOUNT is not set; skipping."

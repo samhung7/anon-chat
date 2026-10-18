@@ -1,5 +1,6 @@
-# Deploys the photo service (worker/) to Cloudflare when it changes on main.
+# Deploys the photo and push service (worker/) to Cloudflare when it changes on main.
 # Needs the CLOUDFLARE_API_TOKEN ("Edit Cloudflare Workers") and CLOUDFLARE_ACCOUNT_ID secrets; without them it does nothing.
+# With the VAPID_KEY secret (made on site/admin.html) it also hands the service its Web Push key.
 name: Deploy photo service
 on:
   push:
@@ -15,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      VAPID_KEY: ${{ secrets.VAPID_KEY }}
     steps:
       - if: env.CLOUDFLARE_API_TOKEN == ''
         run: echo "CLOUDFLARE_API_TOKEN is not set; skipping."
@@ -27,3 +29,4 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: worker
           wranglerVersion: "4"
+          secrets: ${{ env.VAPID_KEY != '' && 'VAPID_KEY' || '' }}

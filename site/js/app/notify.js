@@ -12,6 +12,7 @@ import { mentionsMe } from "./richtext.js?v=dev";
 import { isBlocked } from "./blocking.js?v=dev";
 import { markSeen } from "./chat.js?v=dev";
 import { roomUrl } from "./home.js?v=dev";
+import { syncPush } from "./push.js?v=dev";
 
 const CAN_NOTIFY = "Notification" in window;
 const granted = () => CAN_NOTIFY && Notification.permission === "granted";
@@ -48,11 +49,11 @@ export async function setNotify(on) {
   if (!room) return;
   $("#notifyBar").hidden = true;
   store.set(KEYS.notifyAsked, "1");
-  if (!on) { store.set(KEYS.mute(room.code), "1"); toast(t("mutedToast")); return; }
+  if (!on) { store.set(KEYS.mute(room.code), "1"); syncPush(room.code, false); toast(t("mutedToast")); return; }
   if (!CAN_NOTIFY) { toast(t("noNotify")); return; }
   const p = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
   if (p !== "granted") { toast(t("notifyBlocked")); return; }
-  store.set(KEYS.mute(room.code), null); toast(t("notifyOnToast"));
+  store.set(KEYS.mute(room.code), null); syncPush(room.code, true); toast(t("notifyOnToast"));
 }
 // ask once per device, in a bar rather than a pop-up, and only where notifications could work
 export const offerNotify = () => { $("#notifyBar").hidden = !(CAN_NOTIFY && Notification.permission === "default" && !store.get(KEYS.notifyAsked)); };

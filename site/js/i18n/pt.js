@@ -103,6 +103,7 @@ I18N.add("pt", {
   code4: "O código tem 4 caracteres",
   notFound: "Sala não encontrada. Talvez ela já tenha sido encerrada",
   bannedToast: "O anfitrião removeu você desta sala",
+  bannedAll: "O StoaTalk suspendeu este dispositivo por violar os termos de uso: ele não pode abrir salas, entrar nem escrever. Dúvidas: hello@stoatalk.app",
   lockedToast: "O anfitrião trancou esta sala. Não é possível entrar agora",
   cantJoin: "Não foi possível entrar nesta sala",
 
@@ -323,7 +324,7 @@ I18N.add("pt", {
   removedToast: "Mensagem removida",
   report: "🚩 Denunciar",
   reportTitle: "Denunciar esta mensagem",
-  reportBody: "As denúncias vão para o anfitrião e os coanfitriões. Eles veem o motivo e quantas pessoas denunciaram, nunca quem.",
+  reportBody: "As denúncias vão para o anfitrião e os coanfitriões, e para a equipe do StoaTalk com o conteúdo da mensagem para análise (também num Salão Privado: seu dispositivo a decifra e envia). O anfitrião vê o motivo e quantas pessoas denunciaram, nunca quem.",
   why0: "Assédio ou bullying",
   why1: "Spam ou propaganda",
   why2: "Conteúdo impróprio ou ofensivo",

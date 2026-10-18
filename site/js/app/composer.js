@@ -9,6 +9,7 @@ import { me } from "./identity.js?v=dev";
 import { pairKey } from "./room.js?v=dev";
 import { KIND, snippet } from "./kinds.js?v=dev";
 import { isBlocked } from "./blocking.js?v=dev";
+import { announce } from "./push.js?v=dev";
 
 export const box = () => $("#text");
 
@@ -44,8 +45,10 @@ export async function post(kind, value, more = {}) {
   const m = room.members[uid] || me(); // the name this room knows me by
   const at = (path) => room.api.root(path);
   const upd = { [at("meta/last")]: T, [at(`members/${uid}/ls`)]: T, ...more };
-  if (ui.view === "all") {
-    const id = backend.pushKey(room.api.ref("msgs"));
+  const to = ui.view === "all" ? null : ui.view, code = room.code;
+  let id;
+  if (!to) {
+    id = backend.pushKey(room.api.ref("msgs"));
     upd[at(`members/${uid}/lm`)] = id;
     upd[at(`msgs/${id}`)] = room.cipher ? { by: uid, x: await room.cipher.seal({ ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T }
       : { by: uid, name: m.name, avatar: m.avatar, ...body, at: T };
@@ -53,12 +56,13 @@ export async function post(kind, value, more = {}) {
     if (!room.members[ui.view]) { toast(t("peerLeft")); return false; }
     const key = await room.dmKey(ui.view);
     if (!key) { toast(t("peerOld")); return false; }
-    const path = `dm/${pairKey(uid, ui.view)}`, id = backend.pushKey(room.api.ref(path));
+    const path = `dm/${pairKey(uid, ui.view)}`;
+    id = backend.pushKey(room.api.ref(path));
     upd[at(`${path}/${id}`)] = { by: uid, to: ui.view, x: await seal(key, sealed, "d:" + uid), at: T };
     upd[at(`members/${uid}/lm`)] = id;
   }
   $("#list .empty")?.remove(); cancelReply(); typing.stop();
-  posts.write(upd, ui.view === "all" ? kind.stat : "dms");
+  posts.write(upd, to ? "dms" : kind.stat).then((ok) => ok && announce(code, id, to));
   return true;
 }
 /* ---------- replying ---------- */

@@ -7,7 +7,7 @@
         "meta/last"
       ],
       "$code": {
-        ".write": "(auth != null) && (((!newData.exists()) && ((data.child('meta/owner').val() === auth.uid) || (data.child('meta/last').val() < now - 86400000))) || (((!data.exists()) || (data.child('meta/last').val() < now - 86400000)) && (newData.child('meta/owner').val() === auth.uid) && (newData.child('members/' + auth.uid).exists()) && (!newData.child('msgs').exists()) && (!newData.child('files').exists()) && (!newData.child('dm').exists()) && (!newData.child('banned').exists()) && (!newData.child('reports').exists()) && (!newData.child('qs').exists()) && (!newData.child('qq').exists()) && (!newData.child('qby').exists())))",
+        ".write": "(auth != null) && (((!newData.exists()) && ((data.child('meta/owner').val() === auth.uid) || (data.child('meta/last').val() < now - 86400000) || (root.child('ops/admins/' + auth.uid).val() === true))) || (((!data.exists()) || (data.child('meta/last').val() < now - 86400000)) && (!root.child('bans/' + auth.uid).exists()) && (newData.child('meta/owner').val() === auth.uid) && (newData.child('members/' + auth.uid).exists()) && (!newData.child('msgs').exists()) && (!newData.child('files').exists()) && (!newData.child('dm').exists()) && (!newData.child('banned').exists()) && (!newData.child('reports').exists()) && (!newData.child('qs').exists()) && (!newData.child('qq').exists()) && (!newData.child('qby').exists()) && (!newData.child('push').exists())))",
         ".validate": "($code.matches(/^[2-9A-HJKMNP-Z]{4}$/)) && (newData.hasChild('meta'))",
         "meta": {
           ".read": "auth != null",
@@ -69,6 +69,10 @@
             ".write": "auth != null && ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true))",
             ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{1,32}$/)"
           },
+          "pa": {
+            ".write": "auth != null && data.parent().parent().child('members/' + auth.uid).exists() && (!data.exists() || data.val() < now - 20000)",
+            ".validate": "newData.val() === now"
+          },
           "cap": {
             ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 1000"
           },
@@ -83,7 +87,7 @@
         "members": {
           ".read": "auth != null && data.child(auth.uid).exists()",
           "$uid": {
-            ".write": "(auth != null) && (((auth.uid === $uid) && (!data.parent().parent().child('banned/' + $uid).exists()) && ((data.exists()) || ((data.parent().parent().child('meta').exists()) && (data.parent().parent().child('meta/last').val() >= now - 86400000) && (data.parent().parent().child('meta/locked').val() !== true) && ((!data.parent().parent().child('meta/cap').exists()) || ((newData.parent().parent().child('meta/n').val() === data.parent().parent().child('meta/n').val() + 1) && (newData.parent().parent().child('meta/n').val() <= data.parent().parent().child('meta/cap').val()))) && (data.parent().parent().child('meta/priv').val() !== true)))) || ((!newData.exists()) && ((data.parent().parent().child('meta/owner').val() === auth.uid) || ((data.parent().parent().child('meta/mods/' + auth.uid).val() === true) && ($uid !== data.parent().parent().child('meta/owner').val()) && (data.parent().parent().child('meta/mods/' + $uid).val() !== true)))))",
+            ".write": "(auth != null) && (((auth.uid === $uid) && (!data.parent().parent().child('banned/' + $uid).exists()) && ((!newData.exists()) || (!root.child('bans/' + auth.uid).exists())) && ((data.exists()) || ((data.parent().parent().child('meta').exists()) && (data.parent().parent().child('meta/last').val() >= now - 86400000) && (data.parent().parent().child('meta/locked').val() !== true) && ((!data.parent().parent().child('meta/cap').exists()) || ((newData.parent().parent().child('meta/n').val() === data.parent().parent().child('meta/n').val() + 1) && (newData.parent().parent().child('meta/n').val() <= data.parent().parent().child('meta/cap').val()))) && (data.parent().parent().child('meta/priv').val() !== true)))) || ((!newData.exists()) && (((data.parent().parent().child('meta/owner').val() === auth.uid) || ((data.parent().parent().child('meta/mods/' + auth.uid).val() === true) && ($uid !== data.parent().parent().child('meta/owner').val()) && (data.parent().parent().child('meta/mods/' + $uid).val() !== true))) || (root.child('ops/admins/' + auth.uid).val() === true))))",
             ".validate": "newData.hasChild('joined') && (newData.hasChildren(['name', 'avatar']) || newData.hasChildren(['x', 'h']))",
             "name": {
               ".validate": "(newData.isString() && newData.val().length <= 24) && (newData.val().length > 0) && (!newData.val().matches(/[.#$\\[\\]\\/]/)) && (!(newData.parent().parent().parent().child('meta/enc').val() === true)) && (newData.parent().parent().parent().child('names/' + newData.val().toLowerCase()).val() === $uid)"
@@ -138,14 +142,14 @@
         "banned": {
           "$uid": {
             ".read": "auth != null && auth.uid === $uid",
-            ".write": "auth != null && (data.parent().parent().child('meta/owner').val() === auth.uid) || ((data.parent().parent().child('meta/mods/' + auth.uid).val() === true) && ($uid !== data.parent().parent().child('meta/owner').val()) && (data.parent().parent().child('meta/mods/' + $uid).val() !== true))",
+            ".write": "auth != null && (((data.parent().parent().child('meta/owner').val() === auth.uid) || ((data.parent().parent().child('meta/mods/' + auth.uid).val() === true) && ($uid !== data.parent().parent().child('meta/owner').val()) && (data.parent().parent().child('meta/mods/' + $uid).val() !== true))) || (root.child('ops/admins/' + auth.uid).val() === true))",
             ".validate": "newData.val() === true"
           }
         },
         "msgs": {
           ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
           "$id": {
-            ".write": "(auth != null) && (data.parent().parent().child('members/' + auth.uid).exists()) && (((!data.exists()) && (newData.child('by').val() === auth.uid) && ((newData.parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().child('members/' + auth.uid + '/lm').val() === $id))) || ((!newData.exists()) && ((data.child('by').val() === auth.uid) || ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true)))))",
+            ".write": "(auth != null) && (((data.parent().parent().child('members/' + auth.uid).exists()) && (((!data.exists()) && (!root.child('bans/' + auth.uid).exists()) && (newData.child('by').val() === auth.uid) && ((newData.parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().child('members/' + auth.uid + '/lm').val() === $id))) || ((!newData.exists()) && ((data.child('by').val() === auth.uid) || ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true)))))) || ((!newData.exists()) && (root.child('ops/admins/' + auth.uid).val() === true)))",
             ".validate": "(newData.hasChildren(['by', 'at'])) && ((((newData.parent().parent().child('meta/enc').val() === true)) && (newData.hasChild('x'))) || ((!(newData.parent().parent().child('meta/enc').val() === true)) && (newData.hasChildren(['name', 'avatar'])) && ((newData.hasChild('text')) || (newData.hasChild('gif')) || (newData.hasChild('img')) || (newData.hasChild('poll')) || (newData.hasChild('draw')))))",
             "by": {
               ".validate": "newData.isString()"
@@ -270,7 +274,7 @@
         "files": {
           ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
           "$id": {
-            ".write": "(auth != null) && (data.parent().parent().child('members/' + auth.uid).exists()) && (((!data.exists()) && (newData.child('by').val() === auth.uid) && ((newData.parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().child('members/' + auth.uid + '/lf').val() === $id))) || ((!newData.exists()) && ((data.child('by').val() === auth.uid) || ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true)))))",
+            ".write": "(auth != null) && (((data.parent().parent().child('members/' + auth.uid).exists()) && (((!data.exists()) && (!root.child('bans/' + auth.uid).exists()) && (newData.child('by').val() === auth.uid) && ((newData.parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().child('members/' + auth.uid + '/lf').val() === $id))) || ((!newData.exists()) && ((data.child('by').val() === auth.uid) || ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true)))))) || ((!newData.exists()) && (root.child('ops/admins/' + auth.uid).val() === true)))",
             ".validate": "newData.hasChildren(['by', 'at'])",
             "by": {
               ".validate": "newData.isString()"
@@ -287,7 +291,7 @@
           "$pair": {
             ".read": "auth != null && ($pair.beginsWith(auth.uid + '_') || $pair.endsWith('_' + auth.uid)) && data.parent().parent().child('members/' + auth.uid).exists()",
             "$id": {
-              ".write": "(auth != null) && (!data.exists()) && (newData.child('by').val() === auth.uid) && ((newData.parent().parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().parent().child('members/' + auth.uid + '/lm').val() === $id)) && (($pair === auth.uid + '_' + newData.child('to').val()) || ($pair === newData.child('to').val() + '_' + auth.uid)) && (data.parent().parent().parent().child('members/' + auth.uid).exists()) && (data.parent().parent().parent().child('members/' + newData.child('to').val()).exists())",
+              ".write": "(auth != null) && (!data.exists()) && (!root.child('bans/' + auth.uid).exists()) && (newData.child('by').val() === auth.uid) && ((newData.parent().parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().parent().child('members/' + auth.uid + '/lm').val() === $id)) && (($pair === auth.uid + '_' + newData.child('to').val()) || ($pair === newData.child('to').val() + '_' + auth.uid)) && (data.parent().parent().parent().child('members/' + auth.uid).exists()) && (data.parent().parent().parent().child('members/' + newData.child('to').val()).exists())",
               ".validate": "newData.hasChildren(['by', 'to', 'at', 'x'])",
               "by": {
                 ".validate": "newData.isString()"
@@ -310,7 +314,7 @@
         "reports": {
           ".read": "auth != null && ((data.parent().child('meta/owner').val() === auth.uid) || (data.parent().child('meta/mods/' + auth.uid).val() === true))",
           "$msg": {
-            ".write": "auth != null && !newData.exists() && ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true))",
+            ".write": "auth != null && !newData.exists() && (((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true)) || (root.child('ops/admins/' + auth.uid).val() === true))",
             "$uid": {
               ".write": "(auth != null) && (((auth.uid === $uid) && (!data.exists()) && (newData.exists()) && (data.parent().parent().parent().child('members/' + auth.uid).exists()) && (data.parent().parent().parent().child('msgs/' + $msg).exists())) || ((!newData.exists()) && ((data.parent().parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().parent().child('meta/mods/' + auth.uid).val() === true))))",
               ".validate": "newData.hasChildren(['r', 'at'])",
@@ -324,6 +328,13 @@
                 ".validate": false
               }
             }
+          }
+        },
+        "push": {
+          ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
+          "$uid": {
+            ".write": "(auth != null) && (auth.uid === $uid) && ((!newData.exists()) || (data.parent().parent().child('members/' + auth.uid).exists()))",
+            ".validate": "newData.isString() && newData.val().length <= 2000 && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
           }
         },
         "typing": {
@@ -364,7 +375,7 @@
             "$other": {
               ".validate": false
             },
-            ".write": "(auth != null) && (root.child('rooms/' + $code).child('members/' + auth.uid).exists()) && (((!data.exists()) && ((root.child('rooms/' + $code).child('meta/qa').val() === true) && ((root.child('rooms/' + $code).child('meta/qmod').val() !== true) || ((root.child('rooms/' + $code).child('meta/owner').val() === auth.uid) || (root.child('rooms/' + $code).child('meta/mods/' + auth.uid).val() === true)))) && (!root.child('rooms/' + $code).child('qby/' + $id).exists()) && (newData.parent().parent().child('qby/' + $id).val() === auth.uid) && ((newData.parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().child('members/' + auth.uid + '/lq').val() === $id))) || ((!data.exists()) && ((root.child('rooms/' + $code).child('meta/owner').val() === auth.uid) || (root.child('rooms/' + $code).child('meta/mods/' + auth.uid).val() === true)) && (root.child('rooms/' + $code).child('qq/' + $id).exists()) && (!newData.parent().parent().child('qq/' + $id).exists()) && (newData.child('text').val() === root.child('rooms/' + $code).child('qq/' + $id + '/text').val()) && (newData.child('x').val() === root.child('rooms/' + $code).child('qq/' + $id + '/x').val()) && (newData.child('name').val() === root.child('rooms/' + $code).child('qq/' + $id + '/name').val()) && (newData.child('avatar').val() === root.child('rooms/' + $code).child('qq/' + $id + '/avatar').val()) && (newData.child('at').val() === root.child('rooms/' + $code).child('qq/' + $id + '/at').val())) || ((!newData.exists()) && (((root.child('rooms/' + $code).child('meta/owner').val() === auth.uid) || (root.child('rooms/' + $code).child('meta/mods/' + auth.uid).val() === true)) || (root.child('rooms/' + $code).child('qby/' + $id).val() === auth.uid))))",
+            ".write": "(auth != null) && (root.child('rooms/' + $code).child('members/' + auth.uid).exists()) && (((!data.exists()) && (!root.child('bans/' + auth.uid).exists()) && ((root.child('rooms/' + $code).child('meta/qa').val() === true) && ((root.child('rooms/' + $code).child('meta/qmod').val() !== true) || ((root.child('rooms/' + $code).child('meta/owner').val() === auth.uid) || (root.child('rooms/' + $code).child('meta/mods/' + auth.uid).val() === true)))) && (!root.child('rooms/' + $code).child('qby/' + $id).exists()) && (newData.parent().parent().child('qby/' + $id).val() === auth.uid) && ((newData.parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().child('members/' + auth.uid + '/lq').val() === $id))) || ((!data.exists()) && ((root.child('rooms/' + $code).child('meta/owner').val() === auth.uid) || (root.child('rooms/' + $code).child('meta/mods/' + auth.uid).val() === true)) && (root.child('rooms/' + $code).child('qq/' + $id).exists()) && (!newData.parent().parent().child('qq/' + $id).exists()) && (newData.child('text').val() === root.child('rooms/' + $code).child('qq/' + $id + '/text').val()) && (newData.child('x').val() === root.child('rooms/' + $code).child('qq/' + $id + '/x').val()) && (newData.child('name').val() === root.child('rooms/' + $code).child('qq/' + $id + '/name').val()) && (newData.child('avatar').val() === root.child('rooms/' + $code).child('qq/' + $id + '/avatar').val()) && (newData.child('at').val() === root.child('rooms/' + $code).child('qq/' + $id + '/at').val())) || ((!newData.exists()) && (((root.child('rooms/' + $code).child('meta/owner').val() === auth.uid) || (root.child('rooms/' + $code).child('meta/mods/' + auth.uid).val() === true)) || (root.child('rooms/' + $code).child('qby/' + $id).val() === auth.uid))))",
             "up": {
               "$uid": {
                 ".write": "(auth != null) && (auth.uid === $uid) && (root.child('rooms/' + $code).child('members/' + auth.uid).exists()) && (root.child('rooms/' + $code).child('qby/' + $id).val() !== auth.uid) && (data.parent().parent().exists())",
@@ -425,7 +436,7 @@
               ".validate": false
             },
             ".read": "auth != null && root.child('rooms/' + $code).child('qby/' + $id).val() === auth.uid",
-            ".write": "(auth != null) && (((root.child('rooms/' + $code).child('members/' + auth.uid).exists()) && ((!data.exists()) && ((root.child('rooms/' + $code).child('meta/qa').val() === true) && (root.child('rooms/' + $code).child('meta/qmod').val() === true)) && (!root.child('rooms/' + $code).child('qby/' + $id).exists()) && (newData.parent().parent().child('qby/' + $id).val() === auth.uid) && ((newData.parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().child('members/' + auth.uid + '/lq').val() === $id)))) || ((!newData.exists()) && (((root.child('rooms/' + $code).child('meta/owner').val() === auth.uid) || (root.child('rooms/' + $code).child('meta/mods/' + auth.uid).val() === true)) || (root.child('rooms/' + $code).child('qby/' + $id).val() === auth.uid))))"
+            ".write": "(auth != null) && (((root.child('rooms/' + $code).child('members/' + auth.uid).exists()) && ((!data.exists()) && (!root.child('bans/' + auth.uid).exists()) && ((root.child('rooms/' + $code).child('meta/qa').val() === true) && (root.child('rooms/' + $code).child('meta/qmod').val() === true)) && (!root.child('rooms/' + $code).child('qby/' + $id).exists()) && (newData.parent().parent().child('qby/' + $id).val() === auth.uid) && ((newData.parent().parent().child('members/' + auth.uid + '/ls').val() === now) && (newData.parent().parent().child('members/' + auth.uid + '/lq').val() === $id)))) || ((!newData.exists()) && (((root.child('rooms/' + $code).child('meta/owner').val() === auth.uid) || (root.child('rooms/' + $code).child('meta/mods/' + auth.uid).val() === true)) || (root.child('rooms/' + $code).child('qby/' + $id).val() === auth.uid))))"
           }
         },
         "qby": {
@@ -444,6 +455,76 @@
         "$k": {
           ".write": "(auth != null) && ($day.matches(/^20[0-9]{2}-[01][0-9]-[0-3][0-9]$/)) && ($k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports)$/)) && (((!data.exists()) && (newData.val() === 1)) || (newData.val() === data.val() + 1))",
           ".validate": "newData.isNumber()"
+        }
+      }
+    },
+    "ops": {
+      "admins": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid"
+        }
+      },
+      "reports": {
+        ".read": "auth != null && root.child('ops/admins/' + auth.uid).val() === true",
+        ".indexOn": [
+          "at"
+        ],
+        "$id": {
+          ".write": "(auth != null) && (((!data.exists()) && (newData.child('by').val() === auth.uid) && ($id === newData.child('code').val() + '_' + newData.child('msg').val() + '_' + auth.uid) && (root.child('rooms/' + newData.child('code').val() + '/members/' + auth.uid).exists()) && (root.child('rooms/' + newData.child('code').val() + '/msgs/' + newData.child('msg').val() + '/by').val() === newData.child('who').val()) && (newData.child('who').val() !== auth.uid)) || ((!newData.exists()) && (root.child('ops/admins/' + auth.uid).val() === true)))",
+          ".validate": "newData.hasChildren(['code', 'msg', 'by', 'who', 'r', 'at'])",
+          "code": {
+            ".validate": "newData.isString() && newData.val().matches(/^[2-9A-HJKMNP-Z]{4}$/)"
+          },
+          "msg": {
+            ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{1,32}$/)"
+          },
+          "by": {
+            ".validate": "newData.isString() && newData.val().length <= 128"
+          },
+          "who": {
+            ".validate": "newData.isString() && newData.val().length <= 128"
+          },
+          "r": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"
+          },
+          "at": {
+            ".validate": "newData.val() === now"
+          },
+          "t": {
+            ".validate": "newData.isString() && newData.val().length <= 1000"
+          },
+          "n": {
+            ".validate": "newData.isString() && newData.val().length <= 24"
+          },
+          "f": {
+            ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{1,32}$/)"
+          },
+          "enc": {
+            ".validate": "newData.val() === true"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "told": {
+        ".validate": "newData.isNumber()"
+      }
+    },
+    "bans": {
+      ".read": "auth != null && root.child('ops/admins/' + auth.uid).val() === true",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && root.child('ops/admins/' + auth.uid).val() === true",
+        ".validate": "newData.hasChild('at')",
+        "at": {
+          ".validate": "newData.val() === now || newData.val() === data.val()"
+        },
+        "why": {
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        },
+        "$other": {
+          ".validate": false
         }
       }
     },
