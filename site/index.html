@@ -24,6 +24,28 @@
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta property="og:locale" content="zh_TW">
+<!-- search engines: one address per interface language (js/i18n.js reads ?lang= and adds the canonical link);
+     the bare address picks by device. Keep in step with sitemap.xml -->
+<link rel="alternate" hreflang="zh-TW" href="https://stoatalk.app/?lang=zh-TW">
+<link rel="alternate" hreflang="zh-CN" href="https://stoatalk.app/?lang=zh-CN">
+<link rel="alternate" hreflang="en" href="https://stoatalk.app/?lang=en">
+<link rel="alternate" hreflang="ja" href="https://stoatalk.app/?lang=ja">
+<link rel="alternate" hreflang="ko" href="https://stoatalk.app/?lang=ko">
+<link rel="alternate" hreflang="es" href="https://stoatalk.app/?lang=es">
+<link rel="alternate" hreflang="fr" href="https://stoatalk.app/?lang=fr">
+<link rel="alternate" hreflang="de" href="https://stoatalk.app/?lang=de">
+<link rel="alternate" hreflang="pt" href="https://stoatalk.app/?lang=pt">
+<link rel="alternate" hreflang="x-default" href="https://stoatalk.app/">
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@graph": [
+  {"@type": "WebSite", "name": "StoaTalk", "alternateName": "stoatalk.app", "url": "https://stoatalk.app/"},
+  {"@type": "WebApplication", "name": "StoaTalk", "url": "https://stoatalk.app/",
+   "description": "免費線上匿名討論室：開房拿 4 碼，分享就能聊。不用註冊、不用加好友。適合講座問答、讀書會、工作坊。",
+   "applicationCategory": "CommunicationApplication", "operatingSystem": "Any", "browserRequirements": "Requires JavaScript",
+   "inLanguage": ["zh-TW", "zh-CN", "en", "ja", "ko", "es", "fr", "de", "pt"], "image": "https://stoatalk.app/icons/stoa2-share.png",
+   "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}
+]}
+</script>
 <link rel="manifest" href="manifest.webmanifest?v=dev">
 <link rel="icon" href="icons/stoa2-192.png?v=dev">
 <link rel="apple-touch-icon" href="icons/stoa2-touch-180.png?v=dev">
