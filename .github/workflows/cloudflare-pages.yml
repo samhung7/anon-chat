@@ -1,5 +1,5 @@
-# Deploys site/ to Cloudflare Pages (project "stoatalk", at stoatalk.pages.dev, and at stoatalk.app once the domain is
-# connected there) on every push to main. Needs CLOUDFLARE_ACCOUNT_ID and a CLOUDFLARE_API_TOKEN that can also
+# Deploys site/ to Cloudflare Pages (project "stoatalk": stoatalk.app, and stoatalk.pages.dev) on every push to main.
+# Needs CLOUDFLARE_ACCOUNT_ID and a CLOUDFLARE_API_TOKEN that can also
 # "Edit Cloudflare Pages" (besides the Workers permissions worker.yml uses); without the token it does nothing.
 name: Deploy to Cloudflare Pages
 on:

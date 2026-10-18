@@ -19,7 +19,7 @@ Made for lecture Q&A, anonymous reading groups, workshops and team projects. Int
 ## Layout
 
 ```
-site/                       the whole app, served as-is by Cloudflare Pages (GitHub Pages until the move)
+site/                       the whole app, served as-is by Cloudflare Pages
   index.html, css/app.css
   js/app/                   the page itself, as ES modules served as they are (no build step); main.js starts it.
                             room.js keeps one room live (Room, its data and events), api.js is every write to it,
@@ -90,12 +90,9 @@ The page tests need Chromium: `npx playwright install chromium` once.
 A module in `site/js/app/` imports the others as `./name.js?v=dev`; the deploy stamps the commit there too, and `site/sw.js` lists each module (the unit tests check both).
 After editing `tools/rules.py`, run `npm run rules` and commit the new `database.rules.json` (CI checks they match).
 
-Live at https://stoatalk.app. Pushing to `main` deploys `site/` to Cloudflare Pages (`.github/workflows/cloudflare-pages.yml`, project `stoatalk`, also at `stoatalk.pages.dev`), after `tools/stamp.sh` ties the page to the commit; `site/_headers` sets the response headers there. Until the domain moves, GitHub Pages (`pages.yml`) still serves stoatalk.app.
+Live at https://stoatalk.app. Pushing to `main` deploys `site/` to Cloudflare Pages (`.github/workflows/cloudflare-pages.yml`, project `stoatalk`, also at `stoatalk.pages.dev`), after `tools/stamp.sh` ties the page to the commit; `site/_headers` sets the response headers there.
 
-Moving the domain to Cloudflare Pages, once (the `stoatalk.app` zone is already on Cloudflare for the photo service):
-1. Give the `CLOUDFLARE_API_TOKEN` secret's token the extra permission Account > Cloudflare Pages > Edit, run `cloudflare-pages.yml` (Actions > Run workflow) and try the site at `stoatalk.pages.dev`. Photos can't be sent from there (the photo service only accepts `https://stoatalk.app`); everything else works.
-2. In Cloudflare, Workers & Pages > `stoatalk` > Custom domains: add `stoatalk.app`. Cloudflare offers to replace the apex `A`/`AAAA` records that point at GitHub Pages; accept. Then send `www.stoatalk.app` to the apex with a Redirect Rule (Rules > Redirect Rules, 301, keep the query string) in place of its `CNAME` to GitHub.
-3. When stoatalk.app answers from Cloudflare (response header `server: cloudflare`, no `x-github-request-id`), remove the custom domain under the repository's Settings > Pages and delete `pages.yml`.
+The domain is connected under Workers & Pages > `stoatalk` > Custom domains (it replaced the apex records that pointed at GitHub Pages, which served the site until 2026-10-18). `www.stoatalk.app` is a proxied `CNAME` to the apex with a Redirect Rule: Hostname equals `www.stoatalk.app` → `concat("https://stoatalk.app", http.request.uri.path)`, 301, query string kept. Match on the hostname only: a rule on all requests redirects the whole zone, the photo service included, in a loop. The deploy token needs Account > Cloudflare Pages > Edit besides the Workers permissions.
 
 ## Setting up Firebase
 

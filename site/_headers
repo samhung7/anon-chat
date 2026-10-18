@@ -1,4 +1,4 @@
-# Response headers on Cloudflare Pages (GitHub Pages ignores this file).
+# Response headers on Cloudflare Pages.
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
