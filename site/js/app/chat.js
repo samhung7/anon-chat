@@ -255,7 +255,7 @@ export function openDm(other) {
   setView(other); box().focus();
 }
 
-/* ---------- the room's description (meta/desc), under its name: two lines, and the rest on a tap ---------- */
+/* ---------- the room's description (meta/desc), under its name: one line, and the rest on a tap ---------- */
 let descOpen = null; // the code of the room whose description is open
 export function renderDesc() {
   const box = $("#desc");
@@ -268,13 +268,14 @@ export function renderDesc() {
   const text = el("div", { class: "dtext" }, linkify(desc));
   const more = el("button", { type: "button", class: "link dmore", "aria-expanded": String(open), text: t(open ? "descLess" : "descMore"), onclick: toggle });
   box.classList.toggle("open", open);
-  const row = el("div", { class: "drow" }, more,
-    room.isStaff() ? el("button", { type: "button", class: "link", text: t("editDesc"), onclick: () => editDesc() }) : null);
-  box.replaceChildren(text, row);
+  // closed: the first line, with 更多 at its end; open: all of it, then 收起 (and 編輯 for the owner and co-hosts)
+  if (!open) box.replaceChildren(text, more);
+  else box.replaceChildren(text, el("div", { class: "drow" }, more,
+    room.isStaff() ? el("button", { type: "button", class: "link", text: t("editDesc"), onclick: () => editDesc() }) : null));
   // a link in it opens; a tap anywhere else on a closed one opens it
   text.onclick = (e) => { if (!open && !more.hidden && !e.target.closest("a")) toggle(); };
   // short enough to show whole: nothing to open
-  if (!open) requestAnimationFrame(() => { more.hidden = text.scrollHeight <= text.clientHeight + 1; row.hidden = more.hidden && !room?.isStaff(); });
+  if (!open) requestAnimationFrame(() => { more.hidden = !desc.includes("\n") && text.scrollWidth <= text.clientWidth + 1; });
 }
 
 /* ---------- pinned announcements (meta/pins, owner only, at most 3) ---------- */

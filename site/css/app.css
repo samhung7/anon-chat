@@ -241,14 +241,16 @@ ul.plist small { color: var(--muted); }
 .bub.ro { cursor: default; }
 .rofoot { margin: 0; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); text-align: center; font-size: 13px; color: var(--muted); background: var(--surface); border-top: 1px solid var(--line); }
 
-/* pinned announcements: one line until opened */
-/* the room's description: two lines under the header, all of it when opened */
-.desc { background: var(--surface); border-bottom: 1px solid var(--line); padding: 8px 14px 6px; font-size: 14px; }
-.desc .dtext { white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; cursor: pointer; }
-.desc.open .dtext { display: block; max-height: 40dvh; overflow-y: auto; cursor: auto; }
+/* the room's description: one line under the header with 更多 at its end, all of it when opened */
+.desc { display: flex; align-items: baseline; gap: 10px; background: var(--surface); border-bottom: 1px solid var(--line); padding: 8px 14px; font-size: 14px; }
+.desc .dtext { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.desc > .dmore { flex: none; padding: 0; font-size: 13px; }
+.desc.open { display: block; padding-bottom: 6px; }
+.desc.open .dtext { white-space: pre-wrap; word-break: break-word; max-height: 40dvh; overflow-y: auto; cursor: auto; }
 .desc a { color: inherit; text-decoration: underline; }
 .desc .drow { display: flex; gap: 16px; font-size: 13px; }
 .desc .drow .link { padding: 2px 0; }
+/* pinned announcements: one line until opened */
 .pins { background: var(--surface); border-bottom: 1px solid var(--line); font-size: 14px; }
 .pins .pinhead { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; color: inherit; font: inherit; padding: 8px 14px; text-align: left; cursor: pointer; }
 .pins .pinhead .one { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
