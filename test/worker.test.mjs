@@ -201,8 +201,10 @@ test("push service: announces a message to members with a subscription who aren'
   assert.equal(pushed[0].init.headers.Topic, "ABCD");
   assert.match(pushed[0].init.headers.Authorization, /^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=B/);
   assert.deepEqual(JSON.parse(await alice.open(pushed[0].init.body)), { c: "ABCD", k: "m", n: "b", a: "🐻", r: "讀書會", s: "大家好 今天讀第三章" });
-  // the room was just announced: the next message waits
-  assert.deepEqual(await (await go("POST", "/push/notify/ABCD", "bob", { id: "m1" })).json(), { sent: 0, next: null });
+  // the room was just announced: the next message waits, and is told for how long
+  const soon = await (await go("POST", "/push/notify/ABCD", "bob", { id: "m1" })).json();
+  assert.equal(soon.sent, 0);
+  assert.ok(soon.wait > 0 && soon.wait <= 20000);
   assert.equal(pushed.length, 1);
   // a private message: only to the one it's for, and it says nothing of what's in it
   await db("rooms/ABCD/dm/alice_bob/d1", { by: "bob", to: "alice", x: "sealed", at: Date.now() });

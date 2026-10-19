@@ -15,8 +15,8 @@
      POST   /push/notify/{code}  {id, to?, from?}  the author of a message that just went out asks for it to be announced
    The notify call reads the room with the author's own sign-in (so the rules decide what it may see), checks the
    message is theirs and new, and pushes to the members with a subscription there who aren't online. A room's
-   messages are announced at most every QUIET ms; a private message only to the person it's for. In an encrypted
-   room the push says only that there's something new. Each call sends at most PAGE pushes (a Worker's outgoing
+   messages are announced at most every QUIET ms (a call too soon is told how long to wait); a private message only
+   to the person it's for. In an encrypted room the push says only that there's something new. Each call sends at most PAGE pushes (a Worker's outgoing
    requests are limited) and says where to go on from. */
 import { verifier } from "./token.js";
 import { vapid, sealSub, openSub, send, validSubscription } from "./push.js";
@@ -112,7 +112,8 @@ export function makeHandler({ verify, read, fetcher = (...a) => fetch(...a) }) {
             const [msg, meta] = await Promise.all([read(`rooms/${code}/msgs/${id}`, token, env, false), read(`rooms/${code}/meta`, token, env, false)]);
             if (!msg || msg.by !== uid || !(msg.at > now - FRESH) || !meta) return out(409);
             if (!from) { // the page stamps meta/pa first (the rules allow that at most every QUIET ms)
-              if (!(meta.pa > now - QUIET) || lastPush.get(code) > now - QUIET) return json(200, { sent: 0, next: null });
+              if (!(meta.pa > now - QUIET)) return json(200, { sent: 0, next: null });
+              if (lastPush.get(code) > now - QUIET) return json(200, { sent: 0, next: null, wait: lastPush.get(code) + QUIET - now }); // try again then
               lastPush.set(code, now);
               if (lastPush.size > 10000) lastPush.clear();
             }
