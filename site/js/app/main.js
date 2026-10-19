@@ -125,7 +125,25 @@ const fitChat = () => {
   s.top = up ? `${vv.offsetTop}px` : ""; s.height = up ? `${vv.height}px` : ""; s.bottom = up ? "auto" : "";
   if (stick) l.scrollTop = l.scrollHeight;
 };
-if (vv) { vv.addEventListener("resize", fitChat); vv.addEventListener("scroll", fitChat); }
+// iOS slides the page up in an animation and doesn't always say when it's done, so after the box gains focus or
+// the screen moves, the chat keeps following it every frame until it has stood still for a moment
+let settling = 0;
+const settle = () => {
+  const go = !settling; settling = performance.now() + 800;
+  if (!go) return;
+  let last = "";
+  const step = (now) => {
+    const at = `${vv.offsetTop},${vv.height},${vv.scale}`;
+    if (at !== last) { last = at; fitChat(); settling = Math.max(settling, now + 300); }
+    if (now < settling) requestAnimationFrame(step); else settling = 0;
+  };
+  requestAnimationFrame(step);
+};
+if (vv) {
+  ["resize", "scroll"].forEach((ev) => vv.addEventListener(ev, () => { fitChat(); settle(); }));
+  ["focus", "blur"].forEach((ev) => ta.addEventListener(ev, settle));
+  addEventListener("scroll", settle, { passive: true });
+}
 // Enter sends on a keyboard; on phones Enter is a new line and the button sends. Never while an IME is composing.
 ta.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && matchMedia("(pointer: fine)").matches) { e.preventDefault(); $("#composer").requestSubmit(); }
