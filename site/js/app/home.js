@@ -37,7 +37,7 @@ export function showRecordScreen() { opened(); $("#home").hidden = true; $("#cha
 export function home() {
   only("#home");
   closeRecord(); closePicker(); endShow();
-  $("#composer").classList.remove("off");
+  $("#composer").classList.remove("off"); $("#composer").hidden = false; $("#roBox").hidden = true;
   document.title = t("docTitle");
   const lang = new URLSearchParams(location.search).get("lang"); // the language a search result linked to stays in the address
   history.replaceState(null, "", location.pathname + (lang ? "?lang=" + encodeURIComponent(lang) + asParam("&") : asParam("?")));

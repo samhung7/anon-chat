@@ -638,20 +638,22 @@ test("a quiet room: a warning in its 24th hour, then read-only with the hours le
   await say(alice, "see you tomorrow");
   await bubble(bob, "see you tomorrow").waitFor();
   const quiet = (h) => fetch(dbUrl(`rooms/${code}/meta/last`), { method: "PUT", headers: asOwner, body: String(Date.now() - h * 3600000) });
-  // nobody spoke for 23½ hours: everyone in the room is told, and speaking keeps it going
+  // nobody spoke for 23½ hours: everyone in the room is told; ✕ hides it, and speaking keeps the room going
   await quiet(23.5);
   await bob.locator("#ageBar", { hasText: "turns read-only in about 30 min" }).waitFor();
-  assert.equal(await bob.locator("#ageBar .btn").count(), 0); // nothing to save yet: speaking keeps it going
-  assert.ok(!(await bob.locator("#composer").evaluate((f) => f.classList.contains("off"))));
+  await alice.locator("#ageBar .x").click();
+  await alice.locator("#ageBar").waitFor({ state: "hidden" });
+  assert.ok(await bob.locator("#roBox").isHidden());
   await say(bob, "still here");
   await bubble(alice, "still here").waitFor();
   await bob.locator("#ageBar").waitFor({ state: "hidden" });
-  // 30 hours: read-only, deleted in 18 hours; it can still be saved, but nothing new goes in
+  // 30 hours: read-only, deleted in 18 hours; where the message box was, it says so and offers to save it
   await quiet(30);
-  await alice.locator("#ageBar", { hasText: "Read-only" }).waitFor();
-  await alice.locator("#ageBar", { hasText: "deleted in 18 h" }).waitFor();
-  assert.ok(await alice.locator("#composer").evaluate((f) => f.classList.contains("off")));
-  await alice.locator("#ageBar .btn").click();
+  await alice.locator("#roBox", { hasText: "Read-only" }).waitFor();
+  await alice.locator("#roBox", { hasText: "deleted in 18 h" }).waitFor();
+  assert.ok(await alice.locator("#composer").isHidden());
+  assert.ok(await alice.locator("#ageBar").isHidden());
+  await alice.locator("#roBox .btn").click();
   await press(alice, "save");
   await alice.locator(".toast", { hasText: "Saved" }).first().waitFor();
   // the home list marks it, with the hours left

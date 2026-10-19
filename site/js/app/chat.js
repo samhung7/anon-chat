@@ -34,7 +34,7 @@ export function enter(code, cipher) {
   if (SHOW()) backend.stat("shows");
   rememberRoom(code);
   roomPath(code);
-  LIST().replaceChildren(); $("#ageBar").hidden = true;
+  LIST().replaceChildren(); $("#ageBar").hidden = true; $("#roBox").hidden = true; $("#composer").hidden = false;
   showChat(); offerNotify();
   watchChat(r); watchQa(r); watchShow(r);
   r.start();
@@ -293,18 +293,27 @@ export function renderDesc() {
 }
 
 /* ---------- winding down (js/app/expiry.js): nobody spoke for almost 24 hours, or the room is read-only ---------- */
-let warnedAt = null; // the meta/last the in-page warning was shown for, so it toasts once
+let warnedAt = null;    // the room and meta/last the in-page warning was shown for, so it toasts once
+let dismissedAt = null; // ...and the one whose warning was dismissed with ✕ (until someone speaks again)
 export function renderAge() {
-  const bar = $("#ageBar");
+  const bar = $("#ageBar"), box = $("#roBox");
   if (!room?.meta) return;
-  const { state, left } = phase(room.meta.last, backend.now());
+  const { state, left } = phase(room.meta.last, backend.now()), at = room.code + room.meta.last;
   const ro = state === "ro" || state === "gone";
   if (ro !== room.readOnly) { room.readOnly = ro; if (ro) { cancelReply(); typing.stop(); closePicker(); } renderHeader(); }
-  bar.hidden = state === "live" || room.gone;
+  // read-only: the message box gives way to how long the room has left, and a way to save it
+  $("#composer").hidden = ro && !room.gone;
+  box.hidden = !ro || room.gone;
+  if (box.hidden) box.replaceChildren();
+  else box.replaceChildren(el("span", { text: t("roBar", { h: hoursLeft(left) }) }),
+    el("button", { type: "button", class: "btn small", text: t("roSave"), onclick: () => exportSheet() }));
+  // within the hour: a line under the header, until someone speaks or it's dismissed
+  bar.hidden = state !== "soon" || room.gone || dismissedAt === at;
   if (bar.hidden) return bar.replaceChildren();
-  const text = ro ? t("roBar", { h: hoursLeft(left) }) : t("soonBar", { m: minutesLeft(left) });
-  bar.replaceChildren(...[el("span", { text }), ro ? el("button", { type: "button", class: "btn small", text: t("roSave"), onclick: () => exportSheet() }) : null].filter(Boolean));
-  if (state === "soon" && warnedAt !== room.code + room.meta.last) { warnedAt = room.code + room.meta.last; toast(text); }
+  const text = t("soonBar", { m: minutesLeft(left) });
+  bar.replaceChildren(el("span", { text }),
+    el("button", { type: "button", class: "x", "aria-label": t("close"), text: "✕", onclick: () => { dismissedAt = at; renderAge(); } }));
+  if (warnedAt !== at) { warnedAt = at; toast(text); }
 }
 
 /* ---------- pinned announcements (meta/pins, owner only, at most 3) ---------- */
