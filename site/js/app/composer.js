@@ -39,6 +39,7 @@ export const sendGif = (gif) => post(KIND.gif, gif);
 // one message of a kind to the room or the private chat on view; more: other paths written in the same update (a photo's picture)
 export async function post(kind, value, more = {}) {
   if (!room || room.gone) return false;
+  if (room.readOnly) { toast(t("roNoPost")); return false; }
   const [body, sealed] = kind.pack(value), ui = room.ui, uid = backend.uid, T = backend.stamp();
   const rp = ui.reply && !!ui.reply.dm === (ui.view !== "all") ? ui.reply.id : null;
   if (rp) { sealed.r = rp; if (!room.cipher) body.rp = rp; }

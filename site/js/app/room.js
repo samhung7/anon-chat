@@ -60,6 +60,7 @@ export class Room extends Emitter {
     this.imgs = new Map();      // photo id -> blob: URL
     this.off = [];              // what stops each subscription
     this.gone = false; this.ready = false;
+    this.readOnly = false;      // nobody spoke for 24 hours (js/app/expiry.js): read and save, nothing new
     this.t0 = backend.now();    // messages from before this are history
     this.lastAt = 0;
     // everything that arrives goes through one queue, so decrypting never reorders messages

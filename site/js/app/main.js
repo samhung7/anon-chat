@@ -4,8 +4,8 @@
    travels only in the invite link (after the #), so the server stores the title, nicknames and messages as
    ciphertext. Private messages are always end-to-end encrypted. The owner can lock the room, cap its size, name
    co-hosts, hand the room over and end it, which deletes everything; the owner and co-hosts remove messages and
-   people, and see what people report. A room nobody has written in for 24 hours is deleted too (tools/cleanup).
-   Anyone can export what they can see before it goes.
+   people, and see what people report. A room nobody has written in for 24 hours turns read-only, and 24 hours later
+   it's deleted too (expiry.js, tools/cleanup). Anyone can export what they can see before it goes.
    Backend: Firebase Realtime Database + anonymous sign-in; database.rules.json is what actually enforces all of this.
 
    This file only connects the page's fixed buttons to the modules beside it:

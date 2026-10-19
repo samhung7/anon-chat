@@ -20,7 +20,7 @@ I18N.add("fr", {
   f2t: "🔢 Un code à 4 caractères",
   f2: "Rejoignez avec le code ou le lien, ou affichez un QR code à l’écran.",
   f3t: "🗑️ Tout disparaît à la fin",
-  f3: "Supprimé dès que l’hôte y met fin, ou après 24 heures sans message.",
+  f3: "Supprimé dès que l’hôte y met fin. Après 24 heures sans message il passe en lecture seule, puis il est supprimé 24 heures plus tard.",
   f4t: "💾 Export",
   f4: "Qui veut garder une copie peut la télécharger en fichier texte ou en page web.",
   f5t: "🔐 Chiffrement de bout en bout",
@@ -117,7 +117,7 @@ I18N.add("fr", {
   noNotify: "Ce navigateur ne prend pas en charge les notifications. Sur iPhone, ajoutez le site à l’écran d’accueil et ouvrez-le depuis là.",
   notifyBlocked: "Votre navigateur a bloqué les notifications. Autorisez-les dans les paramètres du site de votre navigateur",
   notifyOnToast: "🔔 Vous serez averti des nouveaux messages",
-  goneEnded: "Ce salon est terminé (l’hôte y a mis fin, ou personne n’a parlé pendant 24 heures) et ses messages ont été supprimés.",
+  goneEnded: "Ce salon est terminé (l’hôte y a mis fin, ou ses 24 heures en lecture seule sont écoulées) et ses messages ont été supprimés.",
   goneKicked: "L’hôte vous a retiré de ce salon.",
   goneLeft: "Vous ne faites plus partie de ce salon.",
   goneKeep: " Ce qui est affiché reste sur votre appareil : vous pouvez l’enregistrer avant de fermer.",
@@ -259,6 +259,14 @@ I18N.add("fr", {
 
   // home list and language
   backToRoom: "Retour au salon ›",
+  // a room nobody spoke in for 24 hours (js/app/expiry.js)
+  roTag: "Lecture seule",
+  roLeft: "supprimé dans {h} h",
+  soonBar: "⏳ Personne n’a parlé depuis près de 24 heures : le salon passe en lecture seule dans environ {m} min. Écrivez pour continuer.",
+  roBar: "🔒 Lecture seule : personne n’a parlé depuis 24 heures. Suppression dans {h} h ; enregistrez-le maintenant pour le garder.",
+  roSave: "Enregistrer",
+  roNoJoin: "Ce salon est en lecture seule et n’accepte plus personne",
+  roNoPost: "Ce salon est en lecture seule",
   language: "Langue",
   followDevice: "Comme mon appareil",
   theme: "Apparence",

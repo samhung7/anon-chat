@@ -13,7 +13,7 @@ Made for lecture Q&A, anonymous reading groups, workshops and team projects. Int
 - **Projector screen** (`?room={code}&show=1`, from the owner's ⋯ menu): the QR Code and code to join beside the question being answered, the most upvoted ones and the latest poll, live and in large type.
 - **Usage stats**: anonymous daily counts (rooms opened, joins, messages, questions, ...) in `stats/{day}`, with no content or ids. `.github/workflows/stats.yml` shows the last 30 days in its run summary every Monday, or when run by hand.
 - **Notifications**: a system notification for each new message while the page is open in the background (a tab, or the installed app). Each room can be muted from its ⋯ menu; the setting stays on the device. With the page closed, Web Push: the browser's subscription, sealed by the push service, sits in each room it wants to hear from (`push/{uid}`), and after posting, the author's page asks the service (`worker/`) to announce the message to members who aren't online, at most once every 20 seconds per room (`meta/pa`). A Private Salon's or a private message's push says only that there's something new. On iPhone, only from the app added to the home screen. Push stays off until the service has its key: make one on `site/admin.html` and save it as the `VAPID_KEY` repository secret.
-- **Deleting**: ending a room deletes every message and private message right away. A room nobody has written in for 24 hours is deleted by an hourly job (`tools/cleanup`), and its code can be reused.
+- **Deleting**: ending a room deletes every message and private message right away. A room nobody has written in for 24 hours turns read-only (its members can still read, save and export it, but nothing new goes in), and 24 hours later the hourly job (`tools/cleanup`) deletes it and its code can be reused. The job warns members who allowed notifications by Web Push an hour before each step; an open page shows the same warning and the countdown, and the home page's room list marks read-only rooms with the hours left.
 - **Export and records**: everyone can download what they can see, including their own private messages, as `.json`, `.html` or `.txt`, or keep it in this browser under 「我的聊天記錄」. The `.json` and `.html` files can be imported back and read here, read-only (the `.html` carries the same JSON inside it). Records stay on the device; nothing is uploaded. An imported file is checked field by field, but a file is only as trustworthy as whoever sent it: nothing proves it wasn't edited by hand.
 
 ## Layout
@@ -31,7 +31,7 @@ site/                       the whole app, served as-is by Cloudflare Pages
   sw.js, manifest.webmanifest, icons/
 database.rules.json         who may read and write what; generated from tools/rules.py
 tools/rules.py              the rules, written readably (npm run rules)
-tools/cleanup/              hourly job that deletes rooms idle for 24 hours, and photos no room points at;
+tools/cleanup/              hourly job that deletes rooms idle for 48 hours (read-only after 24) and warns before, and photos no room points at;
                             stats.mjs prints the usage counts
 worker/                     a Cloudflare Worker at api.stoatalk.app: puts photos into R2 and deletes them, and sends Web Push
 site/admin.html             the operator's page: reports from every room, bans, and making the Web Push key
@@ -107,7 +107,7 @@ The domain is connected under Workers & Pages > `stoatalk` > Custom domains (it 
 3. **Realtime Database** > Create database (Singapore, `asia-southeast1`, is closest to Taiwan), start in locked mode, then paste `database.rules.json` into the **Rules** tab and publish. Or: `npx firebase deploy --only database --project <project-id>`.
 4. Project settings > Your apps > add a **Web app**, and copy its config (`apiKey`, `authDomain`, `databaseURL`, `projectId`, `appId`) into `site/js/config.js`.
 5. Authentication > Settings > Authorized domains: add your site's domain (`stoatalk.app`, and `stoatalk.pages.dev` for trying a deploy).
-6. For the 24-hour cleanup and for publishing rule changes automatically: Project settings > Service accounts > Generate new private key, then in the GitHub repository add the secrets `FIREBASE_SERVICE_ACCOUNT` (the whole JSON file) and `FIREBASE_DATABASE_URL`. Without them the cleanup job skips itself, and idle rooms stay until someone tries to open them or their code is reused. With them, `deploy-rules.yml` publishes `database.rules.json` whenever it changes on `main`.
+6. For the hourly cleanup and for publishing rule changes automatically: Project settings > Service accounts > Generate new private key, then in the GitHub repository add the secrets `FIREBASE_SERVICE_ACCOUNT` (the whole JSON file) and `FIREBASE_DATABASE_URL`. Without them the cleanup job skips itself, and idle rooms stay until someone tries to open them or their code is reused. With them, `deploy-rules.yml` publishes `database.rules.json` whenever it changes on `main`.
 7. GIF search: create a key at https://klipy.com/developers and put it in `site/js/config.js` as `klipyKey`. Without one the GIF button is hidden. GIFs are only accepted from `*.klipy.com` (checked in the rules too).
 
 ## Photos (Cloudflare R2)

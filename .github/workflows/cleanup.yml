@@ -1,7 +1,9 @@
-# Deletes rooms nobody has written in for 24 hours. Needs two repository secrets:
+# Deletes rooms nobody has written in for 48 hours (read-only after 24). Needs two repository secrets:
 # FIREBASE_SERVICE_ACCOUNT (service account JSON) and FIREBASE_DATABASE_URL. Without them the job does nothing.
 # New reports for the operator open a GitHub issue (no content, just how many).
 # With CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY it also deletes photos in R2 no room points at.
+# With VAPID_KEY (the secret worker.yml hands the push service too) it warns rooms' members by Web Push an hour before
+# their room turns read-only and an hour before it's deleted.
 name: Delete expired rooms
 on:
   schedule:
@@ -19,6 +21,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      VAPID_KEY: ${{ secrets.VAPID_KEY }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - if: env.FIREBASE_SERVICE_ACCOUNT == ''

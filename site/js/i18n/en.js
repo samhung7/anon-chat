@@ -20,7 +20,7 @@ I18N.add("en", {
   f2t: "🔢 Join with 4 characters",
   f2: "Join with the code or the link, or show a QR code on screen.",
   f3t: "🗑️ Gone when you're done",
-  f3: "Deleted as soon as the host ends it, or after 24 hours with no messages.",
+  f3: "Deleted as soon as the host ends it. After 24 hours with no messages it turns read-only, and 24 hours later it's deleted.",
   f4t: "💾 Export",
   f4: "Anyone who wants a copy can download it as a text file or a web page.",
   f5t: "🔐 End-to-end encryption",
@@ -117,7 +117,7 @@ I18N.add("en", {
   noNotify: "This browser doesn't support notifications. On iPhone, add the site to your Home Screen and open it from there.",
   notifyBlocked: "Your browser blocked notifications. Allow them in the browser's site settings",
   notifyOnToast: "🔔 You'll be notified about new messages",
-  goneEnded: "This room has ended (the host ended it, or nobody spoke for 24 hours) and its messages were deleted.",
+  goneEnded: "This room has ended (the host ended it, or its 24 read-only hours ran out) and its messages were deleted.",
   goneKicked: "The host removed you from this room.",
   goneLeft: "You're no longer in this room.",
   goneKeep: " What's on screen is still on your device, so you can save it before you close it.",
@@ -259,6 +259,14 @@ I18N.add("en", {
 
   // home list and language
   backToRoom: "Back to room ›",
+  // a room nobody spoke in for 24 hours (js/app/expiry.js)
+  roTag: "Read-only",
+  roLeft: "deleted in {h} h",
+  soonBar: "⏳ Nobody has spoken for almost 24 hours: this room turns read-only in about {m} min. Say something to keep it going.",
+  roBar: "🔒 Read-only: nobody spoke for 24 hours. It's deleted in {h} h, so save it now if you want to keep it.",
+  roSave: "Save",
+  roNoJoin: "This room is read-only now and can't be joined",
+  roNoPost: "This room is read-only now",
   language: "Language",
   followDevice: "Same as my device",
   theme: "Appearance",

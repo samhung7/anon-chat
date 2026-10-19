@@ -20,7 +20,7 @@ I18N.add("es", {
   f2t: "🔢 Entra con 4 caracteres",
   f2: "Únete con el código o el enlace, o muestra un código QR en pantalla.",
   f3t: "🗑️ Desaparece al terminar",
-  f3: "Se borra en cuanto el anfitrión la cierra, o tras 24 horas sin mensajes.",
+  f3: "Se borra en cuanto el anfitrión la cierra. Tras 24 horas sin mensajes pasa a solo lectura, y 24 horas después se borra.",
   f4t: "💾 Exporta",
   f4: "Quien quiera una copia puede descargarla como archivo de texto o página web.",
   f5t: "🔐 Cifrado de extremo a extremo",
@@ -117,7 +117,7 @@ I18N.add("es", {
   noNotify: "Este navegador no admite notificaciones. En iPhone, añade el sitio a tu pantalla de inicio y ábrelo desde ahí.",
   notifyBlocked: "Tu navegador bloqueó las notificaciones. Permítelas en la configuración del sitio en tu navegador",
   notifyOnToast: "🔔 Te avisaremos de los mensajes nuevos",
-  goneEnded: "Esta sala terminó (el anfitrión la cerró o nadie escribió en 24 horas) y sus mensajes se eliminaron.",
+  goneEnded: "Esta sala terminó (el anfitrión la cerró o pasaron sus 24 horas de solo lectura) y sus mensajes se eliminaron.",
   goneKicked: "El anfitrión te expulsó de esta sala.",
   goneLeft: "Ya no estás en esta sala.",
   goneKeep: " Lo que ves en pantalla sigue en tu dispositivo, así que puedes guardarlo antes de cerrarlo.",
@@ -259,6 +259,14 @@ I18N.add("es", {
 
   // home list and language
   backToRoom: "Volver a la sala ›",
+  // a room nobody spoke in for 24 hours (js/app/expiry.js)
+  roTag: "Solo lectura",
+  roLeft: "se borra en {h} h",
+  soonBar: "⏳ Nadie ha hablado en casi 24 horas: la sala pasa a solo lectura en unos {m} min. Escribe algo para seguir.",
+  roBar: "🔒 Solo lectura: nadie habló en 24 horas. Se borra en {h} h; guárdala ahora si quieres conservarla.",
+  roSave: "Guardar",
+  roNoJoin: "Esta sala ya es de solo lectura y no admite a nadie más",
+  roNoPost: "Esta sala ya es de solo lectura",
   language: "Idioma",
   followDevice: "Igual que mi dispositivo",
   theme: "Apariencia",
