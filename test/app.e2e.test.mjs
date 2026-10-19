@@ -602,7 +602,7 @@ test("reports reach StoaTalk's operator, who takes the message down and bans the
   noErrors();
 });
 
-test("Web Push: a message is announced to a member whose page is closed, once in a while", async () => {
+test("Web Push: a message is announced to a member whose page is closed, a quick next one when the quiet time is over", async () => {
   const alice = await person("a"), bob = await person("b");
   const { code, url } = await createRoom(alice, "Alice");
   await joinByLink(bob, url, "Bob");
@@ -623,11 +623,15 @@ test("Web Push: a message is announced to a member whose page is closed, once in
   assert.equal(photos.pushed[0].url, sub.endpoint);
   assert.equal(photos.pushed[0].init.headers.Topic, code);
   assert.ok((await dbGet(`rooms/${code}/meta/pa`)) > 0);
-  // the next one, moments later, isn't announced again
+  // the next ones, moments later, aren't announced right away, but the newest is once the 20 seconds are over
   await say(alice, "bring the book");
-  await bubble(alice, "bring the book").waitFor();
+  await say(alice, "and the snacks");
+  await bubble(alice, "and the snacks").waitFor();
   await new Promise((ok) => setTimeout(ok, 1500));
   assert.equal(photos.pushed.length, 1);
+  await until(() => photos.pushed.length === 2, 30000);
+  await new Promise((ok) => setTimeout(ok, 1500));
+  assert.equal(photos.pushed.length, 2);
   noErrors();
 });
 
