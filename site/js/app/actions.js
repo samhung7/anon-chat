@@ -2,7 +2,7 @@
    The menu is a table: each entry says when it shows and what it does, so adding one is adding a row. A kind of
    message brings its own entries (kinds.js `actions`), shown after the common ones that edit it. */
 import { LIMITS, REACTS } from "./constants.js?v=dev";
-import { t } from "./text.js?v=dev";
+import { t, fmtWhen } from "./text.js?v=dev";
 import { el, toast, sheet, confirmSheet, orToast, pickSheet } from "./dom.js?v=dev";
 import { backend, isDenied } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
@@ -38,7 +38,7 @@ export async function msgActions(id, v, dm) {
   const reacts = dm ? null : el("div", { class: "reactrow" }, REACTS.map((emo, k) =>
     el("button", { type: "button", class: "chip big" + (v.re?.[k]?.[uid] ? " on" : ""), "data-a": "re" + k, text: emo })));
   let picked = null;
-  const a = await sheet("", el("div", {}, kind.preview(v), reacts),
+  const a = await sheet("", el("div", {}, el("time", { class: "mwhen", text: fmtWhen(v.at) }), kind.preview(v), reacts),
     entries.map(([act, label, , , cls]) => [act, label(c), cls]),
     { onOpen: (ov) => reacts?.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { picked = +b.dataset.a.slice(2); ov.close("react"); } }) });
   if (a === "react") return react(id, picked, !v.re?.[picked]?.[uid]);

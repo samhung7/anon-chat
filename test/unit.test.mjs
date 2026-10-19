@@ -135,3 +135,12 @@ test("kinds of message: each message is exactly one, and says itself in a line",
   assert.equal(KIND.poll.unsealed({ p: { q: "Q", o: ["a", "b"] } }, true), null, "no polls in private chats");
   assert.deepEqual(KIND.poll.unsealed({ p: { q: "Q", o: { 0: "a", 1: "b" }, m: "yes" } }, false), { poll: { q: "Q", o: ["a", "b"], m: false } });
 });
+
+test("a message's time gains the month and day from yesterday back, and the year before this year", async () => {
+  const { fmtTime, fmtWhen } = await import(new URL("text.js?v=dev", APP));
+  const now = new Date(2026, 9, 19, 15, 0);
+  assert.equal(fmtTime(new Date(2026, 9, 19, 10, 26), now), "10:26");
+  assert.equal(fmtTime(new Date(2026, 9, 18, 23, 5), now), "10/18, 23:05");
+  assert.equal(fmtTime(new Date(2025, 2, 5, 10, 26), now), "3/5/2025, 10:26");
+  assert.match(fmtWhen(new Date(2026, 9, 18, 23, 5)), /October 18, 2026.*23:05/);
+});
