@@ -1,5 +1,6 @@
 /* Opening a room and joining one: with the code, a pasted link, or an encrypted room's invite link. */
-import { CODE_CHARS, DAY, LIMITS, CONNECT_MS } from "./constants.js?v=dev";
+import { CODE_CHARS, LIMITS, CONNECT_MS } from "./constants.js?v=dev";
+import { phase } from "./expiry.js?v=dev";
 import { t } from "./text.js?v=dev";
 import { $, el, toast, sheet, busy, enterPressesOk } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
@@ -91,8 +92,8 @@ export async function join(raw) {
     // the three answers a join needs, asked together rather than one after another
     const [metaSnap, inside, banned, bannedAll] = await within(Promise.all([backend.fb.get(ref("meta")), backend.val(ref("members/" + uid)),
       backend.val(ref("banned/" + uid)), backend.val(backend.ref("bans/" + uid))]), CONNECT_MS);
-    const meta = metaSnap.val();
-    if (!meta || meta.last < backend.now() - DAY) {
+    const meta = metaSnap.val(), state = meta && phase(meta.last, backend.now()).state;
+    if (!meta || state === "gone") {
       toast(t("notFound"));
       if (meta) backend.update({ [`rooms/${code}`]: null }).catch(() => {}); // expired: clear it out
       store.set(KEYS.roomKey(code), null);
@@ -103,6 +104,7 @@ export async function join(raw) {
     if (cipher === false) return;
     // already inside (coming back)?
     if (inside) { await enter(code, cipher); return; }
+    if (state === "ro") { toast(t("roNoJoin")); return; } // read-only: still open to its members, nobody new
     if (bannedAll) { toast(t("bannedAll")); return; }
     if (banned) { toast(t("bannedToast")); return; }
     if (meta.locked) { toast(t("lockedToast")); return; }

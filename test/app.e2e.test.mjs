@@ -630,3 +630,43 @@ test("Web Push: a message is announced to a member whose page is closed, once in
   assert.equal(photos.pushed.length, 1);
   noErrors();
 });
+
+test("a quiet room: a warning in its 24th hour, then read-only with the hours left, on the chat and the home list", async () => {
+  const alice = await person("a"), bob = await person("b"), carol = await person("c");
+  const { code, url } = await createRoom(alice, "Alice", { title: "Book club" });
+  await joinByLink(bob, url, "Bob");
+  await say(alice, "see you tomorrow");
+  await bubble(bob, "see you tomorrow").waitFor();
+  const quiet = (h) => fetch(dbUrl(`rooms/${code}/meta/last`), { method: "PUT", headers: asOwner, body: String(Date.now() - h * 3600000) });
+  // nobody spoke for 23½ hours: everyone in the room is told; ✕ hides it, and speaking keeps the room going
+  await quiet(23.5);
+  await bob.locator("#ageBar", { hasText: "turns read-only in about 30 min" }).waitFor();
+  await alice.locator("#ageBar .x").click();
+  await alice.locator("#ageBar").waitFor({ state: "hidden" });
+  assert.ok(await bob.locator("#roBox").isHidden());
+  await say(bob, "still here");
+  await bubble(alice, "still here").waitFor();
+  await bob.locator("#ageBar").waitFor({ state: "hidden" });
+  // 30 hours: read-only, deleted in 18 hours; where the message box was, it says so and offers to save it
+  await quiet(30);
+  await alice.locator("#roBox", { hasText: "Read-only" }).waitFor();
+  await alice.locator("#roBox", { hasText: "deleted in 18 h" }).waitFor();
+  assert.ok(await alice.locator("#composer").isHidden());
+  assert.ok(await alice.locator("#ageBar").isHidden());
+  await alice.locator("#roBox .btn").click();
+  await press(alice, "save");
+  await alice.locator(".toast", { hasText: "Saved" }).first().waitFor();
+  // the home list marks it, with the hours left
+  await bob.locator("#chat .bar [data-a=home]").click();
+  const row = bob.locator("#resume .roomrow", { hasText: "Book club" });
+  await row.locator(".rotag", { hasText: "Read-only" }).waitFor();
+  await row.locator(".roleft", { hasText: "deleted in 18 h" }).waitFor();
+  // a member still gets back in to read it; nobody new joins
+  await row.click();
+  await bubble(bob, "still here").waitFor();
+  await carol.locator("#joinCode").fill(code);
+  await carol.locator("#joinForm button").click();
+  await carol.locator(".toast", { hasText: "read-only" }).waitFor();
+  assert.ok(await dbGet(`rooms/${code}/meta`), "still there until its 24 read-only hours are up");
+  noErrors();
+});

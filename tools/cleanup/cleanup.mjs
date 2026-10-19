@@ -1,12 +1,15 @@
-// Deletes rooms nobody has written in for 24 hours, so "聊完即刪" holds even when the owner never ends the room.
-// Runs hourly from .github/workflows/cleanup.yml with a Firebase service account; the database rules can't delete on a timer by themselves.
+// Deletes rooms nobody has written in for 48 hours (read-only for the last 24 of them), so "聊完即刪" holds even when
+// the owner never ends the room, and warns their members by Web Push an hour before each step (expiry.mjs). Runs hourly from .github/workflows/cleanup.yml with a Firebase service account; the database rules can't delete on a timer by themselves.
 // Then it tells the operator about new reports (a GitHub issue) and deletes the photos in R2 that no room points at any more (photos.mjs).
 // Env: FIREBASE_SERVICE_ACCOUNT (the service account JSON), FIREBASE_DATABASE_URL; for photos also CLOUDFLARE_ACCOUNT_ID,
-// R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (without them photos are skipped). DRY_RUN=1 only lists what would go.
+// R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (without them photos are skipped); for the warnings VAPID_KEY, the push
+// service's own secret (worker/; without it no warning is sent). DRY_RUN=1 only lists what would go.
 import { initializeApp, cert } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
 import { AwsClient } from "aws4fetch";
 import { strayPhotos, s3Bucket } from "./photos.mjs";
+import { GONE_AFTER, windows, warnings } from "./expiry.mjs";
+import { vapid, openSub, send, validSubscription } from "../../worker/src/push.js";
 
 const DAY = 864e5;
 const sa = process.env.FIREBASE_SERVICE_ACCOUNT; // not needed against the emulator (FIREBASE_DATABASE_EMULATOR_HOST)
@@ -18,18 +21,43 @@ if (sa) {
 }
 const app = initializeApp({ ...(key ? { credential: cert(key) } : {}), databaseURL: process.env.FIREBASE_DATABASE_URL });
 const db = getDatabase(app);
-const cutoff = Date.now() - DAY;
+const now = Date.now();
 
-const stale = await db.ref("rooms").orderByChild("meta/last").endAt(cutoff).get();
+const stale = await db.ref("rooms").orderByChild("meta/last").endAt(now - GONE_AFTER).get();
 const codes = Object.keys(stale.val() || {});
 // what's left of the old password rooms: no room needs a password any more
 const oldPasswords = (await db.ref("secrets").get()).exists();
 
 const upd = {};
-codes.forEach((c) => { upd[`rooms/${c}`] = null; });
+codes.forEach((c) => { upd[`rooms/${c}`] = null; upd[`ops/warned/${c}`] = null; });
 if (oldPasswords) upd.secrets = null;
 console.log(`expired rooms: ${codes.length}${oldPasswords ? ", old passwords cleared" : ""}`);
 if (Object.keys(upd).length && !process.env.DRY_RUN) await db.ref().update(upd);
+
+// an hour before a room turns read-only, and an hour before it goes: a push to each member who has one in the room
+const near = {};
+for (const [from, to] of windows(now)) {
+  const s = await db.ref("rooms").orderByChild("meta/last").startAt(from).endAt(to).get();
+  s.forEach((r) => { near[r.key] = { meta: r.child("meta").val(), members: r.child("members").val() || {}, push: r.child("push").val() || {} }; });
+}
+const warned = (await db.ref("ops/warned").get()).val() || {};
+const due = warnings(Object.fromEntries(Object.entries(near).map(([c, r]) => [c, r.meta])), warned, now);
+const keys = process.env.VAPID_KEY ? await vapid({ VAPID_KEY: process.env.VAPID_KEY }) : null;
+let pushed = 0;
+for (const { code, s, payload } of due) {
+  const { members, push } = near[code], text = JSON.stringify(payload);
+  if (keys && !process.env.DRY_RUN) for (const [uid, sealed] of Object.entries(push)) {
+    if (!members[uid]) continue;
+    const sub = await openSub(keys, uid, sealed);
+    if (!sub || !validSubscription(sub)) continue;
+    try { if ((await send(keys, sub, text, { topic: code })) < 300) pushed++; } catch (e) { console.warn("push failed"); }
+  }
+  if (!process.env.DRY_RUN) await db.ref(`ops/warned/${code}`).set({ l: near[code].meta.last, s });
+}
+// warnings for rooms that ended some other way (the owner ended them)
+const leftover = Object.entries(warned).filter(([, w]) => !(w?.l > now - GONE_AFTER - DAY)).map(([c]) => [`ops/warned/${c}`, null]);
+if (leftover.length && !process.env.DRY_RUN) await db.ref().update(Object.fromEntries(leftover));
+console.log(`warnings: ${due.length} rooms, ${pushed} pushes${keys ? "" : " (VAPID_KEY not set; none sent)"}`);
 
 // reports for StoaTalk's operator (site/admin.html): tell them about new ones by opening a GitHub issue (GitHub emails
 // the repository's owner), saying only how many, since the repository may be public; drop ones left for 90 days

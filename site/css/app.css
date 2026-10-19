@@ -84,6 +84,10 @@ code { font-size: .9em; }
 .roomrow .txt b { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .roomrow small, .merow small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .roomrow .go { flex: none; color: var(--accent-ink); font-weight: 600; font-size: 14px; }
+/* a read-only room in the list: a tag, and the hours before it's deleted */
+.roomrow .tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rotag { background: var(--warn-bg); color: var(--warn); font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 8px; }
+.roleft { color: var(--warn); font-size: 12px; }
 .pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .pager .pg { color: var(--muted); font-size: 14px; }
 .pager button:disabled { opacity: .4; }
@@ -260,6 +264,14 @@ ul.plist small { color: var(--muted); }
 .desc a { color: inherit; text-decoration: underline; }
 .desc .drow { display: flex; gap: 16px; font-size: 13px; }
 .desc .drow .link { padding: 2px 0; }
+/* a room nobody spoke in for almost 24 hours: what happens next, with ✕ at the end of its last line */
+.agebar { display: flex; align-items: flex-end; gap: 10px; background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid var(--line); padding: 8px 14px; font-size: 14px; }
+.agebar span { flex: 1; min-width: 0; }
+.agebar .x { flex: none; border: 0; background: none; color: inherit; font-size: 16px; line-height: 1; padding: 2px 0 2px 6px; cursor: pointer; }
+/* a read-only room: in place of the message box, how long it has left and a way to save it */
+.robox { display: flex; align-items: center; gap: 10px; background: var(--warn-bg); color: var(--warn); border-top: 1px solid var(--line); padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); font-size: 14px; }
+.robox span { flex: 1; min-width: 0; }
+.robox .btn { flex: none; }
 /* pinned announcements: one line until opened */
 .pins { background: var(--surface); border-bottom: 1px solid var(--line); font-size: 14px; }
 .pins .pinhead { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; color: inherit; font: inherit; padding: 8px 14px; text-align: left; cursor: pointer; }
@@ -297,7 +309,7 @@ ul.plist small { color: var(--muted); }
   /* iOS reports no bottom inset here, so leave room for the home indicator ourselves, like Messenger does */
   .composer { padding-bottom: max(28px, calc(8px + env(safe-area-inset-bottom))); }
   body.typing .composer { padding-bottom: 8px; }
-  .rofoot { padding-bottom: max(28px, calc(10px + env(safe-area-inset-bottom))); }
+  .rofoot, .robox { padding-bottom: max(28px, calc(10px + env(safe-area-inset-bottom))); }
   .sheet { padding-bottom: max(32px, calc(16px + env(safe-area-inset-bottom))); }
 }
 

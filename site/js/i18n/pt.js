@@ -20,7 +20,7 @@ I18N.add("pt", {
   f2t: "🔢 Entre com 4 caracteres",
   f2: "Entre com o código ou o link, ou mostre um QR code na tela.",
   f3t: "🗑️ Some quando acabar",
-  f3: "Apagada assim que o anfitrião encerrar, ou após 24 horas sem mensagens.",
+  f3: "Apagada assim que o anfitrião encerrar. Após 24 horas sem mensagens fica somente leitura, e 24 horas depois é apagada.",
   f4t: "💾 Exportação",
   f4: "Quem quiser guardar uma cópia pode baixar como arquivo de texto ou página web.",
   f5t: "🔐 Criptografia de ponta a ponta",
@@ -117,7 +117,7 @@ I18N.add("pt", {
   noNotify: "Este navegador não tem suporte a notificações. No iPhone, adicione o site à Tela de Início e abra por lá.",
   notifyBlocked: "Seu navegador bloqueou as notificações. Permita-as nas configurações do site no navegador",
   notifyOnToast: "🔔 Você será avisado sobre novas mensagens",
-  goneEnded: "Esta sala foi encerrada (o anfitrião encerrou ou ninguém falou por 24 horas) e as mensagens foram apagadas.",
+  goneEnded: "Esta sala foi encerrada (o anfitrião encerrou ou acabaram suas 24 horas de somente leitura) e as mensagens foram apagadas.",
   goneKicked: "O anfitrião removeu você desta sala.",
   goneLeft: "Você não está mais nesta sala.",
   goneKeep: " O que está na tela continua no seu dispositivo, então você pode salvar antes de fechar.",
@@ -259,6 +259,14 @@ I18N.add("pt", {
 
   // home list and language
   backToRoom: "Voltar para a sala ›",
+  // a room nobody spoke in for 24 hours (js/app/expiry.js)
+  roTag: "Somente leitura",
+  roLeft: "apagada em {h} h",
+  soonBar: "⏳ Ninguém fala há quase 24 horas: a sala fica somente leitura em cerca de {m} min. Diga algo para continuar.",
+  roBar: "🔒 Somente leitura: ninguém falou por 24 horas. Ela será apagada em {h} h; salve agora se quiser guardar.",
+  roSave: "Salvar",
+  roNoJoin: "Esta sala ficou somente leitura e não aceita mais ninguém",
+  roNoPost: "Esta sala ficou somente leitura",
   language: "Idioma",
   followDevice: "Igual ao meu dispositivo",
   theme: "Aparência",

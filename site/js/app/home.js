@@ -1,6 +1,7 @@
 /* The screens (home, chat, projector, record), the address bar, and the home page: the rooms this device is in
    and the ☰ menu (identity, language, theme, saved records). */
-import { CODE_RE, DAY } from "./constants.js?v=dev";
+import { CODE_RE } from "./constants.js?v=dev";
+import { phase, hoursLeft } from "./expiry.js?v=dev";
 import { t } from "./text.js?v=dev";
 import { $, el, sheet, pickSheet } from "./dom.js?v=dev";
 import { store, StoredList, KEYS } from "./storage.js?v=dev";
@@ -36,7 +37,7 @@ export function showRecordScreen() { opened(); $("#home").hidden = true; $("#cha
 export function home() {
   only("#home");
   closeRecord(); closePicker(); endShow();
-  $("#composer").classList.remove("off");
+  $("#composer").classList.remove("off"); $("#composer").hidden = false; $("#roBox").hidden = true;
   document.title = t("docTitle");
   const lang = new URLSearchParams(location.search).get("lang"); // the language a search result linked to stays in the address
   history.replaceState(null, "", location.pathname + (lang ? "?lang=" + encodeURIComponent(lang) + asParam("&") : asParam("?")));
@@ -74,12 +75,12 @@ export async function showResume() {
 async function resumeRow(code, seen) {
   const meta = await backend.val(backend.roomRef(code, "meta"), undefined);
   if (meta === undefined) return seen.find((r) => r.code === code) || null; // offline: keep what we last saw
-  if (!meta || meta.last < backend.now() - DAY) { forgetRoom(code); return null; }
+  if (!meta || phase(meta.last, backend.now()).state === "gone") { forgetRoom(code); return null; }
   const inside = await backend.fb.get(backend.roomRef(code, "members/" + backend.uid)).then((s) => s.exists(), () => false);
   if (!inside) { forgetRoom(code); return null; }
   let title = meta.title || "";
   if (meta.enc) { try { title = (await (await RoomCipher.fromLink(store.get(KEYS.roomKey(code)))).unseal(meta.xt, "t"))?.t || ""; } catch (e) { title = ""; } }
-  return { code, t: title, enc: !!meta.enc };
+  return { code, t: title, enc: !!meta.enc, last: meta.last };
 }
 function renderResume() {
   const box = $("#resume"), rows = resumeRows, pages = Math.ceil(rows.length / PAGE);
@@ -87,11 +88,18 @@ function renderResume() {
   if (!rows.length) return;
   resumePage = Math.min(resumePage, pages - 1);
   $("h2", box).textContent = rows.length === 1 ? t("stillIn") : t("stillInN", { n: rows.length });
-  $(".roomlist", box).replaceChildren(...rows.slice(resumePage * PAGE, resumePage * PAGE + PAGE).map((r) => el("li", {},
-    el("button", { type: "button", class: "roomrow", "data-code": r.code },
-      // laid out like the room's own header: its name, then the code on a chip
-      el("span", { class: "txt" }, el("b", { text: r.t || t("room") }), el("span", { class: "codechip", text: (r.enc ? "🔐 " : "") + r.code })),
-      el("span", { class: "go", text: t("backToRoom") })))));
+  $(".roomlist", box).replaceChildren(...rows.slice(resumePage * PAGE, resumePage * PAGE + PAGE).map((r) => {
+    // a read-only room (nobody spoke for 24 hours) says so, and how many hours it has left
+    const p = typeof r.last === "number" ? phase(r.last, backend.now()) : null, ro = p?.state === "ro" || p?.state === "gone";
+    return el("li", {},
+      el("button", { type: "button", class: "roomrow" + (ro ? " ro" : ""), "data-code": r.code },
+        // laid out like the room's own header: its name, then the code on a chip
+        el("span", { class: "txt" }, el("b", { text: r.t || t("room") }),
+          el("span", { class: "tags" }, el("span", { class: "codechip", text: (r.enc ? "🔐 " : "") + r.code }),
+            ro ? el("span", { class: "rotag", text: t("roTag") }) : null,
+            ro ? el("span", { class: "roleft", text: t("roLeft", { h: hoursLeft(p.left) }) }) : null)),
+        el("span", { class: "go", text: t("backToRoom") })));
+  }));
   $(".pager", box).hidden = pages < 2;
   $(".pager .pg", box).textContent = `${resumePage + 1} / ${pages}`;
   $(".pager [data-a=prev]", box).disabled = resumePage === 0;

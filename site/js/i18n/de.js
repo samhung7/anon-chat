@@ -20,7 +20,7 @@ I18N.add("de", {
   f2t: "🔢 Mit 4 Zeichen dabei",
   f2: "Beitreten per Code oder Link – oder zeig einen QR-Code auf dem Bildschirm.",
   f3t: "🗑️ Danach ist alles weg",
-  f3: "Gelöscht, sobald der Host den Raum beendet, oder nach 24 Stunden ohne Nachrichten.",
+  f3: "Gelöscht, sobald der Host den Raum beendet. Nach 24 Stunden ohne Nachrichten wird er schreibgeschützt und 24 Stunden später gelöscht.",
   f4t: "💾 Exportieren",
   f4: "Wer eine Kopie möchte, kann sie als Textdatei oder Webseite herunterladen.",
   f5t: "🔐 Ende-zu-Ende-Verschlüsselung",
@@ -117,7 +117,7 @@ I18N.add("de", {
   noNotify: "Dieser Browser unterstützt keine Benachrichtigungen. Auf dem iPhone: Füg die Seite zum Home-Bildschirm hinzu und öffne sie von dort.",
   notifyBlocked: "Dein Browser blockiert Benachrichtigungen. Erlaube sie in den Website-Einstellungen des Browsers",
   notifyOnToast: "🔔 Du wirst bei neuen Nachrichten benachrichtigt",
-  goneEnded: "Dieser Raum wurde beendet (vom Host oder weil 24 Stunden lang niemand etwas geschrieben hat) und die Nachrichten wurden gelöscht.",
+  goneEnded: "Dieser Raum wurde beendet (vom Host oder weil seine 24 schreibgeschützten Stunden um sind) und die Nachrichten wurden gelöscht.",
   goneKicked: "Der Host hat dich aus diesem Raum entfernt.",
   goneLeft: "Du bist nicht mehr in diesem Raum.",
   goneKeep: " Was auf dem Bildschirm zu sehen ist, liegt noch auf deinem Gerät – du kannst es vor dem Schließen speichern.",
@@ -259,6 +259,14 @@ I18N.add("de", {
 
   // home list and language
   backToRoom: "Zurück zum Raum ›",
+  // a room nobody spoke in for 24 hours (js/app/expiry.js)
+  roTag: "Schreibgeschützt",
+  roLeft: "gelöscht in {h} Std.",
+  soonBar: "⏳ Seit fast 24 Stunden hat niemand geschrieben: in etwa {m} Min. wird der Raum schreibgeschützt. Schreib etwas, um weiterzumachen.",
+  roBar: "🔒 Schreibgeschützt: 24 Stunden lang hat niemand geschrieben. In {h} Std. wird er gelöscht, also speichere ihn jetzt, wenn du ihn behalten willst.",
+  roSave: "Speichern",
+  roNoJoin: "Dieser Raum ist schreibgeschützt und nimmt niemanden mehr auf",
+  roNoPost: "Dieser Raum ist jetzt schreibgeschützt",
   language: "Sprache",
   followDevice: "Wie auf meinem Gerät",
   theme: "Darstellung",

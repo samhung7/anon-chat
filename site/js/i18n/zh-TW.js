@@ -20,7 +20,7 @@ I18N.add("zh-TW", {
   f2t: "🔢 4 碼加入",
   f2: "代碼或連結都能進，也能投影 QR Code。",
   f3t: "🗑️ 聊完即刪",
-  f3: "房主結束就刪光；沒人說話 24 小時也會自動刪除。",
+  f3: "房主結束就刪光；沒人說話 24 小時轉為唯讀，再過 24 小時自動刪除。",
   f4t: "💾 可以匯出",
   f4: "想留的人自己下載成文字檔或網頁檔。",
   f5t: "🔐 端對端加密",
@@ -117,7 +117,7 @@ I18N.add("zh-TW", {
   noNotify: "這個瀏覽器不支援通知。iPhone 要先「加入主畫面」，從主畫面打開才能收到通知。",
   notifyBlocked: "通知被瀏覽器擋住了，請到瀏覽器的網站設定允許通知",
   notifyOnToast: "🔔 有新訊息時會通知你",
-  goneEnded: "聊天室已經結束（房主結束了，或超過 24 小時沒人說話），訊息都已刪除。",
+  goneEnded: "聊天室已經結束（房主結束了，或唯讀期滿 24 小時），訊息都已刪除。",
   goneKicked: "房主把你移出了這個聊天室。",
   goneLeft: "你已經不在這個聊天室裡了。",
   goneKeep: "畫面上的記錄還在你的裝置上，關掉前可以先存起來。",
@@ -259,6 +259,14 @@ I18N.add("zh-TW", {
 
   // home list and language
   backToRoom: "回到聊天室 ›",
+  // a room nobody spoke in for 24 hours (js/app/expiry.js)
+  roTag: "唯讀",
+  roLeft: "倒數 {h} hr 刪除",
+  soonBar: "⏳ 快 24 小時沒人說話了，約 {m} 分鐘後轉為唯讀。說句話就能繼續聊。",
+  roBar: "🔒 已轉為唯讀：超過 24 小時沒人說話，{h} 小時後刪除。想留下記錄請先存檔。",
+  roSave: "存檔",
+  roNoJoin: "這個聊天室已轉為唯讀，不能再加入",
+  roNoPost: "聊天室已轉為唯讀，不能再發言",
   language: "語言",
   followDevice: "跟隨裝置語言",
   theme: "外觀",

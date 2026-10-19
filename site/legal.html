@@ -70,7 +70,7 @@ a { color: var(--ink); }
     <h3>6. 內容什麼時候刪除</h3>
     <ul>
       <li>房主按「結束並刪除聊天室」時，所有訊息、照片和私訊立即刪除。照片的網路快取副本最多再保留 1 小時。</li>
-      <li>聊天室超過 24 小時沒有新訊息，會被自動刪除。</li>
+      <li>聊天室超過 24 小時沒有新訊息，會轉為唯讀（成員仍可閱讀和存檔，但不能再發言），再過 24 小時自動刪除。</li>
       <li>你匯出或存到裝置上的記錄由你自己保管，我們無法刪除，也不負責。</li>
     </ul>
     <h3>7. 服務現況與責任限制</h3>
@@ -93,7 +93,7 @@ a { color: var(--ink); }
     </ul>
     <p>私人沙龍的名稱、暱稱、訊息和照片，以及所有私訊，都在你的裝置上加密後才上傳，伺服器只存密文，我們無法讀取。</p>
     <h3>3. 存多久</h3>
-    <p>聊天室結束或閒置 24 小時後，伺服器上的內容會全部刪除，包含聊天室裡的檢舉紀錄、提問和推播訂閱。你刪除自己的訊息時也會立刻刪除。送給營運方的檢舉在處理後刪除，最多保留 90 天；停權紀錄保留到解除停權為止。</p>
+    <p>聊天室結束，或閒置 24 小時轉為唯讀、再過 24 小時後，伺服器上的內容會全部刪除，包含聊天室裡的檢舉紀錄、提問和推播訂閱。你刪除自己的訊息時也會立刻刪除。送給營運方的檢舉在處理後刪除，最多保留 90 天；停權紀錄保留到解除停權為止。</p>
     <h3>使用統計</h3>
     <p>為了了解服務的使用情形，我們會記錄每天的總數，例如開了幾間聊天室、送出幾則訊息、提了幾個問題。這些只是每日加總的數字，不包含任何內容、暱稱、帳號 ID 或聊天室代碼，也無法對應到任何人。</p>
     <h3>4. 存在你裝置上的資料</h3>
@@ -140,7 +140,7 @@ a { color: var(--ink); }
     <h3>6. When content is deleted</h3>
     <ul>
       <li>When the owner ends the room, every message, photo and private message is deleted at once. Cached copies of photos on the network may last up to one more hour.</li>
-      <li>A room with no new message for 24 hours is deleted automatically.</li>
+      <li>A room with no new message for 24 hours turns read-only (its members can still read and save it, but not post), and is deleted automatically 24 hours later.</li>
       <li>Records you export or save on your device are yours to keep; we can't delete them and aren't responsible for them.</li>
     </ul>
     <h3>7. Availability and liability</h3>
@@ -163,7 +163,7 @@ a { color: var(--ink); }
     </ul>
     <p>In a Private Salon the room name, nicknames, messages and photos, and every private message anywhere, are encrypted on your device before upload. The server only holds ciphertext, and we can't read it.</p>
     <h3>3. How long it's kept</h3>
-    <p>When a room ends or has been idle for 24 hours, everything about it is deleted from the server, including the room's reports, questions and push subscriptions. A message you delete is deleted at once. Reports sent to the StoaTalk team are deleted once handled, and kept 90 days at most; a suspension is kept until it's lifted.</p>
+    <p>When a room ends, or 24 hours after it turned read-only for being idle for 24 hours, everything about it is deleted from the server, including the room's reports, questions and push subscriptions. A message you delete is deleted at once. Reports sent to the StoaTalk team are deleted once handled, and kept 90 days at most; a suspension is kept until it's lifted.</p>
     <h3>Usage statistics</h3>
     <p>To understand how the service is used, we count daily totals, such as how many rooms were opened, messages sent and questions asked. These are only numbers added up per day. They hold no content, nicknames, account IDs or room codes, and can't be traced to anyone.</p>
     <h3>4. What stays on your device</h3>

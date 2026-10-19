@@ -20,6 +20,7 @@ import { syncPush } from "./push.js?v=dev";
 import { rememberRoom, forgetRoom, roomPath, showChat, home } from "./home.js?v=dev";
 import { archive, saveRecord, openRecord, exportSheet } from "./records.js?v=dev";
 import { editDesc } from "./menu.js?v=dev";
+import { phase, hoursLeft, minutesLeft } from "./expiry.js?v=dev";
 
 export const LIST = () => $("#list");
 
@@ -33,14 +34,17 @@ export function enter(code, cipher) {
   if (SHOW()) backend.stat("shows");
   rememberRoom(code);
   roomPath(code);
-  LIST().replaceChildren();
+  LIST().replaceChildren(); $("#ageBar").hidden = true; $("#roBox").hidden = true; $("#composer").hidden = false;
   showChat(); offerNotify();
   watchChat(r); watchQa(r); watchShow(r);
   r.start();
 }
 function watchChat(r) {
   const inRoomView = () => r.ui.view === "all";
-  r.on("meta", () => { renderHeader(); renderDesc(); renderPins(); refreshNames(); })
+  // the room's age is a matter of time, not only of what the database says: look again every half minute
+  const tick = setInterval(() => { if (r.current && !r.gone) renderAge(); }, 30000);
+  r.off.push(() => clearInterval(tick));
+  r.on("meta", () => { renderHeader(); renderDesc(); renderPins(); refreshNames(); renderAge(); })
     .on("ended", () => gone("ended"))
     .on("lost", checkGone)
     .on("arrivals", ({ joined, left }) => {
@@ -103,7 +107,7 @@ export function renderHeader() {
   $("#peopleBtn .n").textContent = Object.values(room.members || {}).filter((m) => m.online !== false).length;
   $("#peopleBtn .dot").hidden = !Object.values(ui.unread).some((n) => n > 0);
   $("#chat .bar [data-a=menu] .dot").hidden = !room.reportCount();
-  $("#composer").classList.toggle("off", room.gone);
+  $("#composer").classList.toggle("off", room.gone || room.readOnly);
   const tabs = $("#tabs");
   tabs.hidden = !(meta.qa || room.qs.size) || ui.isDm;
   $("[data-a=qa] .n", tabs).textContent = room.qs.size ? " " + room.qs.size : "";
@@ -286,6 +290,30 @@ export function renderDesc() {
   text.onclick = (e) => { if (!open && !more.hidden && !e.target.closest("a")) toggle(); };
   // short enough to show whole: nothing to open
   if (!open) requestAnimationFrame(() => { more.hidden = !desc.includes("\n") && text.scrollWidth <= text.clientWidth + 1; });
+}
+
+/* ---------- winding down (js/app/expiry.js): nobody spoke for almost 24 hours, or the room is read-only ---------- */
+let warnedAt = null;    // the room and meta/last the in-page warning was shown for, so it toasts once
+let dismissedAt = null; // ...and the one whose warning was dismissed with ✕ (until someone speaks again)
+export function renderAge() {
+  const bar = $("#ageBar"), box = $("#roBox");
+  if (!room?.meta) return;
+  const { state, left } = phase(room.meta.last, backend.now()), at = room.code + room.meta.last;
+  const ro = state === "ro" || state === "gone";
+  if (ro !== room.readOnly) { room.readOnly = ro; if (ro) { cancelReply(); typing.stop(); closePicker(); } renderHeader(); }
+  // read-only: the message box gives way to how long the room has left, and a way to save it
+  $("#composer").hidden = ro && !room.gone;
+  box.hidden = !ro || room.gone;
+  if (box.hidden) box.replaceChildren();
+  else box.replaceChildren(el("span", { text: t("roBar", { h: hoursLeft(left) }) }),
+    el("button", { type: "button", class: "btn small", text: t("roSave"), onclick: () => exportSheet() }));
+  // within the hour: a line under the header, until someone speaks or it's dismissed
+  bar.hidden = state !== "soon" || room.gone || dismissedAt === at;
+  if (bar.hidden) return bar.replaceChildren();
+  const text = t("soonBar", { m: minutesLeft(left) });
+  bar.replaceChildren(el("span", { text }),
+    el("button", { type: "button", class: "x", "aria-label": t("close"), text: "✕", onclick: () => { dismissedAt = at; renderAge(); } }));
+  if (warnedAt !== at) { warnedAt = at; toast(text); }
 }
 
 /* ---------- pinned announcements (meta/pins, owner only, at most 3) ---------- */

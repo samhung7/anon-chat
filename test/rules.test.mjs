@@ -46,13 +46,47 @@ test("creating a room, and not over someone else's live room", async () => {
   await assertFails(update(ref(db("bob")), { [`rooms/${C}/meta/owner`]: "bob" }));
 });
 
-test("a room idle for 24 hours can be taken over or cleared by anyone", async () => {
+const idle = (ms) => admin((d) => update(ref(d, `rooms/${C}/meta`), { last: Date.now() - ms }));
+const HOUR = 3600000;
+
+test("a room idle for 48 hours can be taken over or cleared by anyone", async () => {
   await createRoom("alice");
-  await admin((d) => update(ref(d, `rooms/${C}/meta`), { last: Date.now() - 86400000 - 60000 }));
+  await idle(48 * HOUR + 60000);
   await assertFails(join("bob")); // can't join an expired room
   await assertSucceeds(createRoom("bob"));
-  await admin((d) => update(ref(d, `rooms/${C}/meta`), { last: Date.now() - 86400000 - 60000 }));
+  await idle(48 * HOUR + 60000);
   await assertSucceeds(update(ref(db("carol")), { [`rooms/${C}`]: null }));
+});
+
+test("after 24 quiet hours a room is read-only: members read it, nothing new goes in, and it can't be taken over yet", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  const m = await say("alice", "早安");
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/qa`), true));
+  await idle(23.5 * HOUR); // the warning hour: still open, and speaking keeps it going
+  await assertSucceeds(say("bob", "還在"));
+  await idle(24 * HOUR + 60000);
+  // reading, and keeping the record, still work
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/msgs`)));
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/members`)));
+  // nothing new: no message, private message, edit, reaction, typing, or a fresh meta/last to keep it going
+  await assertFails(say("bob", "再說一句"));
+  await assertFails(post("bob", "dm/alice_bob", { by: "bob", to: "alice", x: "c2VhbGVk", at: T }));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/msgs/${m}/text`), "改字"));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/msgs/${m}/re/0/bob`), true));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/typing/bob`), T));
+  await assertFails(ask("bob", "q1", { text: "還能問嗎" }));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/meta/last`), T));
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { title: "新名字", last: T }));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/meta/desc`), "說明"));
+  await assertFails(join("dave")); // nobody new
+  // nobody takes the code over, or clears it, before its 24 read-only hours are up; the owner can still end it
+  await assertFails(createRoom("dave"));
+  await assertFails(update(ref(db("dave")), { [`rooms/${C}`]: null }));
+  // members can still take messages down, report, and leave
+  await assertSucceeds(update(ref(db("carol"), `rooms/${C}/reports/${m}/carol`), { r: 1, at: T }));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/msgs/${m}`), null));
+  await assertSucceeds(update(ref(db("carol")), { [`rooms/${C}/members/carol`]: null, [`rooms/${C}/names/carol`]: null }));
+  await assertSucceeds(update(ref(db("alice")), { [`rooms/${C}`]: null }));
 });
 
 test("public room: anyone with the code joins, reads and talks; outsiders read nothing", async () => {
@@ -343,8 +377,8 @@ test("encrypted room: only ciphertext and hashed nicknames", async () => {
   await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { xd: "c2VhbGVk" }));
   await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { xd: "c2VhbGVk" }));
   await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { xd: "not base64!" }));
-  // after 24 idle hours the code can become an ordinary room again
-  await admin((d) => update(ref(d, `rooms/${C}/meta`), { last: Date.now() - 86400000 - 60000 }));
+  // after 48 idle hours the code can become an ordinary room again
+  await idle(48 * HOUR + 60000);
   await assertSucceeds(createRoom("carol"));
 });
 
