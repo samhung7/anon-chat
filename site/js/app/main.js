@@ -112,6 +112,20 @@ ta.addEventListener("paste", (e) => {
 // the keyboard covers the home indicator, so the home-screen app's extra space under the box goes while typing
 ta.addEventListener("focus", () => document.body.classList.add("typing"));
 ta.addEventListener("blur", () => { document.body.classList.remove("typing"); typing.stop(); });
+// iOS doesn't shrink the page for the keyboard: it slides the whole page up behind it, which takes the room's
+// header off the top (and in a private chat can leave only blank space above the box). While the keyboard is up,
+// the chat is fitted to the part of the screen still showing, so the header stays at the top and the box sits on
+// the keyboard. It only ever shrinks the chat, never stretches it past the screen; pinch zoom is left alone.
+const vv = window.visualViewport;
+const fitChat = () => {
+  const chat = $("#chat"), s = chat.style;
+  const up = Math.abs(vv.scale - 1) < .01 && innerHeight - vv.height > 1;
+  if (!up && !s.height) return;
+  const l = LIST(), stick = l.scrollHeight - l.scrollTop - l.clientHeight < 80;
+  s.top = up ? `${vv.offsetTop}px` : ""; s.height = up ? `${vv.height}px` : ""; s.bottom = up ? "auto" : "";
+  if (stick) l.scrollTop = l.scrollHeight;
+};
+if (vv) { vv.addEventListener("resize", fitChat); vv.addEventListener("scroll", fitChat); }
 // Enter sends on a keyboard; on phones Enter is a new line and the button sends. Never while an IME is composing.
 ta.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && matchMedia("(pointer: fine)").matches) { e.preventDefault(); $("#composer").requestSubmit(); }
