@@ -546,6 +546,8 @@ test("usage stats: anonymous daily counts that only go up by one", async () => {
 /* ---------- StoaTalk's operator: reports from every room, bans, push subscriptions ---------- */
 const opsReport = (uid, msg, extra = {}) => ({ code: C, msg, by: uid, who: "alice", r: 1, at: T, t: "買粉絲", n: "房主", ...extra });
 const makeAdmin = (uid) => admin((d) => set(ref(d, `ops/admins/${uid}`), true));
+// the operator signs in with Google on admin.html; "op" below is that account
+const opDb = (uid = "op") => env.authenticatedContext(uid, { firebase: { sign_in_provider: "google.com", identities: {} } }).database();
 
 test("operator reports: a member reports someone else's message once; only the operator reads or clears them", async () => {
   await createRoom("alice"); await join("bob");
@@ -562,29 +564,41 @@ test("operator reports: a member reports someone else's message once; only the o
   await assertFails(get(ref(db("alice"), "ops/reports")));
   await assertFails(remove(ref(db("bob"), `ops/reports/${key}`)));
   await makeAdmin("op");
-  await assertSucceeds(get(ref(db("op"), "ops/reports")));
-  await assertSucceeds(get(ref(db("op"), "ops/admins/op")));
+  await assertSucceeds(get(ref(opDb(), "ops/reports")));
+  await assertSucceeds(get(ref(opDb(), "ops/admins/op")));
   await assertFails(get(ref(db("bob"), "ops/admins/op")));
-  await assertFails(set(ref(db("op"), "ops/admins/bob"), true));   // only by hand, in the console
-  await assertSucceeds(remove(ref(db("op"), `ops/reports/${key}`)));
+  await assertFails(set(ref(opDb(), "ops/admins/bob"), true));   // only by hand, in the console
+  await assertSucceeds(remove(ref(opDb(), `ops/reports/${key}`)));
+});
+
+test("operator: only a Google sign-in counts; an anonymous id on the list is no admin", async () => {
+  await createRoom("alice"); await join("bob"); await makeAdmin("op");
+  const id = await say("bob");
+  await assertFails(get(ref(db("op"), "ops/reports")));
+  await assertFails(get(ref(db("op"), "bans")));
+  await assertFails(set(ref(db("op"), "bans/bob"), { at: T }));
+  await assertFails(remove(ref(db("op"), `rooms/${C}/msgs/${id}`)));
+  await assertFails(remove(ref(db("op"), `rooms/${C}`)));
+  await assertFails(get(ref(opDb("mallory"), "ops/reports")));   // a Google account that isn't on the list
+  await assertSucceeds(get(ref(opDb(), "ops/reports")));
 });
 
 test("operator: takes a message or a photo marker down, removes someone, ends a room", async () => {
   await createRoom("alice"); await join("bob"); await makeAdmin("op");
   const id = await say("bob");
   await assertFails(remove(ref(db("carol"), `rooms/${C}/msgs/${id}`)));
-  await assertSucceeds(update(ref(db("op"), `rooms/${C}`), { [`msgs/${id}`]: null, [`reports/${id}`]: null }));
-  await assertFails(set(ref(db("op"), `rooms/${C}/msgs/x1`), { by: "op", name: "x", avatar: "🦊", text: "hi", at: T }));   // can't post
-  await assertSucceeds(update(ref(db("op"), `rooms/${C}`), { "members/bob": null, "banned/bob": true }));
+  await assertSucceeds(update(ref(opDb(), `rooms/${C}`), { [`msgs/${id}`]: null, [`reports/${id}`]: null }));
+  await assertFails(set(ref(opDb(), `rooms/${C}/msgs/x1`), { by: "op", name: "x", avatar: "🦊", text: "hi", at: T }));   // can't post
+  await assertSucceeds(update(ref(opDb(), `rooms/${C}`), { "members/bob": null, "banned/bob": true }));
   await assertFails(join("bob"));
-  await assertSucceeds(remove(ref(db("op"), `rooms/${C}`)));
+  await assertSucceeds(remove(ref(opDb(), `rooms/${C}`)));
 });
 
 test("bans: a banned person can't open, join or write anywhere, can still leave, and can see the ban", async () => {
   await createRoom("alice"); await join("bob"); await makeAdmin("op");
   await assertFails(set(ref(db("bob"), "bans/bob"), { at: T }));
   await assertFails(set(ref(db("alice"), "bans/bob"), { at: T }));
-  await assertSucceeds(set(ref(db("op"), "bans/bob"), { at: T, why: "spam" }));
+  await assertSucceeds(set(ref(opDb(), "bans/bob"), { at: T, why: "spam" }));
   await assertSucceeds(get(ref(db("bob"), "bans/bob")));
   await assertFails(get(ref(db("carol"), "bans/bob")));
   await assertFails(say("bob"));
@@ -592,7 +606,7 @@ test("bans: a banned person can't open, join or write anywhere, can still leave,
   await assertFails(update(ref(db("bob")), { [`rooms/${C}/members/bob/name`]: "bobby", [`rooms/${C}/names/bobby`]: "bob" }));
   await assertSucceeds(remove(ref(db("bob"), `rooms/${C}/members/bob`)));   // leaving
   await assertFails(join("bob"));
-  await assertSucceeds(remove(ref(db("op"), "bans/bob")));
+  await assertSucceeds(remove(ref(opDb(), "bans/bob")));
   await assertSucceeds(join("bob"));
   await assertSucceeds(say("bob"));
 });

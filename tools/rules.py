@@ -15,8 +15,10 @@ is_owner = lambda room: f"{room}.child('meta/owner').val() === auth.uid"
 is_mod = lambda room: f"{room}.child('meta/mods/' + auth.uid).val() === true"
 is_staff = lambda room: o(is_owner(room), is_mod(room))
 # StoaTalk's operator (ops/admins/{uid} = true, set by hand in the Firebase console) handles reports from every room:
-# takes messages down, removes people, ends rooms, and bans someone everywhere (bans/{uid})
-is_admin = "root.child('ops/admins/' + auth.uid).val() === true"
+# takes messages down, removes people, ends rooms, and bans someone everywhere (bans/{uid}). The operator signs in
+# with Google on site/admin.html, so the id is the Google account's and stays the same on every browser; an
+# anonymous sign-in never counts, even with its id listed
+is_admin = "auth.token.firebase.sign_in_provider === 'google.com' && root.child('ops/admins/' + auth.uid).val() === true"
 not_banned = "!root.child('bans/' + auth.uid).exists()"
 can_manage = lambda room, target: o(is_owner(room), j(is_mod(room), f"{target} !== {room}.child('meta/owner').val()", f"{room}.child('meta/mods/' + {target}).val() !== true"))
 

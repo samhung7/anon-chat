@@ -6,7 +6,7 @@
     "rules": "python3 tools/rules.py",
     "test": "firebase emulators:exec --only database --project demo-anon-chat \"node --test --test-concurrency=1 test/*.test.mjs\"",
     "test:running": "node --test --test-concurrency=1 test/*.test.mjs",
-    "vendor": "esbuild tools/firebase-entry.js --bundle --format=esm --minify --legal-comments=none --outfile=site/js/vendor/firebase.js && cp node_modules/qrcode-generator/dist/qrcode.js site/js/vendor/qrcode.js"
+    "vendor": "esbuild tools/firebase-entry.js --bundle --format=esm --minify --legal-comments=none --outfile=site/js/vendor/firebase.js && esbuild tools/firebase-ops-entry.js --bundle --format=esm --minify --legal-comments=none --outfile=site/js/vendor/firebase-ops.js && cp node_modules/qrcode-generator/dist/qrcode.js site/js/vendor/qrcode.js"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
