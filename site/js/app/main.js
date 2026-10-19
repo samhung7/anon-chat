@@ -122,6 +122,9 @@ const fitChat = () => {
   const up = Math.abs(vv.scale - 1) < .01 && innerHeight - vv.height > 1;
   if (!up && !s.height) return;
   const l = LIST(), stick = l.scrollHeight - l.scrollTop - l.clientHeight < 80;
+  // the home-screen app can scroll the page itself rather than the visible part, which leaves a fixed chat behind
+  // at the top, so the page is put back at the top first; the fitted chat then fits with nothing left to scroll
+  if (up && (scrollY || vv.offsetTop)) scrollTo(0, 0);
   s.top = up ? `${vv.offsetTop}px` : ""; s.height = up ? `${vv.height}px` : ""; s.bottom = up ? "auto" : "";
   if (stick) l.scrollTop = l.scrollHeight;
 };
@@ -129,11 +132,11 @@ const fitChat = () => {
 // the screen moves, the chat keeps following it every frame until it has stood still for a moment
 let settling = 0;
 const settle = () => {
-  const go = !settling; settling = performance.now() + 800;
+  const go = !settling; settling = performance.now() + 1500;
   if (!go) return;
   let last = "";
   const step = (now) => {
-    const at = `${vv.offsetTop},${vv.height},${vv.scale}`;
+    const at = `${vv.offsetTop},${vv.height},${vv.scale},${scrollY}`;
     if (at !== last) { last = at; fitChat(); settling = Math.max(settling, now + 300); }
     if (now < settling) requestAnimationFrame(step); else settling = 0;
   };
