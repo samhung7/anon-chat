@@ -8,8 +8,10 @@
 <title>StoaTalk 營運管理</title>
 <link rel="icon" href="icons/stoa2-192.png">
 <!-- StoaTalk's operator page: reports from every room (ops/reports), bans (bans/), and the Web Push key.
-     Only an admin (ops/admins/{uid} = true, added by hand in the Firebase console) can read or act; the database
-     rules decide that, not this page. Chinese only. ?emu&as=<uid> runs it against the local emulator. -->
+     The operator signs in with Google here. Only an admin (ops/admins/{that Google account's uid} = true, added once by
+     hand in the Firebase console) can read or act; the database rules decide that, not this page. The sign-in lives in
+     its own Firebase app ("ops"), so it never changes the anonymous id the chat uses in this browser.
+     Chinese only. ?emu&as=<uid> runs it against the local emulator, signed in as that Google account. -->
 <style>
 :root { --bg: #f4efe6; --surface: #fbfaf8; --line: #e4dccc; --text: #3a3128; --muted: #857a6b; --accent: #d9cdb6; --ink: #7d6b52; --danger: #b42318; --ok: #3f7d3a; }
 @media (prefers-color-scheme: dark) { :root { --bg: #1b1916; --surface: #25221e; --line: #3e3a33; --text: #f4efe6; --muted: #b3aa9b; --accent: #e7decd; --ink: #e7decd; --danger: #f08a7e; --ok: #8fc98a; } }
@@ -42,17 +44,26 @@ ol li { margin: 4px 0; }
   <h1>StoaTalk 營運管理</h1>
   <p class="muted">檢舉收件匣、停權與推播設定。<a href="./">回 StoaTalk</a></p>
   <p id="status">連線中…</p>
+  <p id="who" class="muted" hidden><span id="email"></span> <button type="button" class="ghost" id="signOut">登出</button></p>
+
+  <section id="signIn" hidden>
+    <div class="card">
+      <p>用 Google 帳號登入營運管理。</p>
+      <div class="row"><button type="button" id="google">用 Google 登入</button></div>
+      <p class="muted">這個登入只用在這一頁，你在聊天室裡仍然是匿名的。</p>
+    </div>
+  </section>
 
   <section id="notAdmin" hidden>
     <div class="card">
-      <p>這個瀏覽器還不是管理員。把下面這個 ID 加為管理員：</p>
+      <p>這個 Google 帳號還不是管理員。把下面這個 ID 加為管理員：</p>
       <p><code id="myUid"></code> <button type="button" class="ghost" id="copyUid">複製</button></p>
       <ol>
         <li>打開 <a href="https://console.firebase.google.com/project/anon-chat-2792b/database" target="_blank" rel="noopener">Firebase 主控台的 Realtime Database</a>。</li>
         <li>在最上層按「＋」，依序新增 <code>ops</code> → <code>admins</code> → 這個 ID，值填 <code>true</code>。</li>
         <li>回來重新整理這一頁。</li>
       </ol>
-      <p class="muted">管理員身分綁在這個瀏覽器的匿名 ID 上。清除網站資料或換瀏覽器後會變成新的 ID，要再加一次。</p>
+      <p class="muted">這個 ID 屬於你的 Google 帳號，只要加一次。之後在任何瀏覽器或手機用同一個 Google 帳號登入，都是管理員。</p>
     </div>
   </section>
 
@@ -100,16 +111,33 @@ const el = (tag, attrs = {}, ...kids) => {
 };
 const when = (ms) => new Date(ms).toLocaleString("zh-TW", { dateStyle: "short", timeStyle: "short" });
 
-const fb = await import("./js/vendor/firebase.js");
-const app = fb.initializeApp(FB);
+const fb = await import("./js/vendor/firebase-ops.js");
+const app = fb.initializeApp(FB, "ops");   // a named app keeps its own sign-in, apart from the chat's anonymous one
 const db = fb.getDatabase(app);
 let uid;
 if (EMU) {
   uid = params.get("as") || "admin-emu";
-  fb.connectDatabaseEmulator(db, location.hostname, 9000, { mockUserToken: { sub: uid, user_id: uid } });
-} else { // the same places the app keeps its sign-in: this browser's id here is the same as in the chat
-  const auth = fb.initializeAuth(app, { persistence: [fb.indexedDBLocalPersistence, fb.browserLocalPersistence, fb.browserSessionPersistence] });
-  uid = (await fb.signInAnonymously(auth)).user.uid;
+  fb.connectDatabaseEmulator(db, location.hostname, 9000, { mockUserToken: { sub: uid, user_id: uid, firebase: { sign_in_provider: "google.com", identities: {} } } });
+} else {
+  const auth = fb.initializeAuth(app, { persistence: [fb.indexedDBLocalPersistence, fb.browserLocalPersistence], popupRedirectResolver: fb.browserPopupRedirectResolver });
+  await auth.authStateReady();
+  let user = auth.currentUser;
+  if (!user) {   // wait here for the button: a pop-up only opens from a click
+    $("#status").textContent = "";
+    $("#signIn").hidden = false;
+    user = await new Promise((done) => {
+      $("#google").onclick = async (e) => {
+        e.target.disabled = true;
+        try { done((await fb.signInWithPopup(auth, new fb.GoogleAuthProvider())).user); }
+        catch (err) { $("#status").textContent = err.code === "auth/popup-closed-by-user" ? "" : "沒有登入成功：" + (err.code || err.message); e.target.disabled = false; }
+      };
+    });
+    $("#signIn").hidden = true;
+  }
+  uid = user.uid;
+  $("#email").textContent = "已登入 " + (user.email || user.displayName || "Google 帳號");
+  $("#who").hidden = false;
+  $("#signOut").onclick = async () => { await fb.signOut(auth); location.reload(); };
 }
 const r = (path) => (path ? fb.ref(db, path) : fb.ref(db));
 const write = async (btn, upd, done) => {
