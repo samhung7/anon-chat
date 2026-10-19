@@ -602,6 +602,25 @@ test("reports reach StoaTalk's operator, who takes the message down and bans the
   noErrors();
 });
 
+test("a hidden page counts as offline (a phone stops running it), and online again when it's shown", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  const bobId = Object.entries(await dbGet(`rooms/${code}/members`)).find(([, m]) => m.name === "Bob")[0];
+  const show = (hidden) => bob.evaluate((h) => {
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => h });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, hidden);
+  await until(async () => (await dbGet(`rooms/${code}/members/${bobId}/online`)) === true);
+  await show(true);
+  await until(async () => (await dbGet(`rooms/${code}/members/${bobId}/online`)) === false);
+  await new Promise((ok) => setTimeout(ok, 1000)); // and it stays that way: no "I'm still connected" back to online
+  assert.equal(await dbGet(`rooms/${code}/members/${bobId}/online`), false);
+  await show(false);
+  await until(async () => (await dbGet(`rooms/${code}/members/${bobId}/online`)) === true);
+  noErrors();
+});
+
 test("Web Push: a message is announced to a member whose page is closed, a quick next one when the quiet time is over", async () => {
   const alice = await person("a"), bob = await person("b");
   const { code, url } = await createRoom(alice, "Alice");

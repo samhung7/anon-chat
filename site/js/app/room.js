@@ -184,14 +184,19 @@ export class Room extends Emitter {
       this.qs.forEach((q, id) => this.justAsked.delete(id));
       this.emit("qs");
     }), () => {}));
-    // online / offline: the server marks me offline when my connection drops, and I mark myself online on connecting
+    // online / offline: the server marks me offline when my connection drops, and I mark myself online on connecting.
+    // A hidden page counts as offline too: a phone that locks or switches apps stops running the page long before the
+    // server notices the connection is gone, and offline is what lets the push service tell me about new messages
     const online = api.ref("members/" + uid + "/online");
     let connected = false;
     const here = () => {
-      if (!connected || !this.current || this.gone) return;
+      if (!connected || !this.current || this.gone || document.hidden) return;
       fb.onDisconnect(online).set(false).catch(() => {});
       fb.set(online, true).catch(() => {});
     };
+    const seen = () => (document.hidden ? this.current && !this.gone && fb.set(online, false).catch(() => {}) : here());
+    document.addEventListener("visibilitychange", seen);
+    on(() => document.removeEventListener("visibilitychange", seen));
     on(fb.onValue(backend.ref(".info/connected"), (s) => { connected = !!s.val(); here(); }));
     // ...but a dropped connection the server only notices late (a phone that slept), or this room open in another tab
     // that closes, sets me offline while I'm still here: I'm connected, so I'm online again

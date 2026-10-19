@@ -17,6 +17,8 @@ const ROOM_QUIET = 21000;    // a room is announced at most every 20 seconds (th
 const MAX_PAGES = 25;        // the service sends 40 pushes a call: up to 1,000 people
 const supported = () => !!API && "PushManager" in window && "serviceWorker" in navigator && "Notification" in window;
 export const pushOn = () => supported() && Notification.permission === "granted";
+// this browser has a sealed subscription for this device, so the rooms it hears from get pushes while it's offline
+export const pushCovers = () => pushOn() && store.json(KEYS.push)?.u === backend.uid;
 
 // the service's public key, or null while it has none (asked once per page)
 let serviceKey = null;
