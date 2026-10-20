@@ -1,5 +1,6 @@
 /* Small helpers for building the page. Everything people wrote goes in as text, never as HTML. */
 import { t } from "./text.js?v=dev";
+import { ANIMAL_ART } from "./constants.js?v=dev";
 
 export const $ = (s, root = document) => root.querySelector(s);
 export const pause = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -16,6 +17,19 @@ export function el(tag, attrs = {}, ...kids) {
   return e;
 }
 
+// a line icon from icons/icons.svg; cls "sm" makes it 16px
+export function icon(name, cls = "") {
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"), use = document.createElementNS(ns, "use");
+  svg.setAttribute("class", ("st-i " + cls).trim()); svg.setAttribute("aria-hidden", "true");
+  use.setAttribute("href", `icons/icons.svg?v=dev#i-${name}`);
+  svg.append(use);
+  return svg;
+}
+// someone's avatar: the drawing of their animal, or the emoji itself when there is none
+export const avatar = (emoji, cls = "") => (ANIMAL_ART[emoji]
+  ? el("img", { class: cls, src: `avatars/${ANIMAL_ART[emoji]}.svg?v=dev`, alt: "" })
+  : el("span", { class: ("emo " + cls).trim(), "aria-hidden": "true", text: emoji || "🙂" }));
+
 export function toast(text) {
   if (!text) return;
   const note = el("div", { class: "toast", text });
@@ -27,12 +41,12 @@ export function toast(text) {
 export const orToast = (promise, key = "tryAgain") => promise.catch(() => toast(t(key)));
 
 // a bottom sheet; resolves with the data-a of the button pressed (or null when dismissed)
-// cols: 3 lays a long menu out three to a row
-export function sheet(title, body, buttons = [], { onOpen, cols } = {}) {
+// cols: 3 lays a long menu out three to a row; head: a heading element to use instead of the plain title
+export function sheet(title, body, buttons = [], { onOpen, cols, head } = {}) {
   return new Promise((res) => {
     const ov = el("div", { class: "overlay" });
     const box = el("div", { class: "sheet", role: "dialog", "aria-label": title },
-      title ? el("h2", { text: title }) : null, body,
+      head || (title ? el("h2", { text: title }) : null), body,
       buttons.length ? el("div", { class: "actions" + (buttons.length > 3 ? " many" + (cols === 3 ? " three" : "") : "") }, buttons.map(([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a, text: label }))) : null);
     ov.append(box);
     const done = (v) => { ov.remove(); document.removeEventListener("keydown", esc); res(v); };
@@ -55,9 +69,9 @@ export function enterPressesOk(input) {
   return input;
 }
 // a sheet whose body is a list of choices: resolves with what the picked element's `pick(el)` says, or null
-export function pickSheet(title, body, selector, pick, buttons = [["close", t("close")]]) {
+export function pickSheet(title, body, selector, pick, buttons = [["close", t("close")]], head) {
   let picked = null;
-  return sheet(title, body, buttons, {
+  return sheet(title, body, buttons, { head,
     onOpen: (ov) => body.addEventListener("click", (e) => { const b = e.target.closest(selector); if (b) { picked = pick(b); ov.close("pick"); } }),
   }).then((a) => (a === "pick" ? picked : null));
 }

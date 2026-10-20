@@ -1,25 +1,68 @@
 :root {
-  /* warm paper neutrals: coolors.co/palette/e7decd-efe8db-f4efe6-faf7f0-fbfaf8, buttons a step deeper so they stand out */
-  --bg: #f4efe6; --surface: #fbfaf8; --surface-2: #faf7f0; --line: #e4dccc;
-  --text: #3a3128; --muted: #857a6b; --accent: #d9cdb6; --accent-2: #efe8db; --on-accent: #3a3128; --accent-ink: #7d6b52;
-  --danger: #b42318; --warn-bg: #fbecc8; --warn: #7a4a0e; --ok: #3f7d3a;
-  --shadow: 0 10px 30px rgba(58, 49, 40, .1);
+  /* StoaTalk design system (Claude Design, 2026-10): warm paper (sand), dark ink, and the Private Salon slate.
+     Text pairs are checked to WCAG AA: 4.5:1 for text, 3:1 for control edges; ratios against --bg. */
+  --sand-50: #fbfaf8; --sand-100: #faf7f0; --sand-150: #f4efe6; --sand-200: #efe8db; --sand-300: #e4dccc; --sand-400: #d9cdb6;
+  --sand-500: #8f7f64; --sand-600: #6e5c44; --sand-700: #665a4b; --sand-800: #3a3128; --sand-900: #2a251f;
+  --ink-950: #1b1916; --ink-900: #25221e; --ink-850: #2d2a25; --ink-800: #3e3a33; --ink-750: #3f3a31; --ink-700: #857b6a; --ink-300: #b3aa9b; --ink-100: #e7decd; --ink-50: #f4efe6;
+  --slate-50: #eef3f4; --slate-100: #e2eaec; --slate-300: #9cc3d0; --slate-500: #5b7f8c; --slate-700: #2f5361; --slate-850: #243840; --slate-900: #1f2c31;
+  --red-700: #b42318; --red-50: #fbe9e6; --red-300: #f08a7e; --amber-800: #7a4a0e; --amber-100: #fbecc8; --amber-300: #f3c969; --amber-950: #3b2c12;
+  --green-700: #356b31; --green-50: #e7f0e4; --green-300: #8fc98a;
+
+  --bg: var(--sand-150); --surface: var(--sand-50); --surface-2: var(--sand-100);
+  --line: var(--sand-300);            /* dividers and card edges, never the only cue */
+  --line-strong: var(--sand-500);     /* field and control edges: 3.40:1 */
+  --text: var(--sand-800);            /* 11.0:1 */
+  --muted: var(--sand-700);           /* 5.86:1 */
+  /* the primary fill stays the beige tone until each screen moves to the new buttons (design system: --sand-600) */
+  --accent: var(--sand-400); --on-accent: var(--sand-800);
+  --accent-2: var(--sand-200);        /* selected and tinted fills */
+  --accent-soft: var(--sand-400); --on-accent-soft: var(--sand-800);
+  --accent-ink: var(--sand-600);      /* emphasis text, codes, links: 5.59:1 */
+  --stoa: var(--sand-600); --stoa-2: var(--sand-200); --on-stoa: var(--sand-50);
+  --salon: var(--slate-700); --salon-2: var(--slate-100); --salon-ink: var(--slate-700); --on-salon: var(--sand-50); --salon-line: var(--slate-500);
+  --danger: var(--red-700); --danger-2: var(--red-50); --on-danger: #fff;
+  --warn: var(--amber-800); --warn-bg: var(--amber-100);
+  --ok: var(--green-700); --ok-2: var(--green-50);
+  --focus: var(--sand-800); --scrim: rgba(40, 28, 22, .45);
+  --shadow: 0 10px 30px rgba(58, 49, 40, .1); --shadow-sm: 0 2px 8px rgba(58, 49, 40, .08);
+
+  --font-sans: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --fs-sm: 13px; --fs-md: 14px; --fs-body: 16px; --fs-sheet: 18px;
+  --fw-regular: 400; --fw-semibold: 600;
+  --radius-sm: 10px; --radius-md: 12px; --radius-sheet: 20px;
+  --hit: 44px; --hit-sm: 34px; --stroke-icon: 1.75;
   color-scheme: light dark;
 }
-/* dark: the device's choice unless the home menu picked one (data-theme on <html>, set by js/i18n.js) */
+/* dark: the device's choice unless the home menu picked one (data-theme on <html>, set by js/theme.js) */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1b1916; --surface: #25221e; --surface-2: #2d2a25; --line: #3e3a33;
-    --text: #f4efe6; --muted: #b3aa9b; --accent: #e7decd; --accent-2: #3f3a31; --on-accent: #2a251f; --accent-ink: #e7decd;
-    --danger: #f08a7e; --warn-bg: #3b2c12; --warn: #f3c969; --ok: #8fc98a;
-    --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    --bg: var(--ink-950); --surface: var(--ink-900); --surface-2: var(--ink-850);
+    --line: var(--ink-800); --line-strong: var(--ink-700);
+    --text: var(--ink-50); --muted: var(--ink-300);
+    --accent: var(--ink-100); --on-accent: var(--sand-900); --accent-2: var(--ink-750);
+    --accent-soft: var(--ink-750); --on-accent-soft: var(--ink-50); --accent-ink: var(--ink-100);
+    --stoa: var(--ink-100); --stoa-2: var(--ink-750); --on-stoa: var(--sand-900);
+    --salon: var(--slate-300); --salon-2: var(--slate-900); --salon-ink: var(--slate-300); --on-salon: var(--ink-950); --salon-line: var(--slate-500);
+    --danger: var(--red-300); --danger-2: #3a201c; --on-danger: var(--ink-950);
+    --warn: var(--amber-300); --warn-bg: var(--amber-950);
+    --ok: var(--green-300); --ok-2: #1f2e1d;
+    --focus: var(--ink-50); --scrim: rgba(0, 0, 0, .6);
+    --shadow: 0 10px 30px rgba(0, 0, 0, .5); --shadow-sm: 0 2px 8px rgba(0, 0, 0, .4);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #1b1916; --surface: #25221e; --surface-2: #2d2a25; --line: #3e3a33;
-  --text: #f4efe6; --muted: #b3aa9b; --accent: #e7decd; --accent-2: #3f3a31; --on-accent: #2a251f; --accent-ink: #e7decd;
-  --danger: #f08a7e; --warn-bg: #3b2c12; --warn: #f3c969; --ok: #8fc98a;
-  --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+  --bg: var(--ink-950); --surface: var(--ink-900); --surface-2: var(--ink-850);
+  --line: var(--ink-800); --line-strong: var(--ink-700);
+  --text: var(--ink-50); --muted: var(--ink-300);
+  --accent: var(--ink-100); --on-accent: var(--sand-900); --accent-2: var(--ink-750);
+  --accent-soft: var(--ink-750); --on-accent-soft: var(--ink-50); --accent-ink: var(--ink-100);
+  --stoa: var(--ink-100); --stoa-2: var(--ink-750); --on-stoa: var(--sand-900);
+  --salon: var(--slate-300); --salon-2: var(--slate-900); --salon-ink: var(--slate-300); --on-salon: var(--ink-950); --salon-line: var(--slate-500);
+  --danger: var(--red-300); --danger-2: #3a201c; --on-danger: var(--ink-950);
+  --warn: var(--amber-300); --warn-bg: var(--amber-950);
+  --ok: var(--green-300); --ok-2: #1f2e1d;
+  --focus: var(--ink-50); --scrim: rgba(0, 0, 0, .6);
+  --shadow: 0 10px 30px rgba(0, 0, 0, .5); --shadow-sm: 0 2px 8px rgba(0, 0, 0, .4);
   color-scheme: dark;
 }
 :root[data-theme="light"] { color-scheme: light; }
@@ -195,13 +238,45 @@ code { font-size: .9em; }
 .linkrow .field { font-size: 16px; text-align: center; } /* under 16px, iPhone zooms in when it gets focus */
 .qr { width: 200px; height: 200px; margin: 6px auto 0; background: #fff; border-radius: 12px; padding: 6px; }
 .qr svg { width: 100%; height: 100%; display: block; }
-.plist { list-style: none; margin: 0; padding: 0; }
-ul.plist li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-ul.plist li.away { opacity: .55; }
-ul.plist .av { font-size: 26px; }
-ul.plist .nm { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-ul.plist .nm b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-ul.plist small { color: var(--muted); }
+/* line icons from icons/icons.svg (dom.js icon()); stroke follows the text colour */
+.st-i { width: 20px; height: 20px; flex: none; display: inline-block; vertical-align: -.2em; stroke: currentColor; fill: none; stroke-width: var(--stroke-icon); stroke-linecap: round; stroke-linejoin: round; }
+.st-i.sm { width: 16px; height: 16px; }
+.st-count { display: inline-grid; place-items: center; background: var(--danger); color: var(--on-danger); font: var(--fw-semibold) 11px/18px var(--font-sans); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; font-style: normal; font-variant-numeric: tabular-nums; }
+/* members: one group each for the owner, co-hosts and everyone else; a green dot means online, offline greys the
+   avatar and says so in words too */
+.sheet > h2.withav { display: flex; align-items: center; gap: 10px; }
+.st-tav { width: 36px; height: 36px; border-radius: 50%; flex: none; }
+.st-tav.emo { display: grid; place-items: center; background: var(--accent-2); font-size: 22px; }
+.st-mgrp { margin-top: 10px; }
+.st-mgrp h3 { display: flex; align-items: center; gap: 6px; margin: 0 4px 2px; font: var(--fw-semibold) var(--fs-sm)/1.4 var(--font-sans); color: var(--muted); }
+.st-mgrp h3 .st-i { color: var(--accent-ink); }
+.st-mgrp h3 .c { font-variant-numeric: tabular-nums; font-weight: var(--fw-regular); }
+.st-mgrp ul { list-style: none; margin: 0; padding: 0; }
+.st-mrow { display: flex; align-items: center; gap: 12px; padding: 8px 4px; min-height: 60px; border-bottom: 1px solid var(--line); }
+.st-mgrp ul .st-mrow:last-child { border-bottom: 0; }
+.st-mav { position: relative; flex: none; width: 40px; height: 40px; }
+.st-mav img { width: 100%; height: 100%; border-radius: 50%; display: block; }
+.st-mav .emo { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; background: var(--accent-2); font-size: 24px; }
+.st-mav .on { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 2px var(--surface); }
+.st-mrow.away .st-mav img, .st-mrow.away .st-mav .emo { filter: grayscale(1); opacity: .55; }
+.st-mrow.away b { color: var(--muted); }
+.st-mrow .nm { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.st-mrow .nm b { font-weight: var(--fw-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-mrow .nm small { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: var(--fs-sm); }
+.st-mrow.blk small { color: var(--danger); }
+.st-mrow .acts { flex: none; display: flex; align-items: center; gap: 6px; }
+.st-mrow .acts .btn { display: inline-flex; align-items: center; gap: 6px; border-color: var(--line-strong); }
+.st-mrow .acts .btn.bd { display: inline-grid; place-items: center; width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 0; }
+.st-mrow .acts .btn.small::before { content: ""; position: absolute; inset: -5px 0; }
+/* someone's actions: talk to them, then the owner's powers, then the destructive ones in red */
+.st-agrp { display: flex; flex-direction: column; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; margin-top: 10px; }
+.st-arow { display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 0 16px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--text); font: var(--fw-semibold) var(--fs-body)/1.3 var(--font-sans); text-align: left; }
+.st-arow:first-child { border-top: 0; }
+.st-arow .st-i { color: var(--accent-ink); }
+.st-arow:hover { background: var(--surface); }
+.st-arow.danger, .st-arow.danger .st-i { color: var(--danger); }
+.st-arow.danger:hover { background: var(--danger-2); }
+.st-arow span { flex: 1; min-width: 0; padding: 12px 0; }
 .badge { position: absolute; top: -6px; right: -6px; background: var(--danger); color: #fff; font: 600 11px/18px system-ui; min-width: 18px; height: 18px; border-radius: 9px; font-style: normal; }
 .quote { margin: 0 0 12px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 8px; white-space: pre-wrap; word-break: break-word; color: var(--muted); }
 .reactrow { display: flex; justify-content: space-between; gap: 6px; }
