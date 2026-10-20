@@ -2,7 +2,7 @@
    co-hosts and hands the room over; the owner and co-hosts remove people. */
 import { LIMITS } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { el, toast, sheet, confirmSheet, pickSheet, icon, avatar } from "./dom.js?v=dev";
+import { el, toast, sheet, confirmSheet, pickSheet, icon, avatar, bare } from "./dom.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { isBlocked, setBlocked } from "./blocking.js?v=dev";
@@ -55,7 +55,7 @@ async function memberMenu(id) {
   // the row's line icon replaces any emoji the label starts with (menus elsewhere still use them)
   const grp = (rows, danger) => (rows.length ? el("div", { class: "st-agrp" }, rows.map(([a, ic, label]) =>
     el("button", { type: "button", class: "st-arow" + (danger ? " danger" : ""), "data-a": a }, icon(ic),
-      el("span", { text: label.replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "") })))) : null);
+      el("span", { text: bare(label) })))) : null);
   const head = el("h2", { class: "withav" }, avatar(m.avatar, "st-tav"), m.name);
   const a = await pickSheet(m.name, el("div", {}, grp(talk), grp(powers), grp(harm, true)), "button[data-a]", (b) => b.dataset.a, [], head);
   if (!room || room.gone) return;

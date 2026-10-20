@@ -28,7 +28,10 @@ export function icon(name, cls = "") {
 // someone's avatar: the drawing of their animal, or the emoji itself when there is none
 export const avatar = (emoji, cls = "") => (ANIMAL_ART[emoji]
   ? el("img", { class: cls, src: `avatars/${ANIMAL_ART[emoji]}.svg?v=dev`, alt: "" })
-  : el("span", { class: ("emo " + cls).trim(), "aria-hidden": "true", text: emoji || "🙂" }));
+  : el("span", { class: ("emoav " + cls).trim(), "aria-hidden": "true", text: emoji || "🙂" }));
+
+// a label without the emoji it starts with, where an icon stands in for it
+export const bare = (label) => String(label).replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "");
 
 export function toast(text) {
   if (!text) return;
@@ -47,7 +50,7 @@ export function sheet(title, body, buttons = [], { onOpen, cols, head } = {}) {
     const ov = el("div", { class: "overlay" });
     const box = el("div", { class: "sheet", role: "dialog", "aria-label": title },
       head || (title ? el("h2", { text: title }) : null), body,
-      buttons.length ? el("div", { class: "actions" + (buttons.length > 3 ? " many" + (cols === 3 ? " three" : "") : "") }, buttons.map(([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a, text: label }))) : null);
+      buttons.length ? el("div", { class: "actions" + (buttons.length > 3 ? " many" + (cols === 3 ? " three" : "") : buttons.length === 2 ? " pair" : "") }, buttons.map(([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a, text: label }))) : null);
     ov.append(box);
     const done = (v) => { ov.remove(); document.removeEventListener("keydown", esc); res(v); };
     const esc = (e) => { if (e.key === "Escape") done(null); };

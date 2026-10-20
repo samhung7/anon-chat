@@ -3,7 +3,7 @@
    follows the room live. */
 import { APP, params } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { $, el, qrSvg } from "./dom.js?v=dev";
+import { $, el, qrSvg, icon, avatar, bare } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { asParam } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
@@ -38,18 +38,22 @@ function drawShow() {
   $(".sjoin", box).textContent = t(room.cipher ? "showJoinEnc" : "showJoin");
   $(".shost", box).textContent = room.cipher ? "" : location.host + location.pathname.replace(/index\.html$/, "");
   $(".scode", box).textContent = room.cipher ? "" : room.code;
-  $(".sppl", box).textContent = t("showPeople", { n: Object.values(room.members).filter((m) => m.online !== false).length });
+  $(".sppl", box).replaceChildren(icon("people"), t("showPeople", { n: Object.values(room.members).filter((m) => m.online !== false).length }));
   const poll = [...room.msgs.values()].reverse().find((v) => v.poll);
   const pollBox = poll ? el("div", { class: "spollbox" }, pollView(livePoll(poll), null)) : null;
   const live = meta.qnow && room.qs.get(meta.qnow), showLive = live && (!live.done || live.ans);
   const open = qs.filter((q) => !q.done && q !== live).sort(byVotes).slice(0, showLive ? (live.ans ? 3 : 4) : 6);
-  const who = (q) => (q.name ? `${q.avatar} ${q.name}` : t("anonAsker"));
+  // who asked: their animal and name, or a dashed disc for anonymous
+  const sav = (q) => (q.name ? avatar(q.avatar, "sav") : el("span", { class: "sav anon" }, icon("anonymous")));
+  const who = (q) => [sav(q), q.name || bare(t("anonAsker"))];
   const hasQa = meta.qa || room.qs.size, main = [];
   if (hasQa) {
-    if (showLive) main.push(el("div", { class: "snow" }, el("span", { class: "qlive", text: t("qLive") }), el("p", { text: live.text }), el("small", { text: `${who(live)} · ▲ ${live.up.length}` }),
-      live.ans && !live.ans.bad ? el("div", { class: "sans" }, el("small", { text: `💬 ${live.ans.name || t("qAnsLabel")}` }), el("p", { text: live.ans.text })) : null));
+    if (showLive) main.push(el("div", { class: "snow" }, el("span", { class: "qlive", text: t("qLive") }), el("p", { text: live.text }),
+      el("small", {}, ...who(live), el("span", { "aria-hidden": "true", text: "·" }), el("span", { class: "v" }, icon("upvote"), live.up.length)),
+      live.ans && !live.ans.bad ? el("div", { class: "sans" }, el("small", {}, icon("chat"), live.ans.name ? avatar(live.ans.avatar, "sav") : null, live.ans.name || t("qAnsLabel")), el("p", { text: live.ans.text })) : null));
     main.push(el("h2", { text: t("showQs", { n: qs.filter((q) => !q.done).length }) }));
-    main.push(open.length ? el("ol", { class: "slist" }, open.map((q) => el("li", {}, el("span", { class: "sv", text: "▲ " + q.up.length }), el("span", { class: "st" }, q.text, el("small", { text: who(q) })))))
+    main.push(open.length ? el("ol", { class: "slist" }, open.map((q) => el("li", {}, el("span", { class: "sv" }, icon("upvote"), el("b", { text: q.up.length })),
+      el("span", { class: "st" }, el("span", { class: "stx", text: q.text }), el("small", {}, ...who(q))))))
       : el("p", { class: "shint", text: showLive ? "" : t("showNoQs") }));
   } else main.push(pollBox || el("p", { class: "shint big", text: t("showHint") }));
   $(".smain", box).replaceChildren(...main);

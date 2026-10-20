@@ -2,7 +2,7 @@
    announcements, and what happens when the room goes away. The Room tells this what changed; this draws it. */
 import { APP, GROUP_MS, FRESH_MS, KLIPY_KEY, LIMITS, REACTS } from "./constants.js?v=dev";
 import { t, tEl, fmtTime } from "./text.js?v=dev";
-import { $, el, toast, sheet, orToast } from "./dom.js?v=dev";
+import { $, el, toast, sheet, orToast, icon, avatar } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room, setRoom } from "./session.js?v=dev";
@@ -103,14 +103,18 @@ export function renderHeader() {
   if (!room) return;
   const meta = room.meta || {}, ui = room.ui;
   $("#roomTitle").textContent = meta.title || t("room");
-  $("#codeBtn").textContent = (meta.enc ? "🔐 " : "") + room.code + (meta.locked ? " · " + t("lockedTag") : "");
+  // a Private Salon: the slate bar, a lock on the code and the words 端對端加密, so colour is never the only cue
+  $("#chat").classList.toggle("salon", !!meta.enc);
+  $("#codeBtn").replaceChildren(...[meta.enc ? icon("salon") : null, room.code + (meta.locked ? " · " + t("lockedTag") : "")].filter(Boolean));
+  $("#codeBtn").classList.toggle("salon", !!meta.enc);
+  $("#chat .bar .enc").hidden = !meta.enc;
   $("#peopleBtn .n").textContent = Object.values(room.members || {}).filter((m) => m.online !== false).length;
   $("#peopleBtn .dot").hidden = !Object.values(ui.unread).some((n) => n > 0);
   $("#chat .bar [data-a=menu] .dot").hidden = !room.reportCount();
   $("#composer").classList.toggle("off", room.gone || room.readOnly);
   const tabs = $("#tabs");
   tabs.hidden = !(meta.qa || room.qs.size) || ui.isDm;
-  $("[data-a=qa] .n", tabs).textContent = room.qs.size ? " " + room.qs.size : "";
+  $("[data-a=qa] .n", tabs).textContent = room.qs.size || "";
   $("[data-a=qa] .dot", tabs).hidden = !(room.isStaff() && room.qq.size);
   tabs.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.a === ui.view)));
   if (ui.isDm) $("#dmBar .dmwho").replaceChildren(...tEl("dmBar", { name: el("b", { text: room.nameOf(ui.view) }) }));
@@ -121,7 +125,8 @@ function refreshNames() {
   document.querySelectorAll("#list .msg").forEach((node) => {
     const p = room.who(node.dataset.by); if (!p) return;
     const av = $(".who .av", node), nm = $(".who .nm", node); if (!nm) return;
-    av.textContent = p.avatar; nm.textContent = p.name + room.badge(node.dataset.by);
+    if (av.dataset.a !== p.avatar) { av.dataset.a = p.avatar; av.replaceChildren(avatar(p.avatar)); }
+    nm.textContent = p.name + room.badge(node.dataset.by);
   });
 }
 
@@ -139,7 +144,7 @@ function bubble(id, v, dm, { prev = LIST().lastElementChild, show = false } = {}
   const atMe = !mine && !dm && mentionsMe(v.text), who = room.author(v, dm);
   const node = el("div", { class: "msg" + (mine ? " mine" : "") + (cont ? " cont" : "") + (atMe ? " atme" : ""), ...attrs },
     cont ? null : el("div", { class: "who" },
-      el("span", { class: "av", text: who.avatar }),
+      el("span", { class: "av", "data-a": who.avatar }, avatar(who.avatar)),
       el("span", { class: "nm", text: who.name + room.badge(v.by) }),
       el("time", { text: fmtTime(v.at) })),
     v.rp ? replyQuote(v.rp, dm) : null,
@@ -147,7 +152,7 @@ function bubble(id, v, dm, { prev = LIST().lastElementChild, show = false } = {}
     // (and selecting text), a photo opens full size, a poll's options vote
     el("div", { class: "brow" },
       kindOf(v).bubble(id, v, dm),
-      el("button", { type: "button", class: "more", "aria-label": t("msgMenu"), text: "⋯", onclick: () => msgActions(id, (dm ? null : room.msgs.get(id)) || v, dm) })),
+      el("button", { type: "button", class: "more", "aria-label": t("msgMenu"), onclick: () => msgActions(id, (dm ? null : room.msgs.get(id)) || v, dm) }, icon("more"))),
     v.ed ? el("small", { class: "edited", text: t("edited") }) : null,
     dm ? null : el("div", { class: "re" }));
   if (!dm) fillReacts(node, v);
@@ -210,7 +215,7 @@ export function markSeen() {
 export function showJump() {
   const b = $("#jumpBtn"), l = LIST();
   b.hidden = !room || room.gone || l.scrollHeight - l.scrollTop - l.clientHeight < 300;
-  b.textContent = room?.ui.below ? t("jumpNew", { n: room.ui.below }) : "↓";
+  $(".jn", b).textContent = room?.ui.below ? t("jumpNew", { n: room.ui.below }) : "";
 }
 // when this device last read each private chat, so a reload doesn't count old messages as new
 const lastRead = (other) => +store.get(KEYS.dmRead(room.code, other)) || 0;
@@ -312,7 +317,7 @@ export function renderAge() {
   if (bar.hidden) return bar.replaceChildren();
   const text = t("soonBar", { m: minutesLeft(left) });
   bar.replaceChildren(el("span", { text }),
-    el("button", { type: "button", class: "x", "aria-label": t("close"), text: "✕", onclick: () => { dismissedAt = at; renderAge(); } }));
+    el("button", { type: "button", class: "x", "aria-label": t("close"), onclick: () => { dismissedAt = at; renderAge(); } }, icon("close", "sm")));
   if (warnedAt !== at) { warnedAt = at; toast(text); }
 }
 
@@ -331,11 +336,11 @@ export function renderPins() {
   bar.classList.toggle("open", pinsOpen);
   bar.replaceChildren(...[
     el("button", { type: "button", class: "pinhead", "aria-expanded": String(pinsOpen), onclick: () => { pinsOpen = !pinsOpen; renderPins(); } },
-      el("span", { text: "📌" }), el("span", { class: "one", text: pinsOpen ? t("pinsTitle") : line(items[0]) }),
-      el("span", { class: "n", text: ids.length > 1 || pinsOpen ? t("pinsN", { n: ids.length }) : "" }), el("span", { class: "chev", text: "▾" })),
+      icon("pin", "sm"), el("span", { class: "one", text: pinsOpen ? t("pinsTitle") : line(items[0]) }),
+      ids.length > 1 || pinsOpen ? el("span", { class: "n", text: t("pinsN", { n: ids.length }) }) : null, icon("expand", "sm chev")),
     pinsOpen ? el("ul", {}, items.map((it) => el("li", {},
       el("button", { type: "button", class: "go", onclick: () => it.v && jumpTo(it.id) },
-        it.v ? el("small", { text: `${room.author(it.v).avatar} ${room.author(it.v).name} · ${fmtTime(it.v.at)}` }) : null,
+        it.v ? el("small", {}, avatar(room.author(it.v).avatar, "av"), `${room.author(it.v).name} · ${fmtTime(it.v.at)}`) : null,
         (it.v && kindOf(it.v).pinned?.(it.v)) || line(it)),
       room.isOwner() ? el("button", { type: "button", class: "btn small unpin", text: t("unpin"), onclick: () => pin(it.id, false) }) : null))) : null].filter(Boolean));
 }

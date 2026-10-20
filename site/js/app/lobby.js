@@ -2,12 +2,12 @@
 import { CODE_CHARS, LIMITS, CONNECT_MS } from "./constants.js?v=dev";
 import { phase } from "./expiry.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { $, el, toast, sheet, busy, enterPressesOk } from "./dom.js?v=dev";
+import { $, el, toast, sheet, busy, enterPressesOk, icon, bare } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend, isDenied, isBusy, within } from "./backend.js?v=dev";
 import { RoomCipher, deviceKeys, b64u, KEY_RE, RAW_KEY_RE } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
-import { me, ensureMe, askMe, memberRecord } from "./identity.js?v=dev";
+import { me, ensureMe, askMe, memberRecord, meFields, saveMe } from "./identity.js?v=dev";
 import { nameClaim } from "./room.js?v=dev";
 import { enter } from "./chat.js?v=dev";
 import { share } from "./menu.js?v=dev";
@@ -25,23 +25,35 @@ const joining = async (cipher, m) => memberRecord(cipher, backend.uid, m, { join
 
 /* ---------- opening a room ---------- */
 export async function create() {
-  const m = await ensureMe(); if (!m) return;
   const title = el("input", { class: "field", maxlength: LIMITS.roomTitle, placeholder: t("titlePh"), id: "newTitle" });
-  // two kinds: public (the 4-character code is enough) or private, which is always end-to-end encrypted
+  // two kinds: public (the 4-character code is enough) or private, which is always end-to-end encrypted. They differ in
+  // four ways at once (icon, icon tile, the slate rule along the top, the encryption badge), never by colour alone
   let enc = false;
-  const seg = el("div", { class: "seg", role: "radiogroup", "aria-label": t("roomType") },
-    el("button", { type: "button", role: "radio", "aria-checked": "true", "data-v": "pub", text: t("openStoa") }),
-    el("button", { type: "button", role: "radio", "aria-checked": "false", "data-v": "priv", text: t("closedSession") }));
-  const pubNote = el("p", { class: "muted small", text: t("pubNote") });
-  const encNote = el("div", { class: "encnote", hidden: true }, el("b", { text: t("e2ee") }), el("p", { class: "muted small", text: t("encNote") }));
-  seg.addEventListener("click", (e) => {
-    const b = e.target.closest("button"); if (!b) return;
-    enc = b.dataset.v === "priv";
-    seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-checked", String(x === b)));
-    pubNote.hidden = enc; encNote.hidden = !enc;
-  });
-  const body = el("div", {}, el("label", { class: "lbl", for: "newTitle", text: t("roomName") }), title, el("label", { class: "lbl", text: t("roomType") }), seg, pubNote, encNote);
-  if (await sheet(t("newRoom"), body, [["no", t("cancel")], ["yes", t("start"), "primary"]]) !== "yes") return;
+  const kind = (v, cls, ic, name, sub, on) => el("button", { type: "button", class: "kind " + cls, role: "radio", "aria-checked": String(on), "data-v": v },
+    el("span", { class: "kh" }, el("span", { class: "ic" }, icon(ic)), el("span", { class: "mark" }, icon("check", "sm"))),
+    el("b", { text: bare(t(name)) }), sub);
+  const seg = el("div", { class: "seg kinds", role: "radiogroup", "aria-label": t("roomType") },
+    kind("pub", "stoa", "stoa", "openStoa", el("span", { class: "ds", text: t("pubNote") }), true),
+    kind("priv", "salon", "salon", "closedSession", el("span", { class: "kbadge" }, icon("secure", "sm"), bare(t("e2ee"))), false));
+  const encNote = el("div", { class: "encnote", hidden: true }, icon("secure"), el("span", { text: t("encNote") }));
+  // who I am in the room, asked here rather than in a sheet of its own
+  const f = meFields();
+  const body = el("div", { class: "form" },
+    el("div", { class: "grp" }, el("label", { class: "lbl", for: "newTitle", text: t("roomName") }), title),
+    el("div", { class: "grp" }, el("span", { class: "lbl", text: t("roomType") }), seg, encNote),
+    el("div", { class: "grp" }, el("h3", { text: t("meFirst") }), el("p", { class: "hint", text: t("meHint") }), f.grid,
+      el("label", { class: "lbl", for: "meName", text: t("nickname") }), f.input));
+  const go = await sheet(t("newRoom"), body, [["no", t("cancel")], ["yes", t("start"), "primary"]], { onOpen: (ov) => {
+    const start = ov.querySelector("[data-a=yes]");
+    seg.addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      enc = b.dataset.v === "priv";
+      seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-checked", String(x === b)));
+      encNote.hidden = !enc; start.classList.toggle("primary", !enc); start.classList.toggle("salon", enc);
+    });
+  } });
+  if (go !== "yes") return;
+  const m = saveMe(f.value());
   busy(true);
   try {
     await within(backend.connect(), CONNECT_MS);

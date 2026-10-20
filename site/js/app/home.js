@@ -3,7 +3,7 @@
 import { CODE_RE } from "./constants.js?v=dev";
 import { phase, hoursLeft } from "./expiry.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { $, el, sheet, pickSheet } from "./dom.js?v=dev";
+import { $, el, sheet, pickSheet, icon, avatar, bare } from "./dom.js?v=dev";
 import { store, StoredList, KEYS } from "./storage.js?v=dev";
 import { backend, asParam } from "./backend.js?v=dev";
 import { RoomCipher } from "./crypto.js?v=dev";
@@ -93,12 +93,12 @@ function renderResume() {
     const p = typeof r.last === "number" ? phase(r.last, backend.now()) : null, ro = p?.state === "ro" || p?.state === "gone";
     return el("li", {},
       el("button", { type: "button", class: "roomrow" + (ro ? " ro" : ""), "data-code": r.code },
-        // laid out like the room's own header: its name, then the code on a chip
+        // laid out like the room's own header: its name, then its code; a Private Salon's code carries a lock
         el("span", { class: "txt" }, el("b", { text: r.t || t("room") }),
-          el("span", { class: "tags" }, el("span", { class: "codechip", text: (r.enc ? "🔐 " : "") + r.code }),
-            ro ? el("span", { class: "rotag", text: t("roTag") }) : null,
-            ro ? el("span", { class: "roleft", text: t("roLeft", { h: hoursLeft(p.left) }) }) : null)),
-        el("span", { class: "go", text: t("backToRoom") })));
+          el("span", { class: "tags" }, el("span", { class: "code" + (r.enc ? " salon" : "") }, r.enc ? icon("salon") : null, r.code),
+            ro ? el("span", { class: "tag warn" }, icon("hourglass"), t("roTag")) : null,
+            ro ? el("span", { class: "left", text: t("roLeft", { h: hoursLeft(p.left) }) }) : null)),
+        el("span", { class: "go" }, el("span", { class: "vh", text: t("backToRoom") }), icon("forward"))));
   }));
   $(".pager", box).hidden = pages < 2;
   $(".pager .pg", box).textContent = `${resumePage + 1} / ${pages}`;
@@ -108,21 +108,21 @@ function renderResume() {
 export function turnResumePage(step) { resumePage += step; renderResume(); }
 
 /* ---------- the ☰ menu: who I am, language, theme and my saved records ---------- */
-const menuRow = (a, icon, title, sub) => el("button", { type: "button", class: "merow", "data-a": a },
-  el("span", { class: "av", text: icon }), el("span", { class: "txt" }, el("b", { text: title }), el("small", { text: sub })), el("span", { class: "chev", text: "›" }));
+const menuRow = (a, lead, title, sub) => el("button", { type: "button", class: "merow", "data-a": a },
+  el("span", { class: "av" }, lead), el("span", { class: "txt" }, el("b", { text: title }), el("small", { text: sub })), icon("forward", "chev"));
 const languageWord = () => t("language") + (I18N.lang === "en" ? "" : " · Language");
 export function homeMenu() {
   const m = me(), list = records();
   const body = el("div", { class: "hmenu" },
-    menuRow("me", m ? m.avatar : "🙂", m ? m.name : t("noIdentity"), t("editMeShort")),
-    menuRow("lang", "🌐", languageWord(), I18N.LANGS.find(([c]) => c === I18N.lang)[1]),
-    menuRow("theme", "🌓", t("theme"), t({ light: "themeLight", dark: "themeDark" }[THEME.get()] || "themeSystem")),
+    menuRow("me", m ? avatar(m.avatar) : icon("user"), m ? m.name : t("noIdentity"), t("editMeShort")),
+    menuRow("lang", icon("language"), languageWord(), I18N.LANGS.find(([c]) => c === I18N.lang)[1]),
+    menuRow("theme", icon("theme"), t("theme"), t({ light: "themeLight", dark: "themeDark" }[THEME.get()] || "themeSystem")),
     el("h3", { text: t("myRecords") }),
     list.length ? el("ul", { class: "reclist" }, list.map((r) => el("li", {},
       el("button", { type: "button", class: "rec", "data-open": r.id },
         el("b", { text: r.title }), el("small", { text: [r.code ? t("recCode", { code: r.code }) : null, t("recN", { n: r.n }), new Date(r.exported).toLocaleDateString(I18N.lang)].filter(Boolean).join(" · ") })))))
       : el("p", { class: "muted small", text: t("noRecords") }),
-    el("button", { type: "button", class: "btn wide", "data-a": "import", text: t("importRec") }));
+    el("button", { type: "button", class: "btn wide", "data-a": "import" }, icon("download"), bare(t("importRec"))));
   sheet(t("menu"), body, [["close", t("close")]], {
     onOpen: (ov) => body.addEventListener("click", (e) => {
       const b = e.target.closest("[data-a], [data-open]"); if (!b) return;
@@ -149,7 +149,7 @@ async function pickLang() {
 }
 // light, dark, or whatever the device uses (the default)
 async function pickTheme() {
-  const theme = await choose(t("theme"), [["", t("themeSystem")], ["light", "☀️ " + t("themeLight")], ["dark", "🌙 " + t("themeDark")]], THEME.get() || "", "theme");
+  const theme = await choose(t("theme"), [["", t("themeSystem")], ["light", t("themeLight")], ["dark", t("themeDark")]], THEME.get() || "", "theme");
   if (theme == null) return;
   THEME.set(theme || null);
   homeMenu();

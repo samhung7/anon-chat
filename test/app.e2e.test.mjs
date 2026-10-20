@@ -62,7 +62,7 @@ async function pickName(page, name) {
 // opens a room and closes the invite sheet that follows; gives its code and invite link
 async function createRoom(page, name, { priv = false, title = "" } = {}) {
   await page.locator("#createBtn").click();
-  await pickName(page, name);
+  await page.locator("#meName").fill(name); // who I am is asked in the new-room sheet itself
   if (title) await page.locator("#newTitle").fill(title);
   if (priv) await sheet(page).locator(".seg [data-v=priv]").click();
   await press(page, "yes");
@@ -683,8 +683,8 @@ test("a quiet room: a warning in its 24th hour, then read-only with the hours le
   // the home list marks it, with the hours left
   await bob.locator("#chat .bar [data-a=home]").click();
   const row = bob.locator("#resume .roomrow", { hasText: "Book club" });
-  await row.locator(".rotag", { hasText: "Read-only" }).waitFor();
-  await row.locator(".roleft", { hasText: "deleted in 18 h" }).waitFor();
+  await row.locator(".tag.warn", { hasText: "Read-only" }).waitFor();
+  await row.locator(".left", { hasText: "deleted in 18 h" }).waitFor();
   // a member still gets back in to read it; nobody new joins
   await row.click();
   await bubble(bob, "still here").waitFor();

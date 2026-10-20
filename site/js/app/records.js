@@ -1,7 +1,7 @@
 /* Exporting a room to a file, keeping records in this browser (nothing is uploaded), importing them back, and
    reading one, read-only. */
 import { t, fmtFull } from "./text.js?v=dev";
-import { $, el, toast, sheet, confirmSheet } from "./dom.js?v=dev";
+import { $, el, toast, sheet, confirmSheet, icon } from "./dom.js?v=dev";
 import { store, StoredList, KEYS } from "./storage.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
@@ -9,7 +9,7 @@ import { me } from "./identity.js?v=dev";
 import { savedKindOf } from "./kinds.js?v=dev";
 import { linkify } from "./richtext.js?v=dev";
 import { photoUrl } from "./photos.js?v=dev";
-import { ansBox } from "./qa.js?v=dev";
+import { ansBox, qWho } from "./qa.js?v=dev";
 import { ARCHIVE, buildArchive, readArchive, countOf, toText, toHtml, personLabel } from "./archive.js?v=dev";
 import { home, showRecordScreen } from "./home.js?v=dev";
 import { GROUP_MS } from "./constants.js?v=dev";
@@ -107,8 +107,8 @@ function renderRecord() {
   const box = $("#recList");
   if (tab === -2) { // the questions, read-only
     box.replaceChildren(...a.questions.map((q) => el("div", { class: "qcard" + (q.done ? " done" : "") },
-      el("div", { class: "upvote", "aria-hidden": "true" }, el("span", { text: "▲" }), el("b", { text: q.votes })),
-      el("div", { class: "qbody" }, el("div", { class: "qwho" }, el("span", { text: q.name ? `${q.avatar || ""} ${q.name}` : t("anonAsker") }), el("time", { text: fmtFull(q.at) })),
+      el("div", { class: "upvote", "aria-hidden": "true" }, icon("upvote", "sm"), el("b", { text: q.votes })),
+      el("div", { class: "qbody" }, qWho(q.name, q.avatar, el("time", { text: fmtFull(q.at) })),
         el("p", { class: "qtext" }, linkify(q.text)), q.answer ? ansBox(q.answer, fmtFull) : null, q.done ? el("small", { class: "muted", text: t("qAnswered") }) : null))));
     box.scrollTop = 0; return;
   }
