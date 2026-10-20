@@ -127,7 +127,7 @@ export async function join(raw) {
       const k = await nameClaim(cipher, m.name);
       const holder = await backend.val(ref("names/" + k));
       const at = (path) => `rooms/${code}/${path}`;
-      const upd = { [at(`members/${uid}`)]: await joining(cipher, m), [at(`names/${k}`)]: uid, [at("meta/last")]: backend.stamp() };
+      const upd = { [at(`members/${uid}`)]: await joining(cipher, m), [at(`names/${k}`)]: uid }; // joining isn't speaking: it leaves meta/last alone
       // a room with a size limit counts its members: joining adds one (and fails, to try again, if someone got in first)
       if (meta.cap) {
         const counted = await backend.val(ref("meta/n"));

@@ -665,6 +665,10 @@ test("a quiet room: a warning in its 24th hour, then read-only with the hours le
   // nobody spoke for 23½ hours: everyone in the room is told; ✕ hides it, and speaking keeps the room going
   await quiet(23.5);
   await bob.locator("#ageBar", { hasText: "turns read-only in about 30 min" }).waitFor();
+  // joining isn't speaking: someone coming in leaves the clock where it was
+  const last = await dbGet(`rooms/${code}/meta/last`);
+  await joinByLink(await person("d"), url, "Dave");
+  assert.equal(await dbGet(`rooms/${code}/meta/last`), last);
   await alice.locator("#ageBar .x").click();
   await alice.locator("#ageBar").waitFor({ state: "hidden" });
   assert.ok(await bob.locator("#roBox").isHidden());
