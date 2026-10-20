@@ -16,7 +16,6 @@ const createRoom = (uid, { code = C } = {}) =>
 const join = (uid, name = uid) => update(ref(db(uid)), {
   [`rooms/${C}/members/${uid}`]: member(name),
   [`rooms/${C}/names/${name.toLowerCase()}`]: uid,
-  [`rooms/${C}/meta/last`]: T,
 });
 // a message as the app sends it: the same update stamps when this person last posted (ls) and names the message (lm).
 // Tests post faster than the rate limit allows, so the stamp is cleared first unless fast is set.
@@ -265,7 +264,7 @@ test("size limit: joining counts up to the limit, leaving counts down", async ()
   await createRoom("alice"); await join("bob");
   await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { cap: 3, n: 2 }));
   await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { cap: 3, n: 2 }));
-  const joinN = (uid, n) => update(ref(db(uid)), { [`rooms/${C}/members/${uid}`]: member(uid), [`rooms/${C}/names/${uid}`]: uid, [`rooms/${C}/meta/last`]: T, [`rooms/${C}/meta/n`]: n });
+  const joinN = (uid, n) => update(ref(db(uid)), { [`rooms/${C}/members/${uid}`]: member(uid), [`rooms/${C}/names/${uid}`]: uid, [`rooms/${C}/meta/n`]: n });
   await assertFails(join("carol")); // without counting itself
   await assertFails(joinN("carol", 4));
   await assertSucceeds(joinN("carol", 3));
@@ -346,7 +345,7 @@ const encMember = (h) => ({ x: "c2VhbGVk", h, joined: T, online: true, pk: "cGs"
 const createEnc = (uid) => update(ref(db(uid)), {
   [`rooms/${C}`]: { meta: { owner: uid, created: T, last: T, priv: false, enc: true, kc: "0123456789abcdef", xt: "dGl0bGU" }, members: { [uid]: encMember(H("a")) }, names: { [H("a")]: uid } },
 });
-const joinEnc = (uid, h) => update(ref(db(uid)), { [`rooms/${C}/members/${uid}`]: encMember(h), [`rooms/${C}/names/${h}`]: uid, [`rooms/${C}/meta/last`]: T });
+const joinEnc = (uid, h) => update(ref(db(uid)), { [`rooms/${C}/members/${uid}`]: encMember(h), [`rooms/${C}/names/${h}`]: uid });
 
 test("encrypted room: only ciphertext and hashed nicknames", async () => {
   await assertFails(update(ref(db("alice")), { [`rooms/${C}`]: { meta: { owner: "alice", created: T, last: T, priv: false, enc: true, title: "明文" }, members: { alice: encMember(H("a")) }, names: { [H("a")]: "alice" } } }));
