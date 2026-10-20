@@ -113,39 +113,55 @@ ta.addEventListener("paste", (e) => {
 ta.addEventListener("focus", () => document.body.classList.add("typing"));
 ta.addEventListener("blur", () => { document.body.classList.remove("typing"); typing.stop(); });
 // iOS doesn't shrink the page for the keyboard: it slides the whole page up behind it, which takes the room's
-// header off the top (and in a private chat can leave only blank space above the box). While the keyboard is up,
-// the chat is fitted to the part of the screen still showing, so the header stays at the top and the box sits on
-// the keyboard. It only ever shrinks the chat, never stretches it past the screen; pinch zoom is left alone.
+// header off the top (and in a private chat can leave only blank space above the box), and leaves a bottom sheet
+// (a description, an answer, a new room…) under the keyboard with only its title showing. While the keyboard is up,
+// the chat and any open sheet are fitted to the part of the screen still showing, so the header stays at the top,
+// the box sits on the keyboard and a sheet rises above it. It only ever shrinks them, never stretches them past the
+// screen; pinch zoom is left alone.
 const vv = window.visualViewport;
-const fitChat = () => {
-  const chat = $("#chat"), s = chat.style;
+const fit = (box, up) => {
+  const s = box.style;
+  s.top = up ? `${vv.offsetTop}px` : ""; s.height = up ? `${vv.height}px` : ""; s.bottom = up ? "auto" : "";
+};
+const fitScreen = () => {
+  const chat = $("#chat"), sheets = document.querySelectorAll(".overlay");
   const up = Math.abs(vv.scale - 1) < .01 && innerHeight - vv.height > 1;
-  if (!up && !s.height) return;
+  document.documentElement.classList.toggle("kb", up);
+  if (!up && !chat.style.height && ![...sheets].some((o) => o.style.height)) return;
+  // the home page scrolls as usual under its own fields; only the chat and sheets need putting back
+  const fitting = !chat.hidden || sheets.length;
+  if (up && !fitting) return;
   const l = LIST(), stick = l.scrollHeight - l.scrollTop - l.clientHeight < 80;
   // the home-screen app can scroll the page itself rather than the visible part, which leaves a fixed chat behind
   // at the top, so the page is put back at the top first; the fitted chat then fits with nothing left to scroll
   if (up && (scrollY || vv.offsetTop)) scrollTo(0, 0);
-  s.top = up ? `${vv.offsetTop}px` : ""; s.height = up ? `${vv.height}px` : ""; s.bottom = up ? "auto" : "";
+  fit(chat, up && !chat.hidden);
+  sheets.forEach((o) => fit(o, up));
   if (stick) l.scrollTop = l.scrollHeight;
+  // a long sheet (a new room, a poll) scrolls inside itself, so the field being typed in is brought into its view
+  const f = document.activeElement;
+  if (up && f?.closest(".sheet")) f.scrollIntoView({ block: "nearest" });
 };
-// iOS slides the page up in an animation and doesn't always say when it's done, so after the box gains focus or
-// the screen moves, the chat keeps following it every frame until it has stood still for a moment
+// iOS slides the page up in an animation and doesn't always say when it's done, so after a field gains focus, a
+// sheet opens or the screen moves, the screen keeps following it every frame until it has stood still for a moment
 let settling = 0;
 const settle = () => {
   const go = !settling; settling = performance.now() + 1500;
   if (!go) return;
   let last = "";
   const step = (now) => {
-    const at = `${vv.offsetTop},${vv.height},${vv.scale},${scrollY}`;
-    if (at !== last) { last = at; fitChat(); settling = Math.max(settling, now + 300); }
+    const at = `${vv.offsetTop},${vv.height},${vv.scale},${scrollY},${document.querySelectorAll(".overlay").length}`;
+    if (at !== last) { last = at; fitScreen(); settling = Math.max(settling, now + 300); }
     if (now < settling) requestAnimationFrame(step); else settling = 0;
   };
   requestAnimationFrame(step);
 };
 if (vv) {
-  ["resize", "scroll"].forEach((ev) => vv.addEventListener(ev, () => { fitChat(); settle(); }));
-  ["focus", "blur"].forEach((ev) => ta.addEventListener(ev, settle));
+  ["resize", "scroll"].forEach((ev) => vv.addEventListener(ev, () => { fitScreen(); settle(); }));
+  ["focusin", "focusout"].forEach((ev) => document.addEventListener(ev, settle));
   addEventListener("scroll", settle, { passive: true });
+  // a sheet opened while the keyboard is already up (a GIF search from the box) is fitted as it appears
+  new MutationObserver(settle).observe(document.body, { childList: true });
 }
 // Enter sends on a keyboard; on phones Enter is a new line and the button sends. Never while an IME is composing.
 ta.addEventListener("keydown", (e) => {

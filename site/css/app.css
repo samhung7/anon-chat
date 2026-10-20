@@ -278,7 +278,7 @@ code { font-size: .9em; }
 /* ---------- sheets ---------- */
 .overlay { position: fixed; inset: 0; z-index: 20; background: var(--scrim); display: flex; align-items: flex-end; justify-content: center; animation: fade .15s; }
 .sheet {
-  width: 100%; max-width: 520px; max-height: 88dvh; overflow-y: auto; background: var(--surface); border-radius: 20px 20px 0 0;
+  width: 100%; max-width: 520px; max-height: min(88dvh, 100%); overflow-y: auto; background: var(--surface); border-radius: 20px 20px 0 0;
   padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); box-shadow: var(--shadow); animation: up .18s ease-out;
 }
 @media (min-width: 600px) { .overlay { align-items: center; } .sheet { border-radius: 20px; } }
@@ -516,6 +516,11 @@ code { font-size: .9em; }
   .actions.pair { bottom: min(-32px, calc(-16px - env(safe-area-inset-bottom))); margin-bottom: min(-32px, calc(-16px - env(safe-area-inset-bottom))); padding-bottom: max(32px, calc(16px + env(safe-area-inset-bottom))); }
 }
 
+/* while the keyboard is up (js/app/main.js fits a sheet above it) the home indicator is covered, so a sheet drops the
+   extra space kept for it and every line of it goes to what is being typed */
+html.kb .sheet { padding-bottom: 16px; }
+html.kb .actions.pair { bottom: -16px; margin-bottom: -16px; padding-bottom: 16px; }
+@media (min-width: 600px) { html.kb .actions.pair { margin-bottom: 0; padding-bottom: 0; } }
 
 /* language: the page is written in Traditional Chinese, so other languages stay hidden until js/i18n.js fills them in */
 html.l10n body { visibility: hidden; }
