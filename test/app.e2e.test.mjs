@@ -694,3 +694,58 @@ test("a quiet room: a warning in its 24th hour, then read-only with the hours le
   assert.ok(await dbGet(`rooms/${code}/meta`), "still there until its 24 read-only hours are up");
   noErrors();
 });
+
+test("on iPhone the keyboard doesn't cover a sheet being typed in", async () => {
+  // iOS keeps the page its full height under the keyboard and only the visible part (visualViewport) shrinks,
+  // so the phone's keyboard is played by a visualViewport that loses KB pixels at the bottom
+  const KB = 340;
+  const ctx = await browser.newContext({ locale: "en-US", viewport: { width: 390, height: 844 }, hasTouch: true });
+  await ctx.addInitScript(() => {
+    const vv = new EventTarget();
+    Object.assign(vv, { offsetTop: 0, offsetLeft: 0, scale: 1 });
+    Object.defineProperty(vv, "height", { get: () => innerHeight - (window.kbUp || 0) });
+    Object.defineProperty(window, "visualViewport", { value: vv });
+    window.keyboard = (h) => { window.kbUp = h; vv.dispatchEvent(new Event("resize")); };
+  });
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => errors.push(`k: ${e.message}`));
+  await page.goto(`${base}/?emu&as=k`);
+  await page.locator("#createBtn").waitFor();
+  const shown = 844 - KB;
+  const above = async (field) => {
+    await page.locator(field).focus();
+    await page.evaluate((h) => window.keyboard(h), KB);
+    await until(async () => (await sheet(page).locator(".sheet").boundingBox()).y + (await sheet(page).locator(".sheet").boundingBox()).height <= shown + 1);
+    const f = await page.locator(field).boundingBox();
+    assert.ok(f.y >= 0 && f.y + f.height <= shown + 1, `${field} shows above the keyboard`);
+    await page.evaluate(() => window.keyboard(0));
+  };
+  // the new-room sheet is taller than what's left, so the nickname at its foot is scrolled into view
+  await page.locator("#createBtn").click();
+  await above("#meName");
+  await page.locator("#meName").fill("Host");
+  await press(page, "yes");
+  await sheet(page).locator(".share").waitFor();
+  await page.keyboard.press("Escape");
+  await page.locator("#chat").waitFor();
+  await menuPick(page, "desc");
+  await above("#roomDesc");
+  await page.locator("#roomDesc").fill("Welcome");
+  await press(page, "yes");
+  // the keyboard down again: the sheet is back at the foot of the screen
+  await menuPick(page, "qaon");
+  await page.locator("#askBar").waitFor();
+  await say(page, "Why?");
+  await page.locator(".qcard .qtools .btn.primary").click();
+  await above("#ansText");
+  const box = await sheet(page).locator(".sheet").boundingBox();
+  assert.ok(Math.abs(box.y + box.height - 844) < 2, "the sheet sits at the bottom once the keyboard is gone");
+  // and the room's header stays at the top while typing in the box
+  await page.keyboard.press("Escape");
+  await page.locator("#text").focus();
+  await page.evaluate((h) => window.keyboard(h), KB);
+  await until(async () => (await page.locator("#composer").boundingBox()).y + (await page.locator("#composer").boundingBox()).height <= shown + 1);
+  assert.ok((await page.locator("#chat .bar").boundingBox()).y >= 0);
+  await ctx.close();
+  noErrors();
+});
