@@ -169,7 +169,7 @@ async function unlock(code, meta) {
 function askLink(code, note) {
   const input = enterPressesOk(el("input", { class: "field", id: "joinLink", autocomplete: "off", placeholder: t("linkPh"), "aria-label": t("linkAria") }));
   const body = el("div", {}, el("p", { class: "note warn", hidden: !note, text: note }), el("p", { class: "muted", text: t("needLink", { code }) }), input);
-  return sheet(t("needLinkTitle"), body, [["no", t("cancel")], ["yes", t("join"), "primary"]], { onOpen: () => input.focus() })
+  return sheet(bare(t("needLinkTitle")), body, [["no", t("cancel")], ["yes", t("join"), "primary"]], { onOpen: () => input.focus() })
     .then((a) => (a === "yes" ? input.value.match(KEY_RE)?.[1] || (RAW_KEY_RE.test(input.value.trim()) ? input.value.trim() : "") : null))
     .then((k) => (k === "" ? askLink(code, t("notFullLink")) : k));
 }

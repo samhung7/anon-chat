@@ -1,7 +1,7 @@
 /* Exporting a room to a file, keeping records in this browser (nothing is uploaded), importing them back, and
    reading one, read-only. */
 import { t, fmtFull } from "./text.js?v=dev";
-import { $, el, toast, sheet, confirmSheet, icon } from "./dom.js?v=dev";
+import { $, el, toast, sheet, confirmSheet, icon, bare } from "./dom.js?v=dev";
 import { store, StoredList, KEYS } from "./storage.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
@@ -92,7 +92,7 @@ export function openRecord(a, id) {
   view = { a, id, tab: -1 };
   showRecordScreen();
   $("#recTitle").textContent = a.title;
-  $("#recSub").textContent = t("recSub", { t: fmtFull(a.exported) });
+  $("#recSub").replaceChildren(icon("records", "sm"), bare(t("recSub", { t: fmtFull(a.exported) })));
   const tabs = $("#recTabs");
   tabs.replaceChildren(el("button", { type: "button", class: "tab", "data-tab": -1, text: t("everyoneN", { n: a.messages.length }) }),
     ...a.dms.map((d, i) => el("button", { type: "button", class: "tab", "data-tab": i, text: `🔒 ${personLabel(d.with)}` })),

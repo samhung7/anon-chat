@@ -40,7 +40,7 @@ async function notify(v, dmWith, atMe) {
   const a = room.author(v, dmWith);
   const title = dmWith ? t("dmToast", { who: a.name }) : atMe ? t("mentionToast", { who: `${a.avatar} ${a.name}` }) : `${a.avatar} ${a.name} | ${room.meta?.title || t("roomN", { code: room.code })}`;
   const body = dmWith ? t("openToRead") : kindOf(v).notice?.(v) || snippet(v);
-  const opts = { body, tag: "room-" + room.code, renotify: true, icon: "icons/stoa2-192.png", data: { url: roomUrl(room.code) } };
+  const opts = { body, tag: "room-" + room.code, renotify: true, icon: "icons/stoa3-192.png", data: { url: roomUrl(room.code) } };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
     if (reg) return await reg.showNotification(title, opts); // phones only show notifications through the service worker

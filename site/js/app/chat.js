@@ -2,7 +2,7 @@
    announcements, and what happens when the room goes away. The Room tells this what changed; this draws it. */
 import { APP, GROUP_MS, FRESH_MS, KLIPY_KEY, LIMITS, REACTS } from "./constants.js?v=dev";
 import { t, tEl, fmtTime } from "./text.js?v=dev";
-import { $, el, toast, sheet, orToast, icon, avatar } from "./dom.js?v=dev";
+import { $, el, toast, sheet, orToast, icon, avatar, bare } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room, setRoom } from "./session.js?v=dev";
@@ -138,7 +138,7 @@ function bubble(id, v, dm, { prev = LIST().lastElementChild, show = false } = {}
   const attrs = { id: (dm ? "d-" : "m-") + id, "data-by": v.by, "data-at": v.at, "data-id": id };
   if (!mine && !show && isBlocked(v.by)) {
     const folded = el("div", { class: "msg folded", ...attrs },
-      el("button", { type: "button", class: "foldbtn", onclick: () => folded.replaceWith(bubble(id, v, dm, { prev: folded.previousElementSibling, show: true })) }, t("blockedMsg")));
+      el("button", { type: "button", class: "foldbtn", onclick: () => folded.replaceWith(bubble(id, v, dm, { prev: folded.previousElementSibling, show: true })) }, icon("block", "sm"), bare(t("blockedMsg"))));
     return folded;
   }
   const atMe = !mine && !dm && mentionsMe(v.text), who = room.author(v, dm);
@@ -310,7 +310,7 @@ export function renderAge() {
   $("#composer").hidden = ro && !room.gone;
   box.hidden = !ro || room.gone;
   if (box.hidden) box.replaceChildren();
-  else box.replaceChildren(el("span", { text: t("roBar", { h: hoursLeft(left) }) }),
+  else box.replaceChildren(icon("lock"), el("span", { text: bare(t("roBar", { h: hoursLeft(left) })) }),
     el("button", { type: "button", class: "btn small", text: t("roSave"), onclick: () => exportSheet() }));
   // within the hour: a line under the header, until someone speaks or it's dismissed
   bar.hidden = state !== "soon" || room.gone || dismissedAt === at;

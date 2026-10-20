@@ -295,8 +295,13 @@ code { font-size: .9em; }
 .actions.many { display: grid; grid-template-columns: 1fr 1fr; }
 .actions.many .btn { padding: 8px 10px; font-size: 14px; line-height: 1.3; }
 .actions.many .btn.danger { grid-column: 1 / -1; }
+.actions.many .btn { justify-content: flex-start; text-align: start; }
+.actions .btn .st-i { flex: none; color: var(--muted); }
+.actions .btn.primary .st-i, .actions .btn.salon .st-i, .actions .btn.danger .st-i { color: inherit; }
 .actions.three { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
 .actions.three .btn { padding: 6px 4px; font-size: 13px; border-radius: 10px; word-break: break-word; }
+.actions.three .btn { flex-direction: column; justify-content: center; text-align: center; gap: 4px; padding: 10px 4px 8px; }
+.actions.three .btn.danger { flex-direction: row; }
 @media (min-width: 600px) { .sheet:has(.actions.many) { max-width: 600px; } .actions.many .btn { font-size: inherit; } .actions.three .btn { font-size: 14px; } }
 /* the room's description at the top of its ⋯ menu */
 .mdesc { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
@@ -322,6 +327,7 @@ code { font-size: .9em; }
 .form h3 { margin: 0; font: var(--text-title); }
 .form .hint { margin: -2px 0 4px; color: var(--muted); font-size: var(--fs-md); text-wrap: pretty; }
 .form .encnote { margin-top: 2px; }
+.share .encnote { text-align: start; }
 /* the room kinds, two side by side: Open Stoa an outlined sand tile, Private Salon a solid slate one with a slate rule
    along the top and the encryption badge */
 .seg.kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -463,6 +469,9 @@ code { font-size: .9em; }
 .robox { display: flex; align-items: center; gap: 10px; background: var(--warn-bg); color: var(--warn); border-top: 1px solid var(--line); padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); font-size: 14px; }
 .robox span { flex: 1; min-width: 0; }
 .robox .btn { flex: none; }
+.robox > .st-i { flex: none; }
+#recSub { display: inline-flex; align-items: center; gap: 4px; }
+.foldbtn { display: inline-flex; align-items: center; gap: 6px; }
 /* pinned announcements: one line until opened */
 .pins { background: var(--surface); border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
 .pins .pinhead { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; color: inherit; font: inherit; padding: 10px 14px; min-height: var(--hit); text-align: left; cursor: pointer; }

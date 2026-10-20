@@ -35,13 +35,24 @@ export const bare = (label) => String(label).replace(/^\p{Extended_Pictographic}
 
 export function toast(text) {
   if (!text) return;
-  const note = el("div", { class: "toast", text });
+  const note = el("div", { class: "toast", text: bare(text) });
   $("#toasts").append(note);
   setTimeout(() => note.classList.add("out"), 2600);
   setTimeout(() => note.remove(), 3000);
 }
 // a write that tells the person when it didn't go through
 export const orToast = (promise, key = "tryAgain") => promise.catch(() => toast(t(key)));
+
+// the icon a menu button carries, by its data-a; its label then loses the emoji it starts with
+const ACT_ICONS = {
+  share: "share", title: "edit", desc: "info", me: "user", mute: "bell-off", notify: "bell", export: "download",
+  qaon: "qa", qaoff: "qa", qmodon: "mod", qmodoff: "mod", show: "projector", reports: "report", cap: "people",
+  transfer: "owner", lock: "lock", unlock: "key", end: "end", leave: "leave",
+  reply: "reply", copy: "copy", edit: "edit", pin: "pin", unpin: "pin", dm: "mail", at: "chat", report: "report",
+  block: "block", unblock: "block", del: "delete", remove: "delete", save: "download", voters: "people",
+};
+const actBtn = ([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a },
+  ACT_ICONS[a] ? [icon(ACT_ICONS[a]), el("span", { text: bare(label) })] : label);
 
 // a bottom sheet; resolves with the data-a of the button pressed (or null when dismissed)
 // cols: 3 lays a long menu out three to a row; head: a heading element to use instead of the plain title
@@ -50,7 +61,7 @@ export function sheet(title, body, buttons = [], { onOpen, cols, head } = {}) {
     const ov = el("div", { class: "overlay" });
     const box = el("div", { class: "sheet", role: "dialog", "aria-label": title },
       head || (title ? el("h2", { text: title }) : null), body,
-      buttons.length ? el("div", { class: "actions" + (buttons.length > 3 ? " many" + (cols === 3 ? " three" : "") : buttons.length === 2 ? " pair" : "") }, buttons.map(([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a, text: label }))) : null);
+      buttons.length ? el("div", { class: "actions" + (buttons.length > 3 ? " many" + (cols === 3 ? " three" : "") : buttons.length === 2 ? " pair" : "") }, buttons.map(actBtn)) : null);
     ov.append(box);
     const done = (v) => { ov.remove(); document.removeEventListener("keydown", esc); res(v); };
     const esc = (e) => { if (e.key === "Escape") done(null); };
