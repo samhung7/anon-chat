@@ -1,7 +1,7 @@
 /* Who I am: a nickname and an animal, kept on this device. Nicknames are unique per room, compared without case. */
 import { LIMITS } from "./constants.js?v=dev";
 import { t, avatars } from "./text.js?v=dev";
-import { $, el, sheet, enterPressesOk } from "./dom.js?v=dev";
+import { $, el, sheet, enterPressesOk, avatar, icon } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
@@ -16,30 +16,35 @@ export async function memberRecord(cipher, id, m, extra) {
 }
 const randomMe = () => { const all = avatars(), [a, n] = all[(Math.random() * all.length) | 0]; return { avatar: a, name: n, auto: true }; };
 
-// inRoom: also rename in the room we're in (fails, and asks again, if someone there has that name)
-export async function askMe(firstTime, note = "", inRoom = !firstTime) {
+// the animals to pick from and the nickname, as in the identity sheet and the new-room sheet; until the person types a
+// nickname of their own, it follows the animal they pick
+export function meFields() {
   const cur = me() || randomMe();
   let pick = cur.avatar, auto = !!cur.auto;
   const input = enterPressesOk(el("input", { class: "field", maxlength: LIMITS.name, autocomplete: "off", id: "meName", "aria-label": t("nickname") }));
   input.value = cur.name;
   input.addEventListener("input", () => (auto = false));
-  const grid = el("div", { class: "avatars" }, avatars().map(([a, n]) => el("button", {
-    class: "avbtn", type: "button", "aria-label": n, "aria-pressed": String(a === pick), text: a,
-    onclick: (e) => { pick = a; grid.querySelectorAll(".avbtn").forEach((x) => x.setAttribute("aria-pressed", String(x === e.currentTarget))); if (auto) input.value = n; },
-  })));
+  const grid = el("div", { class: "avpick" }, avatars().map(([a, n]) => el("button", {
+    type: "button", "aria-label": n, "aria-pressed": String(a === pick),
+    onclick: (e) => { pick = a; grid.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === e.currentTarget))); if (auto) input.value = n; },
+  }, avatar(a))));
+  return { grid, input, value: () => ({ avatar: pick, name: cleanName(input.value) || avatars().find((x) => x[0] === pick)[1] }) };
+}
+export function saveMe(m) { store.set(KEYS.me, JSON.stringify(m)); showMe(); return m; }
+// inRoom: also rename in the room we're in (fails, and asks again, if someone there has that name)
+export async function askMe(firstTime, note = "", inRoom = !firstTime) {
+  const f = meFields(), input = f.input;
   const warn = el("p", { class: "note warn", hidden: !note, text: note });
-  const body = el("div", {}, warn, el("p", { class: "muted", text: t("meHint") }), grid, el("label", { class: "lbl", for: "meName", text: t("nickname") }), input);
+  const body = el("div", {}, warn, el("p", { class: "muted", text: t("meHint") }), f.grid, el("label", { class: "lbl", for: "meName", text: t("nickname") }), input);
   for (;;) {
     const a = await sheet(t(firstTime ? "meFirst" : note ? "meRetry" : "meEdit"), body, [["no", t("cancel")], ["yes", t("ok"), "primary"]], { onOpen: () => (firstTime || note) && input.select() });
     if (a !== "yes") return null;
-    const m = { avatar: pick, name: cleanName(input.value) || avatars().find((x) => x[0] === pick)[1] };
+    const m = f.value();
     if (inRoom && room && !room.gone && room.members[backend.uid]) {
       const err = await renameInRoom(m);
       if (err) { warn.textContent = err; warn.hidden = false; input.value = m.name; continue; }
     }
-    store.set(KEYS.me, JSON.stringify(m));
-    showMe();
-    return m;
+    return saveMe(m);
   }
 }
 // take the new name in the room on screen; the reason it failed, or null
@@ -58,5 +63,5 @@ async function renameInRoom(m) {
 export const ensureMe = async () => me() || (await askMe(true));
 export function showMe() {
   const m = me();
-  $("#meBtn .av").textContent = m ? m.avatar : "🙂";
+  $("#meBtn .av").replaceChildren(m ? avatar(m.avatar) : icon("user"));
 }

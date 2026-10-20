@@ -9,6 +9,8 @@ export const CODE_RE = /^[2-9A-HJKMNP-Z]{4}$/;
 export const REACTS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
 // each animal; its name in the current language (text.js avatars()) is also the default nickname
 export const ANIMALS = ["🐻", "🦊", "🐼", "🐯", "🦁", "🐸", "🐵", "🐧", "🦉", "🐙", "🦄", "🐶", "🐱", "🐰", "🐨", "🐲"];
+// the drawn version of each animal, in avatars/ (any other emoji someone has stays an emoji)
+export const ANIMAL_ART = { "🐻": "bear", "🦊": "fox", "🐼": "panda", "🐯": "tiger", "🦁": "lion", "🐸": "frog", "🐵": "monkey", "🐧": "penguin", "🦉": "owl", "🐙": "octopus", "🦄": "unicorn", "🐶": "dog", "🐱": "cat", "🐰": "rabbit", "🐨": "koala", "🐲": "dragon" };
 
 // longest texts, in characters (the rules check the same)
 export const LIMITS = {

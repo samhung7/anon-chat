@@ -115,7 +115,8 @@ export function renderTyping() {
     ? Object.entries(room.typing || {}).filter(([id, at]) => id !== uid && room.members[id] && !isBlocked(id) && fresh(at)).map(([id]) => id)
     : fresh(room.dmTyping[view]) && !isBlocked(view) ? [view] : [];
   const names = ids.map((id) => room.members[id]?.name || "");
-  bar.textContent = ids.length === 1 ? t("typing1", { a: names[0] }) : ids.length === 2 ? t("typing2", { a: names[0], b: names[1] }) : ids.length ? t("typingN") : "";
+  bar.replaceChildren(el("span", { class: "dots", "aria-hidden": "true" }, el("i"), el("i"), el("i")),
+    ids.length === 1 ? t("typing1", { a: names[0] }) : ids.length === 2 ? t("typing2", { a: names[0], b: names[1] }) : ids.length ? t("typingN") : "");
   bar.hidden = !ids.length;
 }
 

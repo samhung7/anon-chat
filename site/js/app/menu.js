@@ -2,7 +2,7 @@
    leaving and ending the room. */
 import { APP, LIMITS } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { el, toast, sheet, confirmSheet, qrSvg } from "./dom.js?v=dev";
+import { el, toast, sheet, confirmSheet, qrSvg, icon, bare } from "./dom.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room, setRoom } from "./session.js?v=dev";
 import { askMe } from "./identity.js?v=dev";
@@ -64,7 +64,7 @@ export function share() {
   const qrBox = el("div", { class: "qr", "aria-label": "QR Code" }); qrBox.innerHTML = qrSvg(url, 4);
   const body = el("div", { class: "share" },
     el("div", { class: "bigcode", text: room.code }),
-    el("p", { class: "muted", text: t(room.cipher ? "shareEnc" : "shareOpen") }),
+    room.cipher ? el("p", { class: "encnote" }, icon("secure"), el("span", { text: bare(t("shareEnc")) })) : el("p", { class: "muted", text: t("shareOpen") }),
     el("div", { class: "linkrow" }, el("input", { class: "field", readonly: true, value: url, "aria-label": t("linkAriaShort"), onfocus: (e) => e.target.select() })),
     qrBox);
   const btns = [["copy", t("copyLink"), "primary"]];

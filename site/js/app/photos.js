@@ -8,7 +8,7 @@
    there: deleting the message deletes the marker, and the picture with it. Photos from before R2 kept their bytes
    in the marker (d) and still open until their rooms expire. */
 import { t } from "./text.js?v=dev";
-import { $, el, toast, busy } from "./dom.js?v=dev";
+import { $, el, toast, busy, icon } from "./dom.js?v=dev";
 import { backend, PHOTOS } from "./backend.js?v=dev";
 import { unb64u } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
@@ -110,7 +110,7 @@ export function viewPhoto(src) {
   const close = () => { ov.remove(); document.removeEventListener("keydown", esc); };
   const esc = (e) => { if (e.key === "Escape") close(); };
   const ov = el("div", { class: "lightbox", role: "dialog", "aria-label": t("photo"), onclick: close },
-    el("img", { src, alt: t("photo") }), el("button", { type: "button", class: "icon", "aria-label": t("close"), text: "✕" }));
+    el("img", { src, alt: t("photo") }), el("button", { type: "button", class: "icon", "aria-label": t("close") }, icon("close")));
   document.addEventListener("keydown", esc);
   document.body.append(ov);
 }

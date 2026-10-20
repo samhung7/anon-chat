@@ -62,7 +62,7 @@ async function pickName(page, name) {
 // opens a room and closes the invite sheet that follows; gives its code and invite link
 async function createRoom(page, name, { priv = false, title = "" } = {}) {
   await page.locator("#createBtn").click();
-  await pickName(page, name);
+  await page.locator("#meName").fill(name); // who I am is asked in the new-room sheet itself
   if (title) await page.locator("#newTitle").fill(title);
   if (priv) await sheet(page).locator(".seg [data-v=priv]").click();
   await press(page, "yes");
@@ -202,12 +202,12 @@ test("private salon: only ciphertext on the server, the link is needed, private 
 
   // a private message between Bob and Alice
   await bob.locator("#peopleBtn").click();
-  await sheet(bob).locator(".plist li", { hasText: "Alice" }).locator("[data-dm]").click();
+  await sheet(bob).locator(".st-mrow", { hasText: "Alice" }).locator("[data-dm]").click();
   await bob.locator("#dmBar").waitFor();
   await say(bob, "just for you");
   await alice.locator("#peopleBtn .dot").waitFor();
   await alice.locator("#peopleBtn").click();
-  await sheet(alice).locator(".plist li", { hasText: "Bob" }).locator("[data-dm]").click();
+  await sheet(alice).locator(".st-mrow", { hasText: "Bob" }).locator("[data-dm]").click();
   await bubble(alice, "just for you").waitFor();
   const dms = await dbGet(`rooms/${code}/dm`);
   const dm = Object.values(Object.values(dms)[0])[0];
@@ -337,7 +337,8 @@ test("owner tools: co-host, remove someone, lock; a member leaves", async () => 
 
   const memberMenu = async (name, a) => {
     await alice.locator("#peopleBtn").click();
-    await sheet(alice).locator(".plist li", { hasText: name }).locator("[data-pm]").click();
+    await sheet(alice).locator(".st-mrow", { hasText: name }).locator("[data-pm]").click();
+    if (a === "kick") await sheet(alice).locator(".st-agrp .st-arow.danger[data-a=kick]").waitFor(); // the destructive group, in red
     await press(alice, a);
   };
   await memberMenu("Bob", "mod");
@@ -682,8 +683,8 @@ test("a quiet room: a warning in its 24th hour, then read-only with the hours le
   // the home list marks it, with the hours left
   await bob.locator("#chat .bar [data-a=home]").click();
   const row = bob.locator("#resume .roomrow", { hasText: "Book club" });
-  await row.locator(".rotag", { hasText: "Read-only" }).waitFor();
-  await row.locator(".roleft", { hasText: "deleted in 18 h" }).waitFor();
+  await row.locator(".tag.warn", { hasText: "Read-only" }).waitFor();
+  await row.locator(".left", { hasText: "deleted in 18 h" }).waitFor();
   // a member still gets back in to read it; nobody new joins
   await row.click();
   await bubble(bob, "still here").waitFor();

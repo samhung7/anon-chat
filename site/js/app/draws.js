@@ -2,7 +2,7 @@
    device, with the browser's cryptographic random numbers, and the result goes to the room as a message. */
 import { LIMITS } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { el, sheet } from "./dom.js?v=dev";
+import { el, sheet, icon } from "./dom.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { post } from "./composer.js?v=dev";
@@ -18,7 +18,7 @@ export const liveDraw = (v) => ({ t: v.draw.t, p: v.draw.p.map((id) => room.name
   fresh: v.at > room.t0 && backend.now() - v.at < REVEAL_MS });
 export function drawView(d) {
   return el("div", { class: "drawbox" + (d.fresh ? " fresh" : "") },
-    el("div", { class: "ph" }, el("span", { text: "🎲 " + t("draw") })),
+    el("div", { class: "ph" }, el("span", {}, icon("draw", "sm"), t("draw"))),
     d.t ? el("b", { class: "pq", text: d.t }) : null,
     el("small", { class: "pf", text: t("drawFrom", { n: d.p.length, k: d.w.length }) }),
     el("div", { class: "winners" }, d.w.map((n, i) => el("span", { class: "win", style: `--i:${i}`, text: "🏆 " + n }))),

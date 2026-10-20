@@ -3,7 +3,7 @@
    for what is visible to the room, like reactions. */
 import { LIMITS } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { el, sheet, orToast } from "./dom.js?v=dev";
+import { el, sheet, orToast, icon } from "./dom.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { post } from "./composer.js?v=dev";
@@ -20,13 +20,13 @@ export function livePoll(v) {
 // onVote: null for a saved record, which only shows the result
 export function pollView(p, onVote) {
   return el("div", { class: "pollbox" + (p.closed ? " closed" : "") },
-    el("div", { class: "ph" }, el("span", { text: "📊 " + t("poll") }), el("small", { text: [t(p.m ? "pollMultiTag" : "pollSingleTag"), p.closed ? t("pollClosed") : null].filter(Boolean).join(" · ") })),
+    el("div", { class: "ph" }, el("span", {}, icon("poll", "sm"), t("poll")), el("small", { text: [t(p.m ? "pollMultiTag" : "pollSingleTag"), p.closed ? t("pollClosed") : null].filter(Boolean).join(" · ") })),
     el("b", { class: "pq", text: p.q }),
     p.o.map((o, k) => el("button", {
       type: "button", class: "opt" + (o.on ? " on" : ""), "aria-pressed": String(!!o.on), disabled: !onVote || p.closed || room?.gone,
       title: o.names?.join(t("listSep")) || null, onclick: () => onVote?.(k),
-    }, el("span", { class: "bar", style: `width:${p.total ? Math.round((o.n * 100) / p.total) : 0}%` }),
-      el("span", { class: "ol", text: (o.on ? "✓ " : "") + o.t }), el("span", { class: "oc", text: o.n }))),
+    }, el("span", { class: "fill", style: `width:${p.total ? Math.round((o.n * 100) / p.total) : 0}%` }),
+      o.on ? icon("check", "sm") : null, el("span", { class: "ol", text: o.t }), el("span", { class: "oc", text: o.n }))),
     el("small", { class: "pf", text: t("pollVotes", { n: p.total }) }));
 }
 // the poll of message id, live: voting goes to the database
