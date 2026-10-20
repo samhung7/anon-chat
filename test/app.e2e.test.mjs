@@ -692,6 +692,9 @@ test("a quiet room: a warning in its 24th hour, then read-only with the hours le
   // a member still gets back in to read it; nobody new joins
   await row.click();
   await bubble(bob, "still here").waitFor();
+  // at once, not on the half-minute look at the clock
+  assert.ok(await bob.locator("#composer").isHidden(), "coming back from the home list, the message box stays away");
+  assert.ok(await bob.locator("#roBox", { hasText: "Read-only" }).isVisible());
   await carol.locator("#joinCode").fill(code);
   await carol.locator("#joinForm button").click();
   await carol.locator(".toast", { hasText: "read-only" }).waitFor();

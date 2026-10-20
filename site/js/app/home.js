@@ -9,7 +9,7 @@ import { backend, asParam } from "./backend.js?v=dev";
 import { RoomCipher } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { me, askMe, showMe } from "./identity.js?v=dev";
-import { renderView } from "./chat.js?v=dev";
+import { renderView, renderHeader, renderAge } from "./chat.js?v=dev";
 import { closePicker } from "./pickers.js?v=dev";
 import { SHOW, endShow, renderShow } from "./show.js?v=dev";
 import { records, openRecord, closeRecord } from "./records.js?v=dev";
@@ -32,6 +32,8 @@ export function showChat() {
   $("#home").hidden = true; $("#record").hidden = true;
   if (SHOW()) { $("#chat").hidden = true; $("#show").hidden = false; renderShow(); return; }
   $("#chat").hidden = false; renderView();
+  // back in a room that's still open here: home() put the message box back, so a read-only room takes it away again
+  renderHeader(); renderAge();
 }
 export function showRecordScreen() { opened(); $("#home").hidden = true; $("#chat").hidden = true; $("#record").hidden = false; }
 export function home() {
