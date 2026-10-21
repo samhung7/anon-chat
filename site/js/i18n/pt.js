@@ -175,13 +175,15 @@ I18N.add("pt", {
 
   // room menu
   invite: "Convidar pessoas",
-  editMe: "Mudar meu apelido e imagem",
+  editMe: "Meu apelido e imagem",
   muteRoom: "🔕 Desativar notificações desta sala",
   notifyRoom: "🔔 Avisar sobre novas mensagens",
   exportChat: "Exportar conversa",
   renameRoom: "Renomear sala",
-  unlockRoom: "Destrancar e deixar novas pessoas entrarem",
-  lockRoom: "Trancar e impedir novas pessoas",
+  unlockRoom: "Destrancar sala",
+  lockRoom: "Trancar sala",
+  menuHost: "Moderação",
+  menuOwner: "Dono",
   endRoom: "Encerrar e apagar a sala",
   leaveRoom: "Sair da sala",
   lockedDone: "Trancada. Novas pessoas não podem entrar",

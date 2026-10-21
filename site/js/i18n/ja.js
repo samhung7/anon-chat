@@ -175,13 +175,15 @@ I18N.add("ja", {
 
   // room menu
   invite: "メンバーを招待",
-  editMe: "ニックネームとアイコンを変更",
+  editMe: "名前とアイコン",
   muteRoom: "🔕 このルームの通知をオフにする",
   notifyRoom: "🔔 新しいメッセージを通知する",
   exportChat: "チャットをエクスポート",
   renameRoom: "ルーム名を変更",
-  unlockRoom: "ロックを解除して新しい参加を許可",
-  lockRoom: "ロックして新しい参加を止める",
+  unlockRoom: "ロック解除",
+  lockRoom: "ルームをロック",
+  menuHost: "ホスト用",
+  menuOwner: "オーナー用",
   endRoom: "ルームを終了して削除",
   leaveRoom: "ルームを退出",
   lockedDone: "ロックしました。新しい人は参加できません",

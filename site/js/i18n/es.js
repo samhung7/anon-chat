@@ -175,13 +175,15 @@ I18N.add("es", {
 
   // room menu
   invite: "Invitar personas",
-  editMe: "Cambiar mi apodo e imagen",
+  editMe: "Mi apodo e imagen",
   muteRoom: "🔕 Desactivar avisos de esta sala",
   notifyRoom: "🔔 Avisarme de mensajes nuevos",
   exportChat: "Exportar chat",
   renameRoom: "Cambiar nombre de la sala",
-  unlockRoom: "Desbloquear y dejar entrar a gente nueva",
-  lockRoom: "Bloquear y no dejar entrar a nadie más",
+  unlockRoom: "Desbloquear sala",
+  lockRoom: "Bloquear sala",
+  menuHost: "Moderar",
+  menuOwner: "Dueño",
   endRoom: "Terminar y eliminar la sala",
   leaveRoom: "Salir de la sala",
   lockedDone: "Bloqueada. Ya no puede entrar nadie nuevo",

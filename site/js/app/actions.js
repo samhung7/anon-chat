@@ -3,7 +3,7 @@
    message brings its own entries (kinds.js `actions`), shown after the common ones that edit it. */
 import { LIMITS, REACTS } from "./constants.js?v=dev";
 import { t, fmtWhen } from "./text.js?v=dev";
-import { el, toast, sheet, confirmSheet, orToast, pickSheet } from "./dom.js?v=dev";
+import { el, toast, sheet, confirmSheet, orToast, pickSheet, grouped } from "./dom.js?v=dev";
 import { backend, isDenied } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { kindOf, snippet } from "./kinds.js?v=dev";
@@ -11,7 +11,8 @@ import { isBlocked, setBlocked } from "./blocking.js?v=dev";
 import { startReply, insertAtCursor, box } from "./composer.js?v=dev";
 import { openDm, pin, pinIds, react, jumpTo, setView } from "./chat.js?v=dev";
 
-// [action, label, when(c), run(c), class]; c = { id, v, dm, mine, name }
+// [action, label, when(c), run(c), class]; c = { id, v, dm, mine, name }. Three groups set apart by a gap: the
+// message itself, its author, and keeping the room in order (blocking, reports, taking it down)
 const BEFORE = [
   ["reply", () => t("reply"), (c) => !c.v.bad, (c) => startReply(c.id, c.v, c.dm)],
   ["copy", () => t("copyText"), (c) => c.v.text && !c.v.bad, (c) => navigator.clipboard?.writeText(c.v.text).then(() => toast(t("copied")), () => toast(t("cantCopy")))],
@@ -20,8 +21,10 @@ const BEFORE = [
 const AFTER = [
   ["pin", () => t("pinAsNotice"), (c) => !c.dm && !c.v.bad && room.isOwner() && !pinIds().includes(c.id), (c) => pin(c.id, true)],
   ["unpin", () => t("unpin"), (c) => !c.dm && !c.v.bad && room.isOwner() && pinIds().includes(c.id), (c) => pin(c.id, false)],
+  { group: "" },
   ["dm", (c) => t("dmTo", { name: c.name }), (c) => !c.dm && !c.mine && room.members[c.v.by], (c) => openDm(c.v.by)],
   ["at", (c) => t("mentionName", { name: c.name }), (c) => !c.dm && !c.mine && room.members[c.v.by], (c) => mention(c.name)],
+  { group: "" },
   ["report", () => t("report"), (c) => !c.dm && !c.mine && !room.isStaff(), (c) => reportMsg(c.id)],
   ["unblock", (c) => t("unblockName", { name: c.name }), (c) => !c.mine && isBlocked(c.v.by), (c) => setBlocked(c.v.by, false)],
   ["block", (c) => t("blockName", { name: c.name }), (c) => !c.mine && !isBlocked(c.v.by), (c) => setBlocked(c.v.by, true)],
@@ -34,15 +37,15 @@ export async function msgActions(id, v, dm) {
   if (!room || room.gone) return;
   const uid = backend.uid, kind = kindOf(v);
   const c = { id, v, dm, mine: v.by === uid, name: room.author(v, dm).name };
-  const entries = [...BEFORE, ...kindEntries(kind), ...AFTER].filter(([, , when]) => when(c));
+  const entries = grouped([...BEFORE, ...kindEntries(kind), ...AFTER], ([, , when]) => when(c));
   const reacts = dm ? null : el("div", { class: "reactrow" }, REACTS.map((emo, k) =>
     el("button", { type: "button", class: "chip big" + (v.re?.[k]?.[uid] ? " on" : ""), "data-a": "re" + k, text: emo })));
   let picked = null;
   const a = await sheet("", el("div", {}, el("time", { class: "mwhen", text: fmtWhen(v.at) }), kind.preview(v), reacts),
-    entries.map(([act, label, , , cls]) => [act, label(c), cls]),
+    entries.map((e) => (Array.isArray(e) ? [e[0], e[1](c), e[4]] : e)),
     { onOpen: (ov) => reacts?.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { picked = +b.dataset.a.slice(2); ov.close("react"); } }) });
   if (a === "react") return react(id, picked, !v.re?.[picked]?.[uid]);
-  entries.find(([act]) => act === a)?.[3](c);
+  entries.find((e) => e[0] === a)?.[3](c);
 }
 // the author deletes a message, or the owner or a co-host takes it down (with any reports on it)
 export function removeMsg(id, v) {

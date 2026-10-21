@@ -54,14 +54,21 @@ const ACT_ICONS = {
 const actBtn = ([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a },
   ACT_ICONS[a] ? [icon(ACT_ICONS[a]), el("span", { text: bare(label) })] : label);
 
+// a break between groups of menu buttons: a small heading, or with no label just more room, so what belongs
+// together reads as one group and the destructive ones stand apart
+const actGap = (label) => el("div", { class: "agap", role: label ? "heading" : "presentation", "aria-level": label ? "3" : null, text: label || null });
+
 // a bottom sheet; resolves with the data-a of the button pressed (or null when dismissed)
+// buttons: [action, label, class] rows, with { group: label } between groups (label "" for a gap with no heading)
 // cols: 3 lays a long menu out three to a row; head: a heading element to use instead of the plain title
 export function sheet(title, body, buttons = [], { onOpen, cols, head } = {}) {
   return new Promise((res) => {
     const ov = el("div", { class: "overlay" });
+    const n = buttons.filter(Array.isArray).length;
     const box = el("div", { class: "sheet", role: "dialog", "aria-label": title },
       head || (title ? el("h2", { text: title }) : null), body,
-      buttons.length ? el("div", { class: "actions" + (buttons.length > 3 ? " many" + (cols === 3 ? " three" : "") : buttons.length === 2 ? " pair" : "") }, buttons.map(actBtn)) : null);
+      n ? el("div", { class: "actions" + (n > 3 ? " many" + (cols === 3 ? " three" : "") : n === 2 ? " pair" : "") },
+        buttons.map((b) => (Array.isArray(b) ? actBtn(b) : actGap(b.group)))) : null);
     ov.append(box);
     const done = (v) => { ov.remove(); document.removeEventListener("keydown", esc); res(v); };
     const esc = (e) => { if (e.key === "Escape") done(null); };
@@ -75,6 +82,16 @@ export function sheet(title, body, buttons = [], { onOpen, cols, head } = {}) {
     document.body.append(ov);
     onOpen?.(ov);
   });
+}
+// a menu table's rows that show (shows(row)), with each { group } break kept only when something in its group shows
+export function grouped(entries, shows) {
+  const out = [];
+  let brk = null;
+  for (const e of entries) {
+    if (!Array.isArray(e)) brk = e;
+    else if (shows(e)) { if (brk && out.length) out.push(brk); brk = null; out.push(e); }
+  }
+  return out;
 }
 export const confirmSheet = (title, text, ok, cls = "danger") => sheet(title, el("p", { class: "muted", text }), [["no", t("cancel")], ["yes", ok, cls]]).then((a) => a === "yes");
 // Enter in this field presses the sheet's OK button (never while an IME is composing)

@@ -175,13 +175,15 @@ I18N.add("en", {
 
   // room menu
   invite: "Invite people",
-  editMe: "Change my nickname and picture",
+  editMe: "My name & picture",
   muteRoom: "🔕 Turn off notifications for this room",
   notifyRoom: "🔔 Notify me about new messages",
   exportChat: "Export chat",
   renameRoom: "Rename room",
-  unlockRoom: "Unlock, let new people join",
-  lockRoom: "Lock, keep new people out",
+  unlockRoom: "Unlock room",
+  lockRoom: "Lock room",
+  menuHost: "Hosting",
+  menuOwner: "Owner",
   endRoom: "End and delete the room",
   leaveRoom: "Leave room",
   lockedDone: "Locked. New people can't join",

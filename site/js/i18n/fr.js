@@ -175,13 +175,15 @@ I18N.add("fr", {
 
   // room menu
   invite: "Inviter des personnes",
-  editMe: "Changer mon pseudo et mon image",
+  editMe: "Mon pseudo et image",
   muteRoom: "🔕 Désactiver les notifications de ce salon",
   notifyRoom: "🔔 M’avertir des nouveaux messages",
   exportChat: "Exporter la discussion",
   renameRoom: "Renommer le salon",
-  unlockRoom: "Déverrouiller pour laisser entrer de nouvelles personnes",
-  lockRoom: "Verrouiller pour empêcher de nouvelles arrivées",
+  unlockRoom: "Déverrouiller",
+  lockRoom: "Verrouiller",
+  menuHost: "Animation",
+  menuOwner: "Propriétaire",
   endRoom: "Terminer et supprimer le salon",
   leaveRoom: "Quitter le salon",
   lockedDone: "Verrouillé. Personne ne peut plus rejoindre",

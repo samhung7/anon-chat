@@ -175,13 +175,15 @@ I18N.add("de", {
 
   // room menu
   invite: "Leute einladen",
-  editMe: "Spitznamen und Bild ändern",
+  editMe: "Name und Bild",
   muteRoom: "🔕 Benachrichtigungen für diesen Raum ausschalten",
   notifyRoom: "🔔 Bei neuen Nachrichten benachrichtigen",
   exportChat: "Chat exportieren",
   renameRoom: "Raum umbenennen",
-  unlockRoom: "Entsperren, neue Leute zulassen",
-  lockRoom: "Sperren, keine neuen Leute zulassen",
+  unlockRoom: "Raum entsperren",
+  lockRoom: "Raum sperren",
+  menuHost: "Moderation",
+  menuOwner: "Besitzer",
   endRoom: "Raum beenden und löschen",
   leaveRoom: "Raum verlassen",
   lockedDone: "Gesperrt. Neue Leute können nicht beitreten",

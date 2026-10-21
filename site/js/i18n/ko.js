@@ -175,13 +175,15 @@ I18N.add("ko", {
 
   // room menu
   invite: "초대하기",
-  editMe: "닉네임과 사진 바꾸기",
+  editMe: "닉네임·사진",
   muteRoom: "🔕 이 채팅방 알림 끄기",
   notifyRoom: "🔔 새 메시지 알림 받기",
   exportChat: "채팅 내보내기",
   renameRoom: "채팅방 이름 바꾸기",
-  unlockRoom: "잠금 해제하고 새 참여자 받기",
-  lockRoom: "잠그고 새 참여자 막기",
+  unlockRoom: "잠금 해제",
+  lockRoom: "방 잠그기",
+  menuHost: "진행 도구",
+  menuOwner: "방장 관리",
   endRoom: "채팅방 종료 및 삭제",
   leaveRoom: "채팅방 나가기",
   lockedDone: "잠갔어요. 새로운 사람은 참여할 수 없어요",

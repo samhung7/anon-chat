@@ -175,13 +175,15 @@ I18N.add("zh-CN", {
 
   // room menu
   invite: "邀请大家",
-  editMe: "修改我的昵称和头像",
+  editMe: "改昵称和头像",
   muteRoom: "🔕 关闭这个聊天室的通知",
   notifyRoom: "🔔 开启新消息通知",
   exportChat: "导出聊天记录",
   renameRoom: "修改聊天室名称",
-  unlockRoom: "解除锁定，允许新成员加入",
-  lockRoom: "锁定聊天室，不让新成员加入",
+  unlockRoom: "解除锁定",
+  lockRoom: "锁定聊天室",
+  menuHost: "主持工具",
+  menuOwner: "房主管理",
   endRoom: "结束并删除聊天室",
   leaveRoom: "离开聊天室",
   lockedDone: "已锁定，新成员无法加入",
