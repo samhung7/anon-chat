@@ -33,10 +33,16 @@ export const avatar = (emoji, cls = "") => (ANIMAL_ART[emoji]
 // a label without the emoji it starts with, where an icon stands in for it
 export const bare = (label) => String(label).replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "");
 
+// one note at a time (a new one takes the old one's place). In a room it sits just above the box people type in,
+// clear of the room's name, description and pins; elsewhere, or over a sheet, at the top as before
 export function toast(text) {
   if (!text) return;
-  const note = el("div", { class: "toast", text: bare(text) });
-  $("#toasts").append(note);
+  const box = $("#toasts"), note = el("div", { class: "toast", text: bare(text) });
+  const chat = $("#chat"), foot = chat && !chat.hidden && !document.querySelector(".overlay") ? chat.querySelector("#composer:not([hidden]), #askBar:not([hidden])") : null;
+  const above = foot?.getBoundingClientRect().top;
+  box.classList.toggle("low", !!above);
+  box.style.top = above ? `${above - 8}px` : "";
+  box.replaceChildren(note);
   setTimeout(() => note.classList.add("out"), 2600);
   setTimeout(() => note.remove(), 3000);
 }
@@ -50,19 +56,30 @@ const ACT_ICONS = {
   transfer: "owner", lock: "lock", unlock: "key", end: "end", leave: "leave",
   reply: "reply", copy: "copy", edit: "edit", pin: "pin", unpin: "pin", dm: "mail", at: "chat", report: "report",
   block: "block", unblock: "block", del: "delete", remove: "delete", save: "download", voters: "people",
+  now: "projector", done: "answered",
 };
 const actBtn = ([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a },
   ACT_ICONS[a] ? [icon(ACT_ICONS[a]), el("span", { text: bare(label) })] : label);
 
+// a break between groups of menu buttons: a small heading, or with no label just more room, so what belongs
+// together reads as one group and the destructive ones stand apart
+const actGap = (label) => el("div", { class: "agap", role: label ? "heading" : "presentation", "aria-level": label ? "3" : null, text: label || null });
+
 // a bottom sheet; resolves with the data-a of the button pressed (or null when dismissed)
+// buttons: [action, label, class] rows, with { group: label } between groups (label "" for a gap with no heading)
 // cols: 3 lays a long menu out three to a row; head: a heading element to use instead of the plain title
 export function sheet(title, body, buttons = [], { onOpen, cols, head } = {}) {
   return new Promise((res) => {
     const ov = el("div", { class: "overlay" });
+    const n = buttons.filter(Array.isArray).length;
     const box = el("div", { class: "sheet", role: "dialog", "aria-label": title },
       head || (title ? el("h2", { text: title }) : null), body,
-      buttons.length ? el("div", { class: "actions" + (buttons.length > 3 ? " many" + (cols === 3 ? " three" : "") : buttons.length === 2 ? " pair" : "") }, buttons.map(actBtn)) : null);
+      n ? el("div", { class: "actions" + (n > 3 ? " many" + (cols === 3 ? " three" : "") : n === 2 ? " pair" : "") },
+        buttons.map((b) => (Array.isArray(b) ? actBtn(b) : actGap(b.group)))) : null);
     ov.append(box);
+    // a note sitting low over the room would cover the sheet's buttons: it goes back to the top
+    const notes = $("#toasts");
+    if (notes?.classList.contains("low")) { notes.classList.remove("low"); notes.style.top = ""; }
     const done = (v) => { ov.remove(); document.removeEventListener("keydown", esc); res(v); };
     const esc = (e) => { if (e.key === "Escape") done(null); };
     ov.addEventListener("click", (e) => {
@@ -75,6 +92,16 @@ export function sheet(title, body, buttons = [], { onOpen, cols, head } = {}) {
     document.body.append(ov);
     onOpen?.(ov);
   });
+}
+// a menu table's rows that show (shows(row)), with each { group } break kept only when something in its group shows
+export function grouped(entries, shows) {
+  const out = [];
+  let brk = null;
+  for (const e of entries) {
+    if (!Array.isArray(e)) brk = e;
+    else if (shows(e)) { if (brk && out.length) out.push(brk); brk = null; out.push(e); }
+  }
+  return out;
 }
 export const confirmSheet = (title, text, ok, cls = "danger") => sheet(title, el("p", { class: "muted", text }), [["no", t("cancel")], ["yes", ok, cls]]).then((a) => a === "yes");
 // Enter in this field presses the sheet's OK button (never while an IME is composing)
