@@ -97,6 +97,7 @@ I18N.add("de", {
   openStoa: "🌐 Offene Stoa",
   closedSession: "🔐 Privater Salon",
   pubNote: "Alle mit dem Code oder dem Link können beitreten.",
+  privNote: "Beitreten nur mit dem Link oder QR-Code.",
   e2ee: "Ende-zu-Ende-Verschlüsselung",
   encNote: "Raumname, Spitznamen und Nachrichten können nur Personen mit dem Link lesen – nicht einmal der Server sieht sie. Beigetreten wird per Link oder QR-Code; der 4-stellige Code allein reicht nicht.",
   createFail: "Gerade kann kein Raum erstellt werden. Bitte versuch es noch einmal",

@@ -34,14 +34,14 @@ export async function create() {
     el("b", { text: bare(t(name)) }), sub);
   const seg = el("div", { class: "seg kinds", role: "radiogroup", "aria-label": t("roomType") },
     kind("pub", "stoa", "stoa", "openStoa", el("span", { class: "ds", text: t("pubNote") }), true),
-    kind("priv", "salon", "salon", "closedSession", el("span", { class: "kbadge" }, icon("secure", "sm"), bare(t("e2ee"))), false));
+    kind("priv", "salon", "salon", "closedSession", [el("span", { class: "ds", text: t("privNote") }), el("span", { class: "kbadge" }, icon("secure", "sm"), bare(t("e2ee")))], false));
   const encNote = el("div", { class: "encnote", hidden: true }, icon("secure"), el("span", { text: t("encNote") }));
   // who I am in the room, asked here rather than in a sheet of its own
   const f = meFields();
   const body = el("div", { class: "form" },
     el("div", { class: "grp" }, el("label", { class: "lbl", for: "newTitle", text: t("roomName") }), title),
     el("div", { class: "grp" }, el("span", { class: "lbl", text: t("roomType") }), seg, encNote),
-    el("div", { class: "grp" }, el("h3", { text: t("meFirst") }), el("p", { class: "hint", text: t("meHint") }), f.grid,
+    el("div", { class: "grp part" }, el("h3", { text: t("meFirst") }), el("p", { class: "hint", text: t("meHint") }), f.grid,
       el("label", { class: "lbl", for: "meName", text: t("nickname") }), f.input));
   const go = await sheet(t("newRoom"), body, [["no", t("cancel")], ["yes", t("start"), "primary"]], { onOpen: (ov) => {
     const start = ov.querySelector("[data-a=yes]");

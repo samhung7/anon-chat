@@ -97,6 +97,7 @@ I18N.add("fr", {
   openStoa: "🌐 Stoa Ouverte",
   closedSession: "🔐 Salon Privé",
   pubNote: "Toute personne ayant le code ou le lien peut rejoindre.",
+  privNote: "On ne peut rejoindre qu'avec le lien ou le QR code.",
   e2ee: "Chiffrement de bout en bout",
   encNote: "Le nom, les pseudos et les messages ne sont lisibles que par les personnes qui ont le lien. Même le serveur ne peut pas les voir. On rejoint avec le lien ou le QR code ; le code à 4 caractères seul ne suffit pas.",
   createFail: "Impossible de créer un salon pour le moment. Veuillez réessayer",

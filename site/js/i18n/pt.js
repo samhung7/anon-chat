@@ -97,6 +97,7 @@ I18N.add("pt", {
   openStoa: "🌐 Stoa Aberta",
   closedSession: "🔐 Salão Privado",
   pubNote: "Qualquer pessoa com o código ou o link pode entrar.",
+  privNote: "Só dá para entrar com o link ou o QR code.",
   e2ee: "Criptografia de ponta a ponta",
   encNote: "O nome, os apelidos e as mensagens só podem ser lidos por quem tem o link. Nem o servidor consegue vê-los. As pessoas entram pelo link ou pelo QR code; só o código de 4 caracteres não basta.",
   createFail: "Não foi possível criar uma sala agora. Tente de novo",

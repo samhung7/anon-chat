@@ -97,6 +97,7 @@ I18N.add("zh-TW", {
   openStoa: "🌐 公開議廊",
   closedSession: "🔐 私人沙龍",
   pubNote: "有 4 碼或連結的人都能加入。",
+  privNote: "只能用連結或 QR code 加入。",
   e2ee: "端對端加密",
   encNote: "名稱、暱稱和訊息只有拿到連結的人看得到，伺服器也看不到。只能用連結或 QR code 加入，光輸入 4 碼進不來。",
   createFail: "暫時開不了新聊天室，請再試一次",

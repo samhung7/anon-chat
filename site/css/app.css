@@ -328,6 +328,8 @@ code { font-size: .9em; }
 .form .grp > .lbl + .field, .form .grp > .avpick + .lbl { margin-top: 0; }
 .form .grp > .avpick + .lbl { margin-top: 6px; }
 .form h3 { margin: 0; font: var(--text-title); }
+/* a second part of the form (who I am, after the room itself): a rule and more room above it than between groups */
+.form .grp.part { border-top: 1px solid var(--line); padding-top: 22px; margin-top: 6px; }
 .form .hint { margin: -2px 0 4px; color: var(--muted); font-size: var(--fs-md); text-wrap: pretty; }
 .form .encnote { margin-top: 2px; }
 .share .encnote { text-align: start; }

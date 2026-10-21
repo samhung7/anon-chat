@@ -97,6 +97,7 @@ I18N.add("en", {
   openStoa: "🌐 Open Stoa",
   closedSession: "🔐 Private Salon",
   pubNote: "Anyone with the code or the link can join.",
+  privNote: "Only people with the link or QR code can join.",
   e2ee: "End-to-end encryption",
   encNote: "The name, nicknames and messages can only be read by people with the link. Not even the server can see them. People join with the link or the QR code; the 4-character code alone won't get them in.",
   createFail: "Couldn't create a room right now. Please try again",
