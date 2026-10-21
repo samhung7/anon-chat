@@ -142,17 +142,19 @@ function bubble(id, v, dm, { prev = LIST().lastElementChild, show = false } = {}
     return folded;
   }
   const atMe = !mine && !dm && mentionsMe(v.text), who = room.author(v, dm);
+  const more = el("button", { type: "button", class: "more", "aria-label": t("msgMenu"), onclick: () => msgActions(id, (dm ? null : room.msgs.get(id)) || v, dm) }, icon("more"));
   const node = el("div", { class: "msg" + (mine ? " mine" : "") + (cont ? " cont" : "") + (atMe ? " atme" : ""), ...attrs },
-    cont ? null : el("div", { class: "who" },
+    cont || mine ? null : el("div", { class: "who" },
       el("span", { class: "av", "data-a": who.avatar }, avatar(who.avatar)),
       el("span", { class: "nm", text: who.name + room.badge(v.by) }),
       el("time", { text: fmtTime(v.at) })),
     v.rp ? replyQuote(v.rp, dm) : null,
     // the ⋯ beside the bubble opens what can be done with a message; the bubble itself is for reading
-    // (and selecting text), a photo opens full size, a poll's options vote
+    // (and selecting text), a photo opens full size, a poll's options vote. My own messages carry their time
+    // beside the bubble, under the ⋯, rather than on a line of its own above it
     el("div", { class: "brow" },
       kindOf(v).bubble(id, v, dm),
-      el("button", { type: "button", class: "more", "aria-label": t("msgMenu"), onclick: () => msgActions(id, (dm ? null : room.msgs.get(id)) || v, dm) }, icon("more"))),
+      mine && !cont ? el("div", { class: "side" }, more, el("time", { text: fmtTime(v.at) })) : more),
     v.ed ? el("small", { class: "edited", text: t("edited") }) : null,
     dm ? null : el("div", { class: "re" }));
   if (!dm) fillReacts(node, v);
@@ -285,9 +287,9 @@ export function renderDesc() {
   const text = el("div", { class: "dtext" }, linkify(desc));
   const more = el("button", { type: "button", class: "link dmore", "aria-expanded": String(open), text: t(open ? "descLess" : "descMore"), onclick: toggle });
   box.classList.toggle("open", open);
-  const hide = el("button", { type: "button", class: "link dhide", text: t("descHide"), onclick: () => { setDescHidden(true); toast(t("descHiddenToast")); } });
-  // closed: the first line, with 更多 and 隱藏 at its end; open: all of it, then 收起 (and 編輯 for the owner and
-  // co-hosts) with 隱藏 at the far right
+  const hide = el("button", { type: "button", class: "icon dhide", "aria-label": t("descHide"), title: t("descHide"), onclick: () => { setDescHidden(true); toast(t("descHiddenToast")); } }, icon("close", "sm"));
+  // closed: the first line, with 更多 and a quiet × (hide) at its end; open: all of it, then 收起 (and 編輯 for the
+  // owner and co-hosts) with the × at the far right
   if (!open) box.replaceChildren(text, more, hide);
   else box.replaceChildren(text, el("div", { class: "drow" }, more,
     room.isStaff() ? el("button", { type: "button", class: "link", text: t("editDesc"), onclick: () => editDesc() }) : null, hide));

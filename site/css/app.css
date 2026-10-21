@@ -242,8 +242,6 @@ code { font-size: .9em; }
 .who .av img { width: 22px; height: 22px; border-radius: 50%; display: block; }
 .who .nm { color: var(--text); font-weight: var(--fw-semibold); }
 .who time { font-size: var(--fs-xs); }
-.mine .who { margin-right: 6px; }
-.mine .who .av, .mine .who .nm { display: none; }
 .bub {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-xl); padding: 8px 13px;
   white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; user-select: text; min-width: 0;
@@ -256,6 +254,12 @@ code { font-size: .9em; }
 .more { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); border-radius: 50%; padding: 0; cursor: pointer; }
 .more .st-i { width: 18px; height: 18px; }
 .more:hover, .more:active { background: var(--surface-2); color: var(--text); }
+/* the ⋯ on every message is quiet, so a column of them doesn't read as part of the conversation; where there's a
+   mouse it shows only on the message under it */
+.brow > .more, .brow > .side > .more { opacity: .55; }
+@media (hover: hover) and (pointer: fine) { .brow > .more, .brow > .side > .more { opacity: 0; } .msg:hover .more, .msg .more:focus-visible { opacity: 1; } }
+.brow > .side { flex: none; display: flex; flex-direction: column; align-items: flex-end; align-self: flex-end; }
+.brow > .side time { font-size: var(--fs-xs); color: var(--muted); line-height: 1; margin: 0 4px 4px 0; }
 .re { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .mine .re { justify-content: flex-end; }
 .re:empty { display: none; }
@@ -460,8 +464,9 @@ code { font-size: .9em; }
 /* the room's description: one line under the header with 更多 at its end, all of it when opened */
 .desc { display: flex; align-items: center; gap: 10px; background: var(--surface); border-bottom: 1px solid var(--line); padding: 2px 8px 2px 14px; min-height: var(--hit); font-size: var(--fs-md); }
 .desc .dtext { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; color: var(--muted); }
-.desc > .dmore, .desc > .dhide { flex: none; min-height: var(--hit); padding: 0 2px; font-size: var(--fs-md); }
-.desc .dhide { color: var(--muted); }
+.desc > .dmore { flex: none; min-height: var(--hit); padding: 0 2px; font-size: var(--fs-md); }
+.desc .dhide { flex: none; width: var(--hit); height: var(--hit); min-height: 0; color: var(--muted); }
+.desc.open .dhide { min-width: 32px; width: 32px; height: 32px; margin-right: -6px; }
 .desc .drow .dhide { margin-left: auto; }
 .desc.open { display: block; padding: 8px 14px 6px; }
 .desc.open .dtext { color: var(--text); white-space: pre-wrap; word-break: break-word; max-height: 40dvh; overflow-y: auto; cursor: auto; }
@@ -480,7 +485,8 @@ code { font-size: .9em; }
 #recSub { display: inline-flex; align-items: center; gap: 4px; }
 .foldbtn { display: inline-flex; align-items: center; gap: 6px; }
 /* pinned announcements: one line until opened */
-.pins { background: var(--surface); border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
+/* a shade apart from the description above it, so the two bars read as two things */
+.pins { background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: var(--fs-md); }
 .pins .pinhead { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; color: inherit; font: inherit; padding: 10px 14px; min-height: var(--hit); text-align: left; cursor: pointer; }
 .pins .pinhead > .st-i:first-child { color: var(--accent-ink); }
 .pins .pinhead .one { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: var(--fw-semibold); }
