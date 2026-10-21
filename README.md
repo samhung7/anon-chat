@@ -126,3 +126,31 @@ deploy the service to `api.stoatalk.app`, and `R2_ACCESS_KEY_ID` / `R2_SECRET_AC
 and write on the bucket), which the cleanup uses.
 
 Capacity on the free (Spark) plan: 100 people online at once across all rooms, 1 GB stored, 10 GB downloaded a month. A lecture with more than 100 people needs the pay-as-you-go (Blaze) plan; chat text is small, so the cost is usually tiny. When all 100 connections are taken, the database turns new ones away without an error; the page then gives up after 20 seconds and says the server can't be reached, and a page left in the background with no room on screen lets go of its connection after a minute.
+
+## Staging
+
+Every pull request is deployed to a preview of its own before it's merged: `https://<branch>.stoatalk.pages.dev`
+(Cloudflare makes the branch name lowercase, turns `/` and other signs into `-` and keeps 28 characters), and a comment
+on the pull request gives the exact address. Pushing to a branch named `staging` does the same at
+`https://staging.stoatalk.pages.dev`. Merging into `main` is still the only way anything reaches stoatalk.app.
+
+A preview is the same site with `staging/config.js` in place of `site/js/config.js` (`.github/workflows/staging.yml`),
+so it uses a separate Firebase project, a separate photo service (`worker/` deployed with `--env staging` as
+`stoatalk-photos-staging` at `api-staging.stoatalk.app`) and a separate bucket (`stoatalk-photos-staging`, public at
+`files-staging.stoatalk.app`): rooms, photos and reports made while testing never mix with the real ones. Each preview
+deploys its own `database.rules.json` and `worker/` to staging first, so with two pull requests open, staging's rules
+and service are the last one pushed. Pages show a STAGING tag at the top and `[S]` in the tab's title; the
+`*.pages.dev` addresses send `noindex` (`site/_headers`). The hourly cleanup also clears staging's idle rooms.
+
+Setup, once (all on free plans):
+
+1. Firebase: create a second project (e.g. `stoatalk-staging`) and set it up like the first (steps 1-4 of
+   *Setting up Firebase*, Singapore again), then copy its web config into `staging/config.js` as `firebase`.
+   For `site/admin.html` on staging, also add `staging.stoatalk.pages.dev` under Authorized domains and enable Google.
+2. Its service account key and database URL go in the GitHub secrets `STAGING_FIREBASE_SERVICE_ACCOUNT` and
+   `STAGING_FIREBASE_DATABASE_URL`. Without them a preview deploys only the site.
+3. Cloudflare R2: create the bucket `stoatalk-photos-staging`, connect `files-staging.stoatalk.app`, give it a CORS
+   policy allowing `GET`/`HEAD` from `*` (or the preview addresses), and a lifecycle rule deleting objects after 7 days
+   (the cleanup leaves staging's photos to it).
+4. The deploy token (`CLOUDFLARE_API_TOKEN`) already covers Pages and Workers; `api-staging.stoatalk.app` is made by the
+   first deploy. Web Push on staging uses the same `VAPID_KEY`.

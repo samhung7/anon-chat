@@ -4,6 +4,8 @@
 # With CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY it also deletes photos in R2 no room points at.
 # With VAPID_KEY (the secret worker.yml hands the push service too) it warns rooms' members by Web Push an hour before
 # their room turns read-only and an hour before it's deleted.
+# With STAGING_FIREBASE_SERVICE_ACCOUNT and STAGING_FIREBASE_DATABASE_URL (staging.yml) it does the same for the staging
+# database, but opens no issue for its reports; the staging bucket's photos go by its own lifecycle rule.
 name: Delete expired rooms
 on:
   schedule:
@@ -26,6 +28,24 @@ jobs:
     steps:
       - if: env.FIREBASE_SERVICE_ACCOUNT == ''
         run: echo "FIREBASE_SERVICE_ACCOUNT is not set; skipping."
+      - if: env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: actions/checkout@v4
+      - if: env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: env.FIREBASE_SERVICE_ACCOUNT != ''
+        working-directory: tools/cleanup
+        run: npm ci && node cleanup.mjs
+  cleanup-staging:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.STAGING_FIREBASE_SERVICE_ACCOUNT }}
+      FIREBASE_DATABASE_URL: ${{ secrets.STAGING_FIREBASE_DATABASE_URL }}
+      VAPID_KEY: ${{ secrets.VAPID_KEY }}
+    steps:
+      - if: env.FIREBASE_SERVICE_ACCOUNT == ''
+        run: echo "STAGING_FIREBASE_SERVICE_ACCOUNT is not set; skipping."
       - if: env.FIREBASE_SERVICE_ACCOUNT != ''
         uses: actions/checkout@v4
       - if: env.FIREBASE_SERVICE_ACCOUNT != ''

@@ -1,0 +1,86 @@
+# Staging: try a change on a real site before it reaches stoatalk.app.
+# Every pull request (and every push to the staging branch) is deployed to its own Cloudflare Pages preview,
+# https://<branch>.stoatalk.pages.dev (the staging branch: https://staging.stoatalk.pages.dev), with staging/config.js
+# in place of site/js/config.js, so it runs against the staging Firebase project and the staging photo service
+# (worker/ with --env staging), never stoatalk.app's data. The pull request gets a comment with the address.
+# The preview's database rules and photo service are deployed from the same commit first, so the three always match;
+# with two pull requests open, staging's rules and service are whichever was pushed last.
+# Secrets: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (as for production), STAGING_FIREBASE_SERVICE_ACCOUNT and
+# STAGING_FIREBASE_DATABASE_URL (the staging project's, like the FIREBASE_* ones in cleanup.yml); VAPID_KEY is shared.
+# Without the STAGING_FIREBASE_* secrets only the site is deployed.
+name: Staging
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [staging]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: write   # the comment with the preview's address
+concurrency:
+  group: staging-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  deploy:
+    # a fork's pull request gets no secrets
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.STAGING_FIREBASE_SERVICE_ACCOUNT }}
+      FIREBASE_DATABASE_URL: ${{ secrets.STAGING_FIREBASE_DATABASE_URL }}
+      VAPID_KEY: ${{ secrets.VAPID_KEY }}
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+    steps:
+      - if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "CLOUDFLARE_API_TOKEN is not set; skipping."
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        uses: actions/checkout@v4
+
+      # the database rules, on the staging project
+      - if: env.CLOUDFLARE_API_TOKEN != '' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: env.CLOUDFLARE_API_TOKEN != '' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        working-directory: tools/cleanup
+        run: npm ci && node deploy-rules.mjs
+
+      # the photo and push service, as stoatalk-photos-staging at api-staging.stoatalk.app
+      - if: env.CLOUDFLARE_API_TOKEN != '' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        id: project
+        run: node -e 'console.log("id=" + JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT).project_id)' >> "$GITHUB_OUTPUT"
+      - if: env.CLOUDFLARE_API_TOKEN != '' && env.FIREBASE_SERVICE_ACCOUNT != ''
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          wranglerVersion: "4"
+          environment: staging
+          secrets: ${{ env.VAPID_KEY != '' && 'VAPID_KEY' || '' }}
+          command: deploy --env staging --var PROJECT_ID:${{ steps.project.outputs.id }} --var DATABASE_URL:${{ env.FIREBASE_DATABASE_URL }}
+
+      # the site, with the staging settings
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: tools/stamp.sh && cp staging/config.js site/js/config.js
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        id: pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: pages deploy site --project-name stoatalk --branch "${{ env.BRANCH }}" --commit-hash "${{ github.event.pull_request.head.sha || github.sha }}" --commit-dirty=true
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.pages.outputs.pages-deployment-alias-url || steps.pages.outputs.deployment-url }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          note="Staging preview: $URL"$'\n\n'"Runs against the staging database and photo service, not stoatalk.app's. Updated with every push to this pull request."
+          [ -n "$FIREBASE_SERVICE_ACCOUNT" ] || note+=$'\n\n'"(STAGING_FIREBASE_* secrets aren't set yet, so only the site was deployed.)"
+          echo "$note" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$PR" ]; then gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none --body "$note"; fi
