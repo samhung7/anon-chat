@@ -38,7 +38,7 @@ export const bare = (label) => String(label).replace(/^\p{Extended_Pictographic}
 export function toast(text) {
   if (!text) return;
   const box = $("#toasts"), note = el("div", { class: "toast", text: bare(text) });
-  const chat = $("#chat"), foot = chat && !chat.hidden && !document.querySelector(".overlay") && chat.querySelector("#composer:not([hidden]), #askBar:not([hidden])");
+  const chat = $("#chat"), foot = chat && !chat.hidden && !document.querySelector(".overlay") ? chat.querySelector("#composer:not([hidden]), #askBar:not([hidden])") : null;
   const above = foot?.getBoundingClientRect().top;
   box.classList.toggle("low", !!above);
   box.style.top = above ? `${above - 8}px` : "";
