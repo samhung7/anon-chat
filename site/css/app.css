@@ -406,6 +406,8 @@ code { font-size: .9em; }
 .toasts { position: fixed; left: 0; right: 0; top: calc(64px + env(safe-area-inset-top)); z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; padding: 0 16px; }
 .toast { background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 999px; font-size: 14px; box-shadow: var(--shadow); max-width: 100%; transition: opacity .3s, transform .3s; }
 .toast.out { opacity: 0; transform: translateY(-6px); }
+.toasts.low { transform: translateY(-100%); }
+.toasts.low .toast.out { transform: translateY(6px); }
 @keyframes fade { from { opacity: 0; } }
 @keyframes up { from { transform: translateY(24px); } }
 
