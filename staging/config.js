@@ -1,7 +1,7 @@
 /* Site settings for staging: .github/workflows/staging.yml puts this file in place of site/js/config.js before it deploys
    a preview, so the preview talks to the staging Firebase project and photo service, never to stoatalk.app's data.
    firebase: the web app config of the staging Firebase project (Project settings > Your apps > Web app); public by design.
-Everything else is as in site/js/config.js. */
+   Everything else is as in site/js/config.js. */
 window.CHAT_CONFIG = {
   firebase: {
     apiKey: "AIzaSyDM4qoE9ChsPyOc-VcaXT1_e46EwCHQU_Q",
