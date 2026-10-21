@@ -48,10 +48,17 @@ function announce(code, msg, meta) {
   return { c: code, k: "m", n: msg.name, a: msg.avatar, r: meta.title || "", ...what };
 }
 
+// whether a page at origin may call the service: ORIGINS lists them, comma-separated; "https://*.x.dev" stands for
+// every https page one or more levels under x.dev (staging lets each pull request's preview at <branch>.stoatalk.pages.dev in)
+export function allowedOrigin(origin, list) {
+  return !!origin && (list || "").split(",").map((o) => o.trim()).some((o) => o === origin ||
+    (o.startsWith("https://*.") && origin.startsWith("https://") && origin.endsWith(o.slice(9)) && origin.length > o.length - 1 && !origin.includes("/", 8)));
+}
+
 export function makeHandler({ verify, read, fetcher = (...a) => fetch(...a) }) {
   return async (req, env) => {
     const origin = req.headers.get("Origin");
-    const cors = origin && (env.ORIGINS || "").split(",").includes(origin) ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {};
+    const cors = allowedOrigin(origin, env.ORIGINS) ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {};
     const out = (status) => new Response(null, { status, headers: cors });
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors,
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "86400" } });

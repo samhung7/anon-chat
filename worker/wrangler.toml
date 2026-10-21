@@ -16,3 +16,17 @@ bucket_name = "stoatalk-photos"
 PROJECT_ID = "anon-chat-2792b"
 DATABASE_URL = "https://anon-chat-2792b-default-rtdb.asia-southeast1.firebasedatabase.app"
 ORIGINS = "https://stoatalk.app"
+
+# Staging (.github/workflows/staging.yml deploys it with --env staging): the same service as stoatalk-photos-staging at
+# api-staging.stoatalk.app, with its own bucket (public at files-staging.stoatalk.app) and the staging Firebase project.
+# PROJECT_ID and DATABASE_URL come from the STAGING_FIREBASE_* secrets at deploy time (--var), so they aren't here.
+# Every pull request's preview (<branch>.stoatalk.pages.dev) and the staging branch's site may call it.
+[env.staging]
+routes = [{ pattern = "api-staging.stoatalk.app", custom_domain = true }]
+
+[[env.staging.r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "stoatalk-photos-staging"
+
+[env.staging.vars]
+ORIGINS = "https://*.stoatalk.pages.dev,https://staging.stoatalk.app"

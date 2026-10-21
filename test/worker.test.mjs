@@ -119,7 +119,7 @@ test("cleanup: the bucket listed page by page over R2's S3 API", async () => {
 
 /* ---------- Web Push ---------- */
 import { encrypt, vapid, sealSub, openSub, b64u, validSubscription } from "../worker/src/push.js";
-import { makeHandler, readDb } from "../worker/src/index.js";
+import { makeHandler, readDb, allowedOrigin } from "../worker/src/index.js";
 import { unsignedUid } from "./photo-stub.mjs";
 
 const hkdfBits = async (ikm, salt, info, n) => new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info },
@@ -211,4 +211,12 @@ test("push service: announces a message to members with a subscription who aren'
   assert.equal((await go("POST", "/push/notify/ABCD", "bob", { id: "d1", to: "carol" })).status, 409);
   assert.deepEqual(await (await go("POST", "/push/notify/ABCD", "bob", { id: "d1", to: "alice" })).json(), { sent: 1, next: null });
   assert.deepEqual(JSON.parse(await alice.open(pushed[1].init.body)), { c: "ABCD", k: "d" });
+});
+
+test("service: only the listed pages may call it (staging lets every preview under *.stoatalk.pages.dev in)", () => {
+  const list = "https://stoatalk.app,https://*.stoatalk.pages.dev";
+  for (const o of ["https://stoatalk.app", "https://staging.stoatalk.pages.dev", "https://claude-x.stoatalk.pages.dev"]) assert.ok(allowedOrigin(o, list), o);
+  for (const o of [null, "", "https://stoatalk.pages.dev", "https://evilstoatalk.pages.dev", "http://staging.stoatalk.pages.dev",
+    "https://staging.stoatalk.pages.dev.evil.com", "https://stoatalk.app.evil.com"]) assert.ok(!allowedOrigin(o, list), o);
+  assert.ok(!allowedOrigin("https://stoatalk.app", ""));
 });
