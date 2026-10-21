@@ -59,6 +59,19 @@ async function removeQ(id, waiting) {
   orToast(room.api.removeQuestion(id, { waiting, clearNow: room.isStaff() && room.meta?.qnow === id }));
 }
 const markDone = (id, on) => orToast(room.api.markDone(id, on, on && room.meta?.qnow === id));
+// the host's other steps for a question: on the projector or off, answered or not, take it down
+async function qMenu(q, live) {
+  const a = await sheet("", el("p", { class: "muted qansq", text: q.text }), [
+    ...(!q.done || live ? [["now", t(live ? "qNowOff" : "qNowOn")]] : []),
+    ["done", t(q.done ? "qUndone" : "qDone")],
+    { group: "" },
+    ["remove", t("qRemove"), "danger"],
+  ]);
+  if (!room || room.gone) return;
+  if (a === "now") orToast(room.api.setQNow(live ? null : q.id));
+  if (a === "done") markDone(q.id, !q.done);
+  if (a === "remove") removeQ(q.id, false);
+}
 // write, rewrite or take down the answer; saving one also marks the question answered (and keeps it on the projector if it's the live one)
 async function answerQ(q) {
   const input = el("textarea", { class: "field", maxlength: LIMITS.answer, rows: 6, id: "ansText", placeholder: t("qAnsPh"), "aria-label": t("qAnsTitle") });
@@ -100,13 +113,11 @@ function qCard(q, waiting) {
   const btn = (label, fn, cls = "") => el("button", { type: "button", class: "btn small " + cls, text: label, onclick: fn });
   const tools = [];
   if (waiting) tools.push(btn(t("qApprove"), () => approveQ(q.id), "primary"), btn(t("qReject"), () => removeQ(q.id, true), "danger"));
-  else if (!room.gone) {
-    if (staff && !q.bad) tools.push(btn(t(q.ans ? "qAnsEdit" : "qAnsWrite"), () => answerQ(q), q.ans ? "" : "primary"));
-    if (staff && (!q.done || live)) tools.push(btn(t(live ? "qNowOff" : "qNowOn"), () => orToast(room.api.setQNow(live ? null : q.id))));
-    if (staff) tools.push(btn(t(q.done ? "qUndone" : "qDone"), () => markDone(q.id, !q.done)));
-    // taking a question down is quiet red text at the far end
-    if (staff || mine) tools.push(btn(t(mine && !staff ? "qTakeBack" : "qRemove"), () => removeQ(q.id, false), "danger end"));
-  }
+  else if (!room.gone && staff) {
+    // one step in view, writing or rewriting the answer; the rest wait under ⋯ so the card reads at a glance
+    if (!q.bad) tools.push(btn(t(q.ans ? "qAnsEdit" : "qAnsWrite"), () => answerQ(q), "primary"));
+    tools.push(el("button", { type: "button", class: "btn small more end", "aria-label": t("more"), onclick: () => qMenu(q, live) }, icon("more")));
+  } else if (!room.gone && mine) tools.push(btn(t("qTakeBack"), () => removeQ(q.id, false), "danger end"));
   // vote | question, the host's tools on a row of their own; a waiting question shows an hourglass where the vote goes
   return el("div", { class: "qcard" + (live ? " live" : "") + (q.done ? " done" : "") + (waiting ? " waiting" : ""), id: "q-" + q.id },
     waiting ? el("span", { class: "wicon" }, icon("hourglass")) : el("button", { type: "button", class: "upvote" + (voted ? " on" : ""), "aria-pressed": String(voted), "aria-label": t("qUpvote"),
