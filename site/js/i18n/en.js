@@ -685,4 +685,12 @@ I18N.add("en", {
   qzNeedQ: "Question {n} has no question yet",
   qzNeedOpts: "Question {n} needs at least two options",
   qzNeedRight: "Question {n} has no right answer marked",
+  qzImg: "Question picture",
+  qzImgAdd: "Add a picture",
+  qzImgChange: "Change picture",
+  qzImgDrop: "Remove picture",
+  qzImgUp: "Uploading pictures {n} of {total}…",
+  qzImgFail: "The pictures didn't upload. Please try again",
+  qzProject: "Show on the projector screen",
+  qzShowJoin: "Scan the QR Code to enter the room, then tap the quiz card to play",
 });

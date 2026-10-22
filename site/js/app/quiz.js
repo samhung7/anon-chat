@@ -6,11 +6,17 @@
    the total after the last question is the result, which the card then shows.
    What may be read when is held by the rules (tools/rules.py QUIZ): the whole set only by the hosts, a question only
    once asked, its right answers only once answering is over, and nobody's answer but your own while it's open.
-   Room.followQuiz keeps up with each quiz; this draws it and makes the host's moves. */
+   A question's picture goes to R2 like a photo (photos.js) when the quiz starts, sealed in a Private Salon; the room's
+   copy of the set says where each one is, and a question as asked carries that along once it's out.
+   Room.followQuiz keeps up with each quiz; this draws it and makes the host's moves, and the projector screen
+   (show.js) shows the one that's on, larger, for a room watching together. */
 import { t } from "./text.js?v=dev";
-import { el, toast, icon, avatar, orToast, confirmSheet, saveFile } from "./dom.js?v=dev";
+import { el, toast, icon, avatar, orToast, confirmSheet, saveFile, busy } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
-import { backend } from "./backend.js?v=dev";
+import { backend, PHOTOS } from "./backend.js?v=dev";
+import { b64u, unb64u } from "./crypto.js?v=dev";
+import { uploadPhoto, pictureBytes, jpegUrl, dropPhoto } from "./photos.js?v=dev";
+import { SHOW, openShow } from "./show.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { me } from "./identity.js?v=dev";
 import { post } from "./composer.js?v=dev";
@@ -19,6 +25,7 @@ import { QUIZ, SHAPES, pad, asked, settle, ranking, cleanSet, cleanScores, score
 import { library } from "./quizedit.js?v=dev";
 
 const AUTO_NEXT = 6000; // ms the scores stay up before the next question, when the host lets it go on by itself
+const SHOW_AFTER = 5 * 60e3; // ms the projector keeps showing a quiz's result after it saw the quiz end
 const quizOf = (z) => room?.quizzes.get(z) || null;
 const nameOf = (e, uid) => e.p?.[uid] || (room.who(uid) ? { n: room.who(uid).name, a: room.who(uid).avatar } : { n: t("someoneLeft"), a: "👤" });
 // a host's write: JSON in a plain room, sealed in a Private Salon (Room.openBlob reads it back)
@@ -26,25 +33,79 @@ const blob = async (r, x, aad) => (r.cipher ? r.cipher.seal(x, aad) : JSON.strin
 const running = (e) => !!e?.live && e.live.ph !== "end";
 
 /* ---------- starting one ---------- */
-// the card and the quiz go in one write: who runs it, the whole set (for the hosts' eyes), and the lobby
+// the card and the quiz go in one write: who runs it, the whole set (for the hosts' eyes), and the lobby. The pictures
+// go to R2 first, each under an id that starts with the quiz's and goes on with 10 random letters, so nobody can
+// guess where one is before its question is out
 export async function startQuiz(set) {
   if (!room || room.gone) return false;
   if (room.readOnly) { toast(t("roNoPost")); return false; }
   if (!room.isStaff()) { toast(t("qzHostsOnly")); return false; }
   const on = [...room.quizzes.entries()].find(([, e]) => running(e));
   if (on) { toast(t("qzOneAtATime")); openQuiz(on[0]); return false; }
+  if (!PHOTOS && set.q.some((q) => q.img)) { toast(t("qzImgFail")); return false; }
   const r = room, uid = backend.uid;
   let z = null;
   const ok = await post(KIND.quiz, { t: set.t, n: set.q.length }, async (id) => {
     z = id;
     return {
       [r.api.root(`qz/${id}/by`)]: uid,
-      [r.api.root(`qz/${id}/src`)]: await blob(r, set, `zs:${id}`),
+      [r.api.root(`qz/${id}/src`)]: await blob(r, { t: set.t, q: await putPictures(r, id, set.q) }, `zs:${id}`),
       [r.api.root(`qz/${id}/live`)]: { ph: "lobby", i: "00", at: backend.now(), d: 0, n: set.q.length, lock: false },
     };
-  }, { wait: true });
+  }, { wait: true }).catch((err) => { console.error(err); toast(t("qzImgFail")); return false; });
   if (ok && z && r === room) openQuiz(z);
   return ok;
+}
+
+const PIC_ID = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+const picId = (z) => z + Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => PIC_ID[b % PIC_ID.length]).join("");
+// the questions as the room keeps them: each picture put in R2, and where it is in its place
+async function putPictures(r, z, qs) {
+  const total = qs.filter((q) => q.img).length;
+  if (!total) return qs.map(({ img, im, ...q }) => q);
+  busy(true);
+  try {
+    const out = [];
+    for (const { img, im, ...q } of qs) {
+      if (img) {
+        toast(t("qzImgUp", { n: out.filter((x) => x.im).length + 1, total }));
+        const f = picId(z), bytes = unb64u(img.d);
+        await uploadPhoto(r.code, f, r.cipher ? await r.cipher.sealRaw(bytes, `zi:${z}:${f}`) : bytes, !!r.cipher);
+        r.imgs.set("zi" + f, Promise.resolve(jpegUrl(bytes))); // no need to fetch my own
+        q.im = { f, w: img.w, h: img.h };
+      }
+      out.push(q);
+    }
+    return out;
+  } finally { busy(false); }
+}
+// a question's picture as a blob: URL, fetched once per visit (null if it's gone); by: who started the quiz
+export function quizPicture(r, z, by, f) {
+  const key = "zi" + f;
+  if (!r.imgs.has(key)) r.imgs.set(key, pictureBytes(r, by, f, `zi:${z}:${f}`).then((b) => (b ? jpegUrl(b) : null), () => null)
+    .then((u) => { if (!u) r.imgs.delete(key); return u; }));
+  return r.imgs.get(key);
+}
+// ...as an <img>, the same one each time (the page is drawn again with every answer that comes in)
+const pics = new Map();
+function picture(z, q) {
+  if (!q?.im) return null;
+  const f = q.im.f;
+  if (!pics.has(f)) {
+    const img = el("img", { class: "qzimg", width: q.im.w, height: q.im.h, alt: t("qzImg"), decoding: "async" });
+    quizPicture(room, z, room.msgs.get(z)?.by, f).then((u) => { if (u) img.src = u; else img.hidden = true; });
+    pics.set(f, img);
+  }
+  return pics.get(f);
+}
+// when a quiz's card is deleted: its pictures out of R2 too, those this device knows of (the hourly cleanup takes the rest)
+export async function dropQuizPictures(z, by) {
+  const r = room;
+  if (!r || !z) return;
+  const ids = new Set(Object.values(quizOf(z)?.q || {}).map((q) => q?.im?.f).filter(Boolean));
+  const set = await sets.get(r.code + ":" + z)?.catch(() => null);
+  set?.q.forEach((q) => q.im && ids.add(q.im.f));
+  ids.forEach((f) => dropPhoto(r.code, by, f));
 }
 
 /* ---------- the host's moves ---------- */
@@ -139,12 +200,12 @@ export function watchQuiz(r) {
   }).on("msg-removed", (id) => { if (view?.z === id) { closeView(); toast(t("qzGone")); } });
   const tick = setInterval(() => {
     if (!r.current || r.gone) return;
-    for (const [z, e] of r.quizzes) if (running(e) && r.isStaff() && (hosting.has(z) || r.msgs.get(z)?.by === backend.uid)) drive(z, e);
+    for (const [z, e] of r.quizzes) if (running(e) && r.isStaff() && !SHOW() && (hosting.has(z) || r.msgs.get(z)?.by === backend.uid)) drive(z, e);
     if (view && quizOf(view.z)) {
       if (stage(quizOf(view.z)) !== view.stage) draw(); else clock();
     }
   }, 200);
-  r.off.push(() => { clearInterval(tick); closeView(); hosting.clear(); revAt.clear(); });
+  r.off.push(() => { clearInterval(tick); closeView(); hosting.clear(); revAt.clear(); pics.clear(); });
 }
 // a host's device moves the quiz on by itself: answering stops at the end of the time or once everyone has answered,
 // and with "next by itself" on, the next question follows a few seconds after the scores
@@ -209,7 +270,8 @@ export function openQuiz(z) {
   const ov = el("div", { class: "overlay gameov quizov" }, el("div", { class: "gamebox quizbox", role: "dialog", "aria-label": v.quiz.t },
     el("header", { class: "gmhead" },
       el("button", { type: "button", class: "icon", "aria-label": t("close"), onclick: closeView }, icon("close")),
-      el("div", { class: "gmttl" }, el("b", { text: v.quiz.t }), el("small", { class: "muted qzstep" }))),
+      el("div", { class: "gmttl" }, el("b", { text: v.quiz.t }), el("small", { class: "muted qzstep" })),
+      room.isStaff() ? el("button", { type: "button", class: "icon", "aria-label": t("qzProject"), title: t("qzProject"), onclick: openShow }, icon("projector")) : null),
     body));
   document.addEventListener("keydown", esc);
   document.body.append(ov);
@@ -222,14 +284,14 @@ function closeView() {
   view = null;
 }
 const secsLeft = (l) => Math.max(0, Math.ceil((l.at + l.d * 1000 - backend.now()) / 1000));
-// the parts that run with the clock, between redraws
-function clock() {
-  const e = quizOf(view.z), l = e?.live;
+// the parts that run with the clock, between redraws (on the quiz's page, or the projector's: root)
+function clock(root = view.body, z = view.z) {
+  const l = quizOf(z)?.live;
   if (!l || l.ph !== "q") return;
   const now = backend.now();
-  view.body.querySelectorAll(".qzcount").forEach((n) => (n.textContent = Math.max(1, Math.ceil((l.at - now) / 1000))));
-  view.body.querySelectorAll(".qzsecs").forEach((n) => (n.textContent = secsLeft(l)));
-  view.body.querySelectorAll(".qzbar i").forEach((n) => (n.style.width = `${Math.max(0, Math.min(100, (100 * (l.at + l.d * 1000 - now)) / (l.d * 1000)))}%`));
+  root.querySelectorAll(".qzcount").forEach((n) => (n.textContent = Math.max(1, Math.ceil((l.at - now) / 1000))));
+  root.querySelectorAll(".qzsecs").forEach((n) => (n.textContent = secsLeft(l)));
+  root.querySelectorAll(".qzbar i").forEach((n) => (n.style.width = `${Math.max(0, Math.min(100, (100 * (l.at + l.d * 1000 - now)) / (l.d * 1000)))}%`));
 }
 function draw() {
   const e = quizOf(view?.z);
@@ -281,7 +343,7 @@ function question(e, host, z) {
   const l = e.live, i = l.i, q = e.q[i], now = backend.now();
   if (!q) return el("p", { class: "muted", text: t("loading") });
   const head = el("div", { class: "qzq" }, ptsTag(q), el("h2", { class: "qzt", text: q.t }));
-  if (now < l.at) return el("div", { class: "qzpre" }, head, el("p", { class: "muted", text: t("qzGetReady") }), el("b", { class: "qzcount", "aria-live": "polite" }));
+  if (now < l.at) return el("div", { class: "qzpre" }, head, picture(z, q), el("p", { class: "muted", text: t("qzGetReady") }), el("b", { class: "qzcount", "aria-live": "polite" }));
   const open = now <= l.at + l.d * 1000, mine = e.mine[i], playing = !!e.p[backend.uid];
   const opts = el("div", { class: "qzopts" }, q.o.map((o, k) => el(host || !playing ? "div" : "button", {
     type: host || !playing ? null : "button", class: `qzopt qz${k}` + (mine?.c === k ? " picked" : "") + (mine && mine.c !== k ? " dim" : ""),
@@ -289,7 +351,7 @@ function question(e, host, z) {
     onclick: host || !playing ? null : () => answer(z, i, k),
   }, el("span", { class: "shape", "aria-hidden": "true", text: SHAPES[k] }), el("span", { class: "otext", text: o }))));
   const ids = Object.keys(e.p), answered = ids.filter((uid) => e.all[i]?.[uid]).length;
-  return el("div", { class: "qzlive" }, head,
+  return el("div", { class: "qzlive" }, head, picture(z, q),
     el("div", { class: "qztime" }, el("span", { class: "qzbar" }, el("i")), el("b", { class: "qzsecs" })),
     opts,
     host ? el("p", { class: "muted small", text: t("qzAnswered", { n: answered, total: ids.length }) }) : null,
@@ -353,6 +415,61 @@ function saveCsv(e, s, z) {
 }
 // the set this quiz was played from, into this device's library (for a co-host who didn't make it, or a set from a file)
 async function keepSet(z) {
-  try { await library.add(await setOf(room, z)); toast(t("qzSavedLib")); }
+  const r = room, by = r.msgs.get(z)?.by;
+  try {
+    const set = await setOf(r, z);
+    // the pictures back from R2, into the set itself
+    const q = await Promise.all(set.q.map(async ({ im, ...q }) => {
+      const b = im && (await pictureBytes(r, by, im.f, `zi:${z}:${im.f}`).catch(() => null));
+      return b ? { ...q, img: { d: b64u(b), w: im.w, h: im.h } } : q;
+    }));
+    await library.add({ t: set.t, q });
+    toast(t("qzSavedLib"));
+  }
   catch (err) { console.error(err); toast(t("qzLibFail")); }
+}
+
+/* ---------- on the projector (show.js) ---------- */
+// the quiz the projector screen shows: one that's on, or one it saw end a few minutes ago (its result)
+const seenOn = new Map(); // quiz -> when this screen last saw it on
+export function shownQuiz() {
+  const now = backend.now();
+  for (const [z, e] of room?.quizzes || []) if (running(e) && room.msgs.get(z)?.quiz) { seenOn.set(z, now); return z; }
+  for (const [z, at] of seenOn) if (at > now - SHOW_AFTER && quizOf(z)?.live && room.msgs.get(z)?.quiz) return z;
+  return null;
+}
+// where it's at, to know when to draw it again
+export const quizStage = (z) => stage(quizOf(z));
+export const quizClock = (root, z) => clock(root, z);
+// the screen: everything as large as the room needs it, nothing to tap
+export function quizScreen(z) {
+  const e = quizOf(z), l = e?.live, v = room.msgs.get(z);
+  if (!l || !v) return null;
+  const head = el("div", { class: "sqzh" }, el("span", { class: "qlive" }, icon("trophy"), el("span", { text: t("quiz") })), el("b", { text: v.quiz.t }),
+    el("span", { class: "sqzstep", text: l.ph === "lobby" ? t("qzLobby") : l.ph === "end" ? t("qzOver") : t("qzQ", { n: +l.i + 1, total: l.n }) }));
+  const ids = Object.keys(e.p);
+  if (l.ph === "lobby") return el("div", { class: "sqz lobby" }, head, el("p", { class: "sqzjoin", text: t("qzShowJoin") }),
+    el("h2", { text: t("qzPlayers", { n: ids.length }) }),
+    el("div", { class: "qzplayers" }, ids.map((uid) => el("span", { class: "chip", text: `${e.p[uid].a} ${e.p[uid].n}` }))));
+  if (l.ph === "end") {
+    const s = e.final || e.s[l.i], rows = s ? ranking(s) : [];
+    return el("div", { class: "sqz end" }, head, rows.length ? podium(e, rows) : el("p", { class: "shint big", text: t(s ? "qzNobody" : "loading") }),
+      rows.length > 3 ? board(e, s, 10) : null);
+  }
+  const q = e.q[l.i];
+  if (!q) return el("div", { class: "sqz" }, head, el("p", { class: "shint big", text: t("loading") }));
+  const title = el("h1", { class: "sqzt", text: q.t });
+  if (l.ph === "q" && backend.now() < l.at) return el("div", { class: "sqz pre" }, head, title, picture(z, q), el("b", { class: "qzcount" }));
+  const key = l.ph === "rev" ? e.k[l.i] : null, s = l.ph === "rev" ? e.s[l.i] : null, total = s ? Math.max(1, s.n.reduce((a, b) => a + b, 0)) : 1;
+  const opts = el("div", { class: "qzopts" + (s ? " shown" : "") }, q.o.map((o, k) => el("div", { class: `qzopt qz${k}` + (key ? (key.includes(k) ? " right" : " dim") : "") },
+    el("span", { class: "shape", "aria-hidden": "true", text: SHAPES[k] }), el("span", { class: "otext", text: o }),
+    key?.includes(k) ? icon("check") : null,
+    s ? el("span", { class: "ocount", text: s.n[k] || 0 }) : null,
+    s ? el("span", { class: "obar", style: `width:${(100 * (s.n[k] || 0)) / total}%` }) : null)));
+  if (l.ph === "rev") return el("div", { class: "sqz rev" }, head, title, opts,
+    s ? board(e, s) : el("p", { class: "shint", text: t("qzScoring") }));
+  const answered = ids.filter((uid) => e.all[l.i]?.[uid]).length;
+  return el("div", { class: "sqz q" }, head, title, picture(z, q),
+    el("div", { class: "qztime" }, el("span", { class: "qzbar" }, el("i")), el("b", { class: "qzsecs" })),
+    opts, el("p", { class: "sqzn", text: room.isStaff() ? t("qzAnswered", { n: answered, total: ids.length }) : t("qzPlayers", { n: ids.length }) }));
 }

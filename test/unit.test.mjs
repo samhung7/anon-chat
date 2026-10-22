@@ -224,4 +224,16 @@ test("quiz: a set is cleaned, asked without its answers, scored by speed, ranked
   assert.equal(Q.fromFile("not json"), null);
   assert.equal(Q.fromFile(JSON.stringify({ kind: "stoatalk-quiz", v: 1, t: "x", q: [] })), null);
   assert.match(Q.scoresCsv([[1, 'A "b", c', 900, 1]], ["Rank", "Name", "Points", "Right"]), /^﻿Rank,Name,Points,Right\r\n1,"A ""b"", c",900,1\r\n$/);
+  // a picture: kept in a set and a file as the JPEG itself; in the room only where it is, and that goes out with the question
+  const img = { d: "_9j_4AAQ", w: 640, h: 480 }, f = "-Nquiz0000000000000Aabc123XYZ0";
+  const withPic = Q.cleanSet({ t: "p", q: [{ ...set.q[0], img, im: { f, w: 640, h: 480 } }] }).q[0];
+  assert.deepEqual([withPic.img, withPic.im], [img, { f, w: 640, h: 480 }]);
+  assert.equal(Q.cleanQuestion({ ...set.q[0], img: { d: "not base64!", w: 1, h: 1 } }).img, undefined);
+  assert.equal(Q.cleanQuestion({ ...set.q[0], img: { d: "x".repeat(Q.QUIZ.imgChars + 1), w: 1, h: 1 } }).img, undefined);
+  assert.equal(Q.cleanQuestion({ ...set.q[0], img: { ...img, w: 0 } }).img, undefined);
+  assert.equal(Q.cleanQuestion({ ...set.q[0], im: { f: "../x", w: 1, h: 1 } }).im, undefined);
+  assert.deepEqual(Q.asked(withPic)[0].im, { f, w: 640, h: 480 });
+  assert.deepEqual(Q.cleanAsked(Q.asked(withPic)[0]).im, { f, w: 640, h: 480 });
+  const back = Q.fromFile(Q.toFile({ t: "p", q: [withPic] })).q[0];
+  assert.deepEqual([back.img, back.im], [img, undefined]);
 });

@@ -685,4 +685,12 @@ I18N.add("de", {
   qzNeedQ: "Frage {n} hat noch keinen Fragetext",
   qzNeedOpts: "Frage {n} braucht mindestens zwei Optionen",
   qzNeedRight: "Bei Frage {n} ist keine richtige Antwort markiert",
+  qzImg: "Bild zur Frage",
+  qzImgAdd: "Bild hinzufügen",
+  qzImgChange: "Bild ändern",
+  qzImgDrop: "Bild entfernen",
+  qzImgUp: "Bilder werden hochgeladen: {n} von {total}…",
+  qzImgFail: "Die Bilder konnten nicht hochgeladen werden. Bitte versuch es noch einmal",
+  qzProject: "Auf dem Projektorbildschirm zeigen",
+  qzShowJoin: "QR-Code scannen, um den Raum zu betreten, dann auf die Quizkarte tippen und mitspielen",
 });

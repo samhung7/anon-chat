@@ -19,7 +19,7 @@ import { gameCard, gameText, GAME } from "./games.js?v=dev";
 import { GAMES, DAY_RE } from "./puzzles.js?v=dev";
 import { postCard, savedPostCard, openPost, editPost, copyPost, knownBody, postName } from "./posts.js?v=dev";
 import { knownComments } from "./comments.js?v=dev";
-import { quizCard, savedQuizCard, quizResult } from "./quiz.js?v=dev";
+import { quizCard, savedQuizCard, quizResult, dropQuizPictures } from "./quiz.js?v=dev";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 export { esc as escHtml };
@@ -270,8 +270,9 @@ const quiz = {
   preview: (v) => quoteText(snippet(v)),
   pinned: (v) => "🏆 " + v.quiz.t,
   notice: (v) => `🏆 ${t("quiz")}${t("colon")}${v.quiz.t}`,
-  // the quiz goes with its card
+  // the quiz goes with its card, and its pictures once it has
   removes: (v, id) => ({ ["qz/" + id]: null }),
+  removed: (v) => dropQuizPictures(v.zid, v.by),
   toSaved: (v) => { if (!v.quiz) return {}; const r = quizResult(v.zid); return { quiz: { ...v.quiz, r: r.length ? r : undefined } }; },
   readSaved: (m) => {
     const q = cleanQuiz(m?.quiz), r = arr(m?.quiz?.r).slice(0, 300).map((x) => ({ n: str(x?.n, 24) || "？", a: str(x?.a, 8) || "👤", s: clamp(Math.round(num(x?.s)), 0, 200000) }));

@@ -685,4 +685,12 @@ I18N.add("zh-CN", {
   qzNeedQ: "第 {n} 题还没有题目",
   qzNeedOpts: "第 {n} 题至少要有两个选项",
   qzNeedRight: "第 {n} 题还没有正确答案",
+  qzImg: "题目图片",
+  qzImgAdd: "添加一张图片",
+  qzImgChange: "换图片",
+  qzImgDrop: "移除图片",
+  qzImgUp: "上传图片 {n} / {total}…",
+  qzImgFail: "图片没有上传成功，请再试一次",
+  qzProject: "在投影画面显示",
+  qzShowJoin: "扫描二维码进入聊天室，点竞答卡片就能参加",
 });

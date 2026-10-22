@@ -1,6 +1,6 @@
 /* The projector screen (?show). For a lecture hall: how to join (QR Code, address and code) beside the question
-   being answered and the most upvoted ones, or the latest poll. It opens in its own tab, as the same person, and
-   follows the room live. */
+   being answered and the most upvoted ones, or the latest poll. While a quiz is on (quiz.js) it shows the quiz instead,
+   across the whole screen once the questions start. It opens in its own tab, as the same person, and follows the room live. */
 import { APP, params } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
 import { $, el, qrSvg, icon, avatar, bare } from "./dom.js?v=dev";
@@ -10,6 +10,7 @@ import { room } from "./session.js?v=dev";
 import { pollView, livePoll } from "./polls.js?v=dev";
 import { byVotes } from "./qa.js?v=dev";
 import { roomUrl } from "./home.js?v=dev";
+import { shownQuiz, quizScreen, quizStage, quizClock } from "./quiz.js?v=dev";
 
 let showing = params.has("show");
 export const SHOW = () => showing;
@@ -18,8 +19,16 @@ export const endShow = () => { showing = false; };
 export function watchShow(r) {
   const ifPoll = (id, v) => { if (v.poll) renderShow(); };
   r.on("meta", renderShow).on("members", renderShow).on("qs", renderShow)
-    .on("msg", ifPoll).on("msg-changed", ifPoll).on("msg-removed", renderShow);
+    .on("msg", ifPoll).on("msg-changed", ifPoll).on("msg-removed", renderShow).on("quiz", renderShow);
+  // a quiz moves on with the clock too: drawn again when it does, its countdown kept up in between
+  const tick = setInterval(() => {
+    if (!showing || !r.current) return;
+    const z = shownQuiz(), at = z ? z + quizStage(z) : "";
+    if (at !== shownAt) renderShow(); else if (z) quizClock($("#show"), z);
+  }, 200);
+  r.off.push(() => clearInterval(tick));
 }
+let shownAt = "";
 export function openShow() {
   const k = room.cipher && store.get(KEYS.roomKey(room.code));
   const url = location.pathname + "?room=" + room.code + "&show=1" + asParam("&") + (k ? "#k=" + k : "");
@@ -39,6 +48,14 @@ function drawShow() {
   $(".shost", box).textContent = room.cipher ? "" : location.host + location.pathname.replace(/index\.html$/, "");
   $(".scode", box).textContent = room.cipher ? "" : room.code;
   $(".sppl", box).replaceChildren(icon("people"), t("showPeople", { n: Object.values(room.members).filter((m) => m.online !== false).length }));
+  const z = shownQuiz();
+  shownAt = z ? z + quizStage(z) : "";
+  box.classList.toggle("quizon", !!z && !shownAt.startsWith(z + "lobby"));
+  if (z) {
+    $(".smain", box).replaceChildren(quizScreen(z) || "");
+    $(".spoll", box).replaceChildren();
+    return quizClock(box, z);
+  }
   const poll = [...room.msgs.values()].reverse().find((v) => v.poll);
   const pollBox = poll ? el("div", { class: "spollbox" }, pollView(livePoll(poll), null)) : null;
   const live = meta.qnow && room.qs.get(meta.qnow), showLive = live && (!live.done || live.ans);

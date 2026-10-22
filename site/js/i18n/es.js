@@ -685,4 +685,12 @@ I18N.add("es", {
   qzNeedQ: "La pregunta {n} aún no tiene enunciado",
   qzNeedOpts: "La pregunta {n} necesita al menos dos opciones",
   qzNeedRight: "La pregunta {n} no tiene respuesta correcta marcada",
+  qzImg: "Imagen de la pregunta",
+  qzImgAdd: "Añadir una imagen",
+  qzImgChange: "Cambiar imagen",
+  qzImgDrop: "Quitar imagen",
+  qzImgUp: "Subiendo imágenes {n} de {total}…",
+  qzImgFail: "No se pudieron subir las imágenes. Inténtalo de nuevo",
+  qzProject: "Mostrar en la pantalla del proyector",
+  qzShowJoin: "Escanea el código QR para entrar a la sala y toca la tarjeta del quiz para jugar",
 });

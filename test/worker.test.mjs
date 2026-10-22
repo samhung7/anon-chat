@@ -83,6 +83,16 @@ test("photo service: a photo goes once its marker is gone, a room's once the roo
   assert.equal(await call("OPTIONS", "/photo/ABCD/bob/f1.jpg", null), 204);
 });
 
+test("photo service: a quiz's picture goes once its quiz is gone", async () => {
+  const z = "-Nquiz0000000000000A", f = z + "abc123XYZ0";
+  assert.equal(await call("PUT", `/photo/ABCD/alice/${f}.jpg`, "alice", JPEG), 201);
+  await db("rooms/ABCD/qz/" + z, { by: "alice" });
+  assert.equal(await call("DELETE", `/photo/ABCD/alice/${f}`, "bob"), 409); // its quiz is still there
+  await db("rooms/ABCD/qz/" + z, null);
+  assert.equal(await call("DELETE", `/photo/ABCD/alice/${f}`, "bob"), 204);
+  assert.equal(bucket.objects.size, 0);
+});
+
 test("cleanup: photos no marker points at, once they're old enough", async () => {
   const t = Date.now(), old = t - GRACE - 1;
   const objects = [
@@ -92,9 +102,14 @@ test("cleanup: photos no marker points at, once they're old enough", async () =>
     { key: "ABCD/bob/f3.bin", uploaded: t - 1000 }, // being sent right now
     { key: "WXYZ/bob/f1.bin", uploaded: old },   // its room is gone
     { key: "junk", uploaded: old },
+    { key: "ABCD/bob/-Nquiz0000000000000Aabc123XYZ0.jpg", uploaded: old },  // its quiz is on
+    { key: "ABCD/bob/-Nquiz0000000000000Babc123XYZ0.jpg", uploaded: old },  // its quiz is gone
+    { key: "ABCD/eve/-Nquiz0000000000000Aabc123XYZ1.bin", uploaded: old },  // not the quiz's host's
   ];
   const markers = async (code) => (code === "ABCD" ? { f1: { by: "bob", at: 1 } } : null);
-  assert.deepEqual(await strayPhotos(objects, markers, t), ["ABCD/bob/f2.jpg", "ABCD/eve/f1.jpg", "WXYZ/bob/f1.bin", "junk"]);
+  const quizBy = async (code, z) => (code === "ABCD" && z === "-Nquiz0000000000000A" ? "bob" : null);
+  assert.deepEqual(await strayPhotos(objects, markers, t, quizBy), ["ABCD/bob/f2.jpg", "ABCD/eve/f1.jpg", "WXYZ/bob/f1.bin", "junk",
+    "ABCD/bob/-Nquiz0000000000000Babc123XYZ0.jpg", "ABCD/eve/-Nquiz0000000000000Aabc123XYZ1.bin"]);
 });
 
 test("cleanup: the bucket listed page by page over R2's S3 API", async () => {

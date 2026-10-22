@@ -3,14 +3,23 @@
 // catches what it missed. A photo is only taken once it's GRACE old, so one being sent right now isn't touched.
 export const GRACE = 15 * 60e3;
 const KEY = /^([^/]+)\/([^/]+)\/([A-Za-z0-9_-]+)\.(jpg|bin)$/;
+const QUIZ_IMG = /^([A-Za-z0-9_-]{20})[A-Za-z0-9]{10}$/; // a quiz's picture (as in worker/src/index.js): kept while its quiz is
 
-// objects: [{ key, uploaded (ms) }]; markers(code) gives that room's files/ (or null). Returns the keys to delete.
-export async function strayPhotos(objects, markers, now = Date.now()) {
-  const rooms = new Map(), stray = [];
+// objects: [{ key, uploaded (ms) }]; markers(code) gives that room's files/ (or null); quizBy(code, quiz) who runs that
+// quiz (or null when it's gone). Returns the keys to delete.
+export async function strayPhotos(objects, markers, now = Date.now(), quizBy = async () => null) {
+  const rooms = new Map(), quizzes = new Map(), stray = [];
   for (const o of objects) {
     const m = KEY.exec(o.key);
     if (!m) { if (o.uploaded < now - GRACE) stray.push(o.key); continue; }
     if (o.uploaded >= now - GRACE) continue;
+    const q = QUIZ_IMG.exec(m[3]);
+    if (q) {
+      const k = m[1] + "/" + q[1];
+      if (!quizzes.has(k)) quizzes.set(k, await quizBy(m[1], q[1]));
+      if (quizzes.get(k) !== m[2]) stray.push(o.key);
+      continue;
+    }
     if (!rooms.has(m[1])) rooms.set(m[1], (await markers(m[1])) || {});
     if (rooms.get(m[1])[m[3]]?.by !== m[2]) stray.push(o.key);
   }
