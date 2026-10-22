@@ -18,6 +18,7 @@ import { exportSheet } from "./records.js?v=dev";
 import { roomUrl, home } from "./home.js?v=dev";
 import { failed } from "./lobby.js?v=dev";
 import { dropRoomPhotos } from "./photos.js?v=dev";
+import { editMine, editRoomQuick } from "./quick.js?v=dev";
 
 const owner = () => room.isOwner(), staff = () => room.isStaff(), always = () => true;
 // a meta setting the owner flips, with what the toast says after
@@ -29,10 +30,12 @@ const ENTRIES = [
   ["me", () => t("editMe"), always, () => askMe(false)],
   ["mute", () => t("muteRoom"), () => notifyOn(room.code), () => setNotify(false)],
   ["notify", () => t("notifyRoom"), () => !notifyOn(room.code), () => setNotify(true)],
+  ["quick", () => t("quickMine"), always, () => editMine()],
   ["export", () => t("exportChat"), always, () => exportSheet()],
   { group: "menuHost" },
   ["title", () => t("renameRoom"), owner, () => renameRoom()],
   ["desc", () => t("editDesc"), staff, () => editDesc()],
+  ["roomquick", () => t("quickRoom"), staff, () => editRoomQuick()],
   ["qaoff", () => t("qaOff"), () => owner() && room.meta?.qa, () => setQa(false)],
   ["qaon", () => t("qaOn"), () => owner() && !room.meta?.qa, () => setQa(true)],
   ["qmodoff", () => t("qModOff"), () => owner() && room.meta?.qa && room.meta.qmod, flip({ qmod: false }, "qModOffToast")],

@@ -199,6 +199,85 @@ test("a made-up nickname: 🎲 picks a colour and an animal, and one that is tak
   noErrors();
 });
 
+test("quick replies: one tap sends, answers while replying, my own and the room's; a double tap gives a 👍", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  await say(alice, "Welcome, everyone");
+  await bubble(bob, "Welcome, everyone").waitFor();
+
+  // the presets, in my language, above the empty box; one tap sends, and the chip rests a moment so it isn't sent twice
+  const bar = bob.locator("#quickBar");
+  await bar.locator(".chip", { hasText: "Agreed" }).click();
+  await bubble(alice, "👍 Agreed").waitFor();
+  assert.ok(await bar.locator(".chip", { hasText: "Agreed" }).isDisabled());
+  // it gives way while something is being typed
+  await bob.locator("#text").fill("typing…");
+  await bar.waitFor({ state: "hidden" });
+  await bob.locator("#text").fill("");
+  await bar.waitFor();
+
+  // while replying, answers to that message come first, and go out as a reply
+  await bob.locator("#list .msg:not(.mine) .more").first().click();
+  await press(bob, "reply");
+  await bar.locator(".chip.rp", { hasText: "I see it differently" }).click();
+  await alice.locator("#list .msg .rpq", { hasText: "Welcome" }).waitFor();
+  await bubble(alice, "🤔 I see it differently").waitFor();
+  assert.equal(await bar.locator(".chip.rp").count(), 0, "the reply is done");
+
+  // a double tap on a message gives it a 👍, and a second one doesn't take it back
+  await bubble(bob, "Welcome, everyone").dblclick();
+  await alice.locator("#list .msg .re .chip", { hasText: "👍 1" }).waitFor();
+  await bubble(bob, "Welcome, everyone").dblclick();
+  await bob.waitForTimeout(500);
+  const re = Object.values(await dbGet(`rooms/${code}/msgs`)).find((m) => m.text === "Welcome, everyone").re;
+  assert.equal(Object.keys(re[0]).length, 1);
+
+  // my own, from the ✎ at the end of the row: kept on this device only
+  await bar.locator("[data-a=quickEdit]").click();
+  await sheet(bob).locator(".qrow input").first().fill("Count me in");
+  await sheet(bob).locator(".qadd").click();
+  await sheet(bob).locator(".qrow input").last().fill("Brb");
+  await press(bob, "yes");
+  await bar.locator(".chip", { hasText: "Count me in" }).waitFor();
+  await bar.locator(".chip", { hasText: "Brb" }).waitFor();
+  assert.equal(await bar.locator(".chip", { hasText: "Agreed" }).count(), 0);
+  const kept = JSON.parse(await bob.evaluate(() => localStorage.getItem("chat-quick")));
+  assert.equal(kept[0], "Count me in");
+  assert.equal(kept.length, 7);
+  // turned off, the row goes; the ⋯ menu brings it back
+  await menuPick(bob, "quick");
+  await sheet(bob).locator("#quickOn").uncheck();
+  await press(bob, "yes");
+  await bar.waitFor({ state: "hidden" });
+  await menuPick(bob, "quick");
+  await press(bob, "quickreset");
+  await sheet(bob).locator("#quickOn").check();
+  await press(bob, "yes");
+  await bar.locator(".chip", { hasText: "Agreed" }).waitFor();
+  assert.equal(await bob.evaluate(() => localStorage.getItem("chat-quick")), null, "the presets aren't kept, so they follow the language");
+
+  // the room's own, from the host: first in everyone's row; members can't write them
+  await bob.locator("#chat .bar [data-a=menu]").click();
+  assert.equal(await sheet(bob).locator("[data-a=roomquick]").count(), 0);
+  await bob.keyboard.press("Escape");
+  await menuPick(alice, "roomquick");
+  await press(alice, "quicksample");
+  await press(alice, "yes");
+  await bar.locator(".chip.host", { hasText: "Got it" }).waitFor();
+  assert.equal((await bar.locator(".chip").first().textContent()), "✅ Got it");
+  assert.equal((await dbGet(`rooms/${code}/meta`)).qr, "✅ Got it\n🐢 Too fast\n🔁 Say that again?\n🔊 Can't hear");
+  await bar.locator(".chip.host", { hasText: "Too fast" }).click();
+  await bubble(alice, "🐢 Too fast").waitFor();
+  // a host who clears the list takes it out of everyone's row
+  await menuPick(alice, "roomquick");
+  for (let n = await sheet(alice).locator(".qrow").count(); n > 0; n--) await sheet(alice).locator(".qrow button").last().click();
+  await press(alice, "yes");
+  await bar.locator(".chip.host").first().waitFor({ state: "detached" });
+  assert.equal((await dbGet(`rooms/${code}/meta`)).qr, undefined);
+  noErrors();
+});
+
 test("private salon: only ciphertext on the server, the link is needed, private messages are sealed", async () => {
   const alice = await person("a"), bob = await person("b"), carol = await person("c");
   const { code, url } = await createRoom(alice, "Alice", { priv: true, title: "Secret" });
@@ -213,6 +292,13 @@ test("private salon: only ciphertext on the server, the link is needed, private 
   await bob.locator("#desc .dtext", { hasText: "Salon rules" }).waitFor();
   const sealed = await dbGet(`rooms/${code}/meta`);
   assert.ok(sealed.xd && !sealed.desc, "the description is only kept sealed");
+  // so are the room's quick replies
+  await menuPick(alice, "roomquick");
+  await press(alice, "quicksample");
+  await press(alice, "yes");
+  await bob.locator("#quickBar .chip.host", { hasText: "Too fast" }).waitFor();
+  const sealedQ = await dbGet(`rooms/${code}/meta`);
+  assert.ok(sealedQ.xr && !sealedQ.qr, "the room's quick replies are only kept sealed");
   await say(alice, "top secret words");
   await bubble(bob, "top secret words").waitFor();
   const msgs = Object.values(await dbGet(`rooms/${code}/msgs`));

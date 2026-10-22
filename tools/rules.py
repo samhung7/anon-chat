@@ -301,6 +301,12 @@ rules = {"rules": {
                          ".validate": S(500) + " && newData.val().length > 0 && newData.parent().child('enc').val() !== true"},
                 "xd": {".write": j("auth != null", is_staff("data.parent().parent()"), alive("data.parent().parent()")),
                        ".validate": SEALED(4200) + " && newData.parent().child('enc').val() === true"},
+                # the room's quick replies, one per line, shown first in everyone's row above the message box; the owner or
+                # a co-host writes them (sealed as xr in an encrypted room; 6 lines of 20 take at most about 1,100 sealed)
+                "qr": {".write": j("auth != null", is_staff("data.parent().parent()"), alive("data.parent().parent()")),
+                       ".validate": S(130) + " && newData.val().length > 0 && newData.parent().child('enc').val() !== true"},
+                "xr": {".write": j("auth != null", is_staff("data.parent().parent()"), alive("data.parent().parent()")),
+                       ".validate": SEALED(1200) + " && newData.parent().child('enc').val() === true"},
                 # up to three messages the owner pins as announcements, one per slot
                 "pins": {"$slot": {".validate": "$slot.matches(/^[0-2]$/) && " + PUSH_ID}},
                 "mods": {"$uid": {".validate": "newData.val() === true"}},

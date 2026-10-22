@@ -154,6 +154,18 @@ test("the room's description: the owner and co-hosts write it, in plain text up 
   await assertSucceeds(update(ref(db("carol"), `rooms/${C}/meta`), { desc: null }));
 });
 
+test("the room's quick replies: the owner and co-hosts write them, in plain text up to 130 characters", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { qr: "✅ 聽得懂" }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { qr: "✅ 聽得懂\n🐢 太快了" }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { qr: "x".repeat(131) }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { qr: "" }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { xr: "c2VhbGVk" })); // sealed only in a Private Salon
+  await set(ref(db("alice"), `rooms/${C}/meta/mods/carol`), true);
+  await assertSucceeds(update(ref(db("carol"), `rooms/${C}/meta`), { qr: "x".repeat(130) }));
+  await assertSucceeds(update(ref(db("carol"), `rooms/${C}/meta`), { qr: null }));
+});
+
 test("pins: the owner pins up to three messages; replies point at a message", async () => {
   await createRoom("alice"); await join("bob");
   await assertFails(set(ref(db("bob"), `rooms/${C}/meta/pins/0`), "-Nabc123"));
@@ -411,6 +423,10 @@ test("encrypted room: only ciphertext and hashed nicknames", async () => {
   await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { xd: "c2VhbGVk" }));
   await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { xd: "c2VhbGVk" }));
   await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { xd: "not base64!" }));
+  // and the room's quick replies
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { qr: "明文" }));
+  await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { xr: "c2VhbGVk" }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { xr: "c2VhbGVk" }));
   // after 48 idle hours the code can become an ordinary room again
   await idle(48 * HOUR + 60000);
   await assertSucceeds(createRoom("carol"));

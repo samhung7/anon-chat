@@ -19,6 +19,7 @@ export const LIMITS = {
   postTitle: 60, postBody: 20000, postEx: 200, postPhotos: 9, comment: 1000,
   pollQ: 200, pollOpt: 80, pollOpts: 10, drawTitle: 60, gifUrl: 500, gifTitle: 120,
   cap: 1000,
+  quick: 40, quicks: 8, roomQuick: 20, roomQuicks: 6,
 };
 export const DAY = 864e5;          // a room nobody wrote in for this long is gone
 export const MAX_LOAD = 2000;      // the most messages loaded on entering a room

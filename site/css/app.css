@@ -742,6 +742,27 @@ html.l10n .splash p { visibility: hidden; }
 .foldbtn { border: 1px dashed var(--line); background: none; color: var(--muted); border-radius: 14px; padding: var(--sp-1) var(--sp-3); font: inherit; font-size: 13px; cursor: pointer; }
 .mentionbar { display: flex; gap: 6px; overflow-x: auto; padding: 6px 10px; background: var(--surface); border-top: 1px solid var(--line); }
 .mentionbar .chip { flex: none; min-height: 32px; padding: 2px var(--sp-3); font-size: 14px; }
+/* quick replies (quick.js): the room's own first, with the accent; while replying, answers to that message, dashed */
+.quickbar { scrollbar-width: none; }
+.quickbar::-webkit-scrollbar { display: none; }
+.quickbar .chip { cursor: pointer; white-space: nowrap; }
+.quickbar .chip.host { border-color: var(--accent-ink); color: var(--accent-ink); font-weight: var(--fw-semibold); }
+.quickbar .chip.rp { border-style: dashed; }
+.quickbar .chip.edit { color: var(--muted); padding: 2px 10px; }
+.quickbar .chip:disabled { opacity: .45; cursor: default; }
+.qlist { display: flex; flex-direction: column; gap: var(--sp-2); }
+.qrow { display: flex; align-items: center; gap: var(--sp-1); }
+.qrow .field { flex: 1; min-width: 0; margin: 0; font-size: 16px; } /* under 16px, iPhone zooms in when it gets focus */
+.qrow .qup svg { transform: rotate(-90deg); }
+.qrow .qup:disabled { visibility: hidden; }
+.qadd { margin-top: var(--sp-2); }
+.qshow { display: flex; align-items: center; gap: var(--sp-2); margin-top: 14px; font-size: var(--fs-md); }
+.qshow input { width: 20px; height: 20px; accent-color: var(--accent-ink); }
+/* the 👍 a double tap gives, rising off the message */
+.brow { position: relative; }
+.likepop { position: absolute; left: 50%; top: 50%; font-size: 34px; pointer-events: none; animation: likepop .8s ease-out forwards; }
+@keyframes likepop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); } 25% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -120%) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .likepop { animation-duration: .01s; } }
 .replist { list-style: none; margin: 0; padding: 0; }
 .replist li { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .replist .go { display: block; width: 100%; border: 0; background: none; color: inherit; font: inherit; text-align: left; padding: 0; white-space: pre-wrap; word-break: break-word; cursor: pointer; }
