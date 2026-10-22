@@ -175,7 +175,7 @@ function showReports(all) {
 }
 function card(g) {
   const clear = Object.fromEntries(g.keys.map((k) => ["ops/reports/" + k, null]));
-  const takeDown = { ...clear, [`rooms/${g.code}/msgs/${g.msg}`]: null, [`rooms/${g.code}/reports/${g.msg}`]: null, ...(g.f ? { [`rooms/${g.code}/files/${g.f}`]: null } : {}) };
+  const takeDown = { ...clear, [`rooms/${g.code}/msgs/${g.msg}`]: null, [`rooms/${g.code}/reports/${g.msg}`]: null, [`rooms/${g.code}/posts/${g.msg}`]: null, ...(g.f ? { [`rooms/${g.code}/files/${g.f}`]: null } : {}) };
   const counts = REASONS.map((name, k) => [name, g.reasons.filter((x) => x === k).length]).filter(([, n]) => n).map(([name, n]) => `${name} ×${n}`).join("、");
   const btn = (text, cls, fn) => { const b = el("button", { type: "button", class: cls, text }); b.onclick = () => fn(b); return b; };
   return el("div", { class: "card" },

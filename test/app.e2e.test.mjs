@@ -837,6 +837,107 @@ test("mini-games in a Private Salon: scores are sealed, and still make the leade
   noErrors();
 });
 
+// opens the ＋ panel's long-post page and writes one; publish: send it, or leave it as a draft
+async function writePost(page, title, body, { publish = true } = {}) {
+  await page.locator("#composer [data-a=more]").click();
+  await page.locator("#picker .morebtn", { hasText: "Long post" }).click();
+  await page.locator(".writer .ptitlein").fill(title);
+  await page.locator(".writer .pbody").fill(body);
+  if (publish) { await page.locator(".writer .bar .btn.primary").click(); await page.locator(".writer").waitFor({ state: "detached" }); }
+}
+
+test("long posts: hosts write one on its own page, the chat shows a card, the text opens whole; owners open it up to members", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  // members don't get the tile until the owner allows it
+  await bob.locator("#composer [data-a=more]").click();
+  await bob.locator("#picker .morebtn", { hasText: "Poll" }).waitFor();
+  assert.equal(await bob.locator("#picker .morebtn", { hasText: "Long post" }).count(), 0);
+  await bob.locator("#composer [data-a=more]").click();
+
+  // what's being written stays on the device when the page is closed, and comes back
+  await writePost(alice, "Weekly notes", "draft only", { publish: false });
+  await alice.locator(".writer .bar [data-a=back]").click();
+  await alice.locator(".writer").waitFor({ state: "detached" });
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn", { hasText: "Long post" }).click();
+  assert.equal(await alice.locator(".writer .ptitlein").inputValue(), "Weekly notes");
+  assert.equal(await alice.locator(".writer .pbody").inputValue(), "draft only");
+  const text = "# Plan\n**Ship** it this week\n- one\n- two\n\n> a quote\nsee https://example.com";
+  await alice.locator(".writer .pbody").fill(text);
+  await alice.locator(".writer .bar .btn.primary").click();
+  await alice.locator(".writer").waitFor({ state: "detached" });
+
+  // the chat holds the card; the text sits apart
+  const card = bob.locator("#list .postbub", { hasText: "Weekly notes" });
+  await card.waitFor();
+  assert.match(await card.locator(".ps").textContent(), /^Plan Ship it this week one two a quote see https:\/\/example\.com$/);
+  const msgs = await dbGet(`rooms/${code}/msgs`), [id] = Object.keys(msgs);
+  assert.equal(msgs[id].pt, true);
+  assert.equal(msgs[id].post.t, "Weekly notes");
+  assert.equal(JSON.stringify(msgs[id]).includes("**Ship**"), false);
+  assert.equal((await dbGet(`rooms/${code}/posts/${id}`)).b, text);
+
+  // reading it whole: headings, bold, lists, quotes and links, and reacting as to any message
+  await card.click();
+  const reader = bob.locator(".reader");
+  await reader.locator(".md h3", { hasText: "Plan" }).waitFor();
+  assert.equal(await reader.locator(".md b").textContent(), "Ship");
+  assert.equal(await reader.locator(".md li").count(), 2);
+  await reader.locator(".md blockquote", { hasText: "a quote" }).waitFor();
+  await reader.locator(".md a[href='https://example.com']").waitFor();
+  await reader.locator(".re.big .chip").first().click();
+  await alice.locator("#list .re .chip", { hasText: "👍 1" }).waitFor();
+
+  // the author edits it; the open page follows
+  await alice.locator("#list .msg.mine .more").first().click();
+  await press(alice, "editpost");
+  await alice.locator(".writer .pbody").fill("# Plan B\nnew words");
+  await alice.locator(".writer .bar .btn.primary").click();
+  await reader.locator(".md h3", { hasText: "Plan B" }).waitFor();
+  await bob.locator("#list .msg .edited").waitFor();
+  await reader.locator(".bar [data-a=back]").click();
+  await reader.waitFor({ state: "detached" });
+
+  // the owner lets everyone write them; the owner can take one down, its text with it
+  await menuPick(alice, "postsopen");
+  await until(async () => (await dbGet(`rooms/${code}/meta/po`)) === true);
+  await writePost(bob, "From Bob", "hello from a member");
+  await alice.locator("#list .postbub", { hasText: "From Bob" }).waitFor();
+  const bobs = Object.entries(await dbGet(`rooms/${code}/msgs`)).find(([, v]) => v.by !== msgs[id].by)[0];
+  assert.ok(await dbGet(`rooms/${code}/posts/${bobs}`));
+
+  // an export carries the whole text, not only the card
+  await menuPick(alice, "export");
+  const [file] = await Promise.all([alice.waitForEvent("download"), press(alice, "json")]);
+  const a = JSON.parse(readFileSync(await file.path(), "utf8"));
+  assert.deepEqual(a.messages.map((m) => [m.post.t, m.post.b]), [["Weekly notes", "# Plan B\nnew words"], ["From Bob", "hello from a member"]]);
+
+  await alice.locator("#list .msg:not(.mine) .more").first().click();
+  await press(alice, "remove");
+  await press(alice, "yes");
+  await until(async () => (await dbGet(`rooms/${code}/posts/${bobs}`)) === null);
+  await bob.locator("#list .postbub", { hasText: "From Bob" }).waitFor({ state: "detached" });
+  noErrors();
+});
+
+test("long posts in a Private Salon: the card and the text are sealed, and members read them", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  await writePost(alice, "Secret plan", "**only** for us");
+  await bob.locator("#list .postbub", { hasText: "Secret plan" }).click();
+  await bob.locator(".reader .md b", { hasText: "only" }).waitFor();
+  const msgs = await dbGet(`rooms/${code}/msgs`), [id] = Object.keys(msgs);
+  assert.equal(msgs[id].pt, true);
+  assert.equal(msgs[id].post, undefined);
+  const body = await dbGet(`rooms/${code}/posts/${id}`);
+  assert.equal(body.b, undefined);
+  assert.ok(body.x && !JSON.stringify(body).includes("only") && !JSON.stringify(msgs).includes("Secret"));
+  noErrors();
+});
+
 test("on iPhone the keyboard doesn't cover a sheet being typed in", async () => {
   // iOS keeps the page its full height under the keyboard and only the visible part (visualViewport) shrinks,
   // so the phone's keyboard is played by a visualViewport that loses KB pixels at the bottom
