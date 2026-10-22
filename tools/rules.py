@@ -35,7 +35,8 @@ room_write = o(
     j(fresh_room, not_banned, "newData.child('meta/owner').val() === auth.uid", "newData.child('members/' + auth.uid).exists()",
       "!newData.child('msgs').exists()", "!newData.child('files').exists()", "!newData.child('dm').exists()", "!newData.child('banned').exists()",
       "!newData.child('reports').exists()", "!newData.child('qs').exists()", "!newData.child('qq').exists()", "!newData.child('qby').exists()",
-      "!newData.child('push').exists()", "!newData.child('games').exists()", "!newData.child('posts').exists()", "!newData.child('pc').exists()"),
+      "!newData.child('push').exists()", "!newData.child('games').exists()", "!newData.child('posts').exists()", "!newData.child('pc').exists()",
+      "!newData.child('pv').exists()", "!newData.child('ab').exists()", "!newData.child('av').exists()"),
 )
 
 member_join = j(
@@ -178,14 +179,56 @@ POST_MARK = {".validate": j("newData.val() === true", can_post,
                             o(ENC("newData.parent().parent().parent()"), "newData.parent().hasChild('post')"))}
 MSG_ROOM = "newData.parent().parent().parent().parent()"   # from rooms/$code/msgs/$id/votes/$uid
 # a vote: the options picked, as "0" or "0,2"; sealed in an encrypted room. Only one option unless the poll allows more.
+# Here only for a poll that is neither anonymous nor hidden (those keep their votes apart: pv, ab and av below)
 VOTE = {
     ".write": j("auth != null", "auth.uid === $uid", is_member("data.parent().parent().parent().parent()"),
-                alive("data.parent().parent().parent().parent()"), "data.parent().parent().child('closed').val() !== true"),
+                alive("data.parent().parent().parent().parent()"), "data.parent().parent().child('closed').val() !== true",
+                "!data.parent().parent().hasChild('an')", "!data.parent().parent().hasChild('rv')"),
     ".validate": o(j(ENC(MSG_ROOM), SEALED(200)),
                    j("!" + ENC(MSG_ROOM), "newData.parent().parent().child('poll').exists()",
                      o(r"newData.isString() && newData.val().matches(/^[0-9]$/)",
                        j("newData.parent().parent().child('poll/m').val() === true", r"newData.isString() && newData.val().matches(/^[0-9](,[0-9]){1,9}$/)")))),
 }
+WEEK = "604800000"
+# Two more kinds of poll keep their votes outside the message, where the rules decide who reads them:
+#   hidden until a time its author sets (rv on the message): pv/{msg}/{uid}, each person reads only their own vote;
+#   anonymous (an on the message): ballots under keys their voters pick, ab/{msg}/{key}, and which key is whose in
+#   av/{msg}/{uid}, which only its owner reads, so nobody in the room (the poll's author included) learns who voted how.
+#   A key is taken once and a ballot never deleted (taking a vote back leaves it empty), so no key can be reused.
+# Votes stop once the poll is revealed (or its author closes it, which reveals it early); from then everyone reads them.
+PMSG = f"{PROOM}.child('msgs/' + $m)"   # the poll, from rooms/$code/<pv|ab|av>/$m/...
+poll_open = j(f"{PMSG}.child('poll').exists() || {PMSG}.hasChild('x')", f"{PMSG}.child('closed').val() !== true",
+              o(f"!{PMSG}.hasChild('rv')", f"now < {PMSG}.child('rv').val()"))
+revealed = o(f"{PMSG}.child('closed').val() === true", f"now >= {PMSG}.child('rv').val()")
+can_vote = j("auth != null", is_member(PROOM), alive(PROOM), poll_open)
+PICKS = o(j(ENC(PROOM), SEALED(200)),
+          j("!" + ENC(PROOM), o(r"newData.isString() && newData.val().matches(/^[0-9]$/)",
+                                j(f"{PMSG}.child('poll/m').val() === true", r"newData.isString() && newData.val().matches(/^[0-9](,[0-9]){1,9}$/)"))))
+# all of a poll's votes go once the poll does, in the same update (by whoever deletes it)
+with_poll = j("auth != null", "!newData.exists()", "!newData.parent().parent().child('msgs/' + $m).exists()")
+HIDDEN_VOTES = {"$m": {
+    ".read": j("auth != null", is_member(PROOM), revealed),
+    ".write": with_poll,
+    "$uid": {".read": "auth != null && auth.uid === $uid",
+             ".write": j(can_vote, "auth.uid === $uid", f"{PMSG}.hasChild('rv')", f"!{PMSG}.hasChild('an')"),
+             ".validate": PICKS},
+}}
+BALLOTS = {"$m": {
+    ".read": j("auth != null", is_member(PROOM), o(f"!{PMSG}.hasChild('rv')", revealed)),
+    ".write": with_poll,
+    "$k": {".read": f"auth != null && {PROOM}.child('av/' + $m + '/' + auth.uid).val() === $k",   # my own, before it's revealed
+           ".write": j(can_vote, f"{PMSG}.child('an').val() === true", "newData.exists()",
+                       "newData.parent().parent().parent().child('av/' + $m + '/' + auth.uid).val() === $k"),
+           ".validate": o("newData.val() === ''", PICKS)},
+}}
+BALLOT_KEYS = {"$m": {
+    ".write": with_poll,
+    "$uid": {".read": "auth != null && auth.uid === $uid",
+             ".write": j(can_vote, "auth.uid === $uid", "!data.exists()", f"{PMSG}.child('an').val() === true",
+                         f"!{PROOM}.child('ab/' + $m + '/' + newData.val()).exists()",
+                         "newData.parent().parent().parent().child('ab/' + $m + '/' + newData.val()).exists()"),
+             ".validate": PUSH_ID},
+}}
 # the author edits a message's words: text in a plain room, the sealed x in an encrypted one; ed marks when
 EDIT_ROOM = "data.parent().parent().parent()"   # from rooms/$code/msgs/$id/<field>
 edit_write = j("auth != null", "data.parent().child('by').val() === auth.uid", is_member(EDIT_ROOM), alive(EDIT_ROOM))
@@ -391,6 +434,11 @@ rules = {"rules": {
                                              alive("data.parent().parent().parent().parent().parent()")),
                                  ".validate": "newData.val() === true"}}},
                     "votes": {"$uid": VOTE},
+                    # a poll whose votes are kept apart: anonymous (an), or hidden until rv, a time from now to a week on.
+                    # Plain beside a sealed poll too, so the rules can follow them. Set with the poll, never changed
+                    "an": {".validate": "newData.val() === true && (" + o(ENC(MEMBER_ROOM), "newData.parent().hasChild('poll')") + ")"},
+                    "rv": {".validate": j(o(ENC(MEMBER_ROOM), "newData.parent().hasChild('poll')"),
+                                          o("newData.val() === data.val()", j("!data.exists()", "newData.isNumber()", "newData.val() > now", f"newData.val() <= now + {WEEK}")))},
                     "cc": {"$cid": CC},
                     # the poll's author closes it; votes stop
                     "closed": {".write": j("auth != null", "data.parent().child('by').val() === auth.uid", alive(EDIT_ROOM)), ".validate": "newData.val() === true"},
@@ -431,6 +479,8 @@ rules = {"rules": {
                     "$other": NO,
                 },
             },
+            # the votes of hidden and anonymous polls (see HIDDEN_VOTES, BALLOTS and BALLOT_KEYS)
+            "pv": HIDDEN_VOTES, "ab": BALLOTS, "av": BALLOT_KEYS,
             "pc": {
                 ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
                 "$post": {

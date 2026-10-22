@@ -7,7 +7,7 @@ import { PUSH_ID } from "./clean.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { deviceKeys, sharedKey, unseal } from "./crypto.js?v=dev";
 import { room as current } from "./session.js?v=dev";
-import { plainFields, unsealedFields, finishOpen } from "./kinds.js?v=dev";
+import { plainFields, unsealedFields, finishOpen, openPicks } from "./kinds.js?v=dev";
 import { RoomApi } from "./api.js?v=dev";
 
 export const pairKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
@@ -59,6 +59,7 @@ export class Room extends Emitter {
     this.plain = new Map();     // sealed value -> what it opened to
     this.dk = new Map();        // private-chat keys
     this.imgs = new Map();      // photo id -> blob: URL
+    this.ballots = new Map();   // poll id -> its votes, when they're kept apart (followBallots)
     this.off = [];              // what stops each subscription
     this.gone = false; this.ready = false;
     this.readOnly = false;      // nobody spoke for 24 hours (js/app/expiry.js): read and save, nothing new
@@ -170,16 +171,17 @@ export class Room extends Emitter {
     on(fb.onValue(api.ref("members"), (s) => this.queue(() => this.takeMembers(s.val() || {})), lost));
     const msgs = fb.query(api.ref("msgs"), fb.limitToLast(MAX_LOAD));
     on(fb.onChildAdded(msgs, (s) => this.queue(async () => {
-      const v = await this.openMsg(s.val(), null, s.key);
+      const v = this.withBallots(s.key, await this.openMsg(s.val(), null, s.key));
       this.msgs.set(s.key, v); this.lastAt = Math.max(this.lastAt, +v.at || 0);
       this.emit("msg", s.key, v);
     }), lost));
     on(fb.onChildChanged(msgs, (s) => this.queue(async () => {
-      const old = this.msgs.get(s.key), v = await this.openMsg(s.val(), null, s.key);
+      const old = this.msgs.get(s.key), v = this.withBallots(s.key, await this.openMsg(s.val(), null, s.key));
       this.msgs.set(s.key, v);
       this.emit("msg-changed", s.key, v, old);
     })));
-    on(fb.onChildRemoved(msgs, (s) => this.queue(() => { this.msgs.delete(s.key); this.emit("msg-removed", s.key); })));
+    on(fb.onChildRemoved(msgs, (s) => this.queue(() => { this.msgs.delete(s.key); this.dropBallots(s.key); this.emit("msg-removed", s.key); })));
+    on(() => [...this.ballots.keys()].forEach((id) => this.dropBallots(id)));
     on(fb.onValue(api.ref("typing"), (s) => { this.typing = s.val() || {}; this.emit("typing"); }, () => {}));
     on(fb.onValue(api.ref("qs"), (s) => this.queue(async () => {
       this.qs = await this.openQs(s.val());
@@ -261,6 +263,68 @@ export class Room extends Emitter {
       }), () => { this.qqOff = null; });
       this.off.push(() => this.qqOff?.());
     } else if (!want && this.qqOff) { this.qqOff(); this.qqOff = null; this.qq = new Map(); this.qqRaw = {}; this.emit("qq", { more: false }); }
+  }
+  /* ---------- polls whose votes are kept apart ---------- */
+  // An anonymous poll (an) or one hidden until rv keeps its votes outside the message (tools/rules.py pv, ab and av):
+  // my own vote is followed from the start, everyone's once the results are out. A message as shown carries them:
+  // votes (everyone's, by uid or by ballot), mine, key (my ballot's) and ready (mine has come in)
+  withBallots(id, v) {
+    if (!v?.poll || !(v.an || v.rv)) return v;
+    const b = this.followBallots(id, v);
+    return { ...v, votes: b.votes || {}, mine: b.mine, key: b.key, ready: b.ready };
+  }
+  followBallots(id, v) {
+    let b = this.ballots.get(id);
+    if (!b) {
+      b = { v, votes: null, mine: [], key: null, ready: false, offs: [], all: null, timer: 0 };
+      this.ballots.set(id, b);
+      const { fb } = backend, api = this.api, uid = this.uid;
+      const mineAt = (ref, aad) => b.offs.push(fb.onValue(ref, (s) => this.queue(async () => {
+        b.mine = await openPicks(s.val(), aad, b.v.poll); b.ready = true; this.ballotsChanged(id);
+      }), () => {}));
+      if (v.an) b.offs.push(fb.onValue(api.ref(`av/${id}/${uid}`), (s) => {
+        const key = typeof s.val() === "string" ? s.val() : null;
+        if (key && !b.key) { b.key = key; mineAt(api.ref(`ab/${id}/${key}`), `b:${id}:${key}`); }
+        else if (!key) this.queue(() => { b.ready = true; this.ballotsChanged(id); });
+      }, () => {}));
+      else mineAt(api.ref(`pv/${id}/${uid}`), `v:${id}:${uid}`);
+    }
+    b.v = v;
+    this.followAllBallots(id, b);
+    return b;
+  }
+  // everyone's votes, once they can be read: straight away, or when the poll is revealed (its time, or its author closing it)
+  followAllBallots(id, b) {
+    const v = b.v;
+    if (b.all) return;
+    clearTimeout(b.timer);
+    const wait = v.rv && !v.closed ? v.rv - backend.now() : 0;
+    if (wait > 0) { b.timer = setTimeout(() => this.followAllBallots(id, b), Math.min(wait + 500, 2 ** 31 - 1)); return; }
+    const { fb } = backend, path = (v.an ? "ab/" : "pv/") + id;
+    b.all = fb.onValue(this.api.ref(path), (s) => this.queue(async () => {
+      const out = {};
+      for (const [k, x] of Object.entries(s.val() || {})) {
+        const list = await openPicks(x, v.an ? `b:${id}:${k}` : `v:${id}:${k}`, v.poll);
+        if (list.length) out[k] = list;
+      }
+      b.votes = out; this.ballotsChanged(id);
+    }), () => { // not readable yet (this device's clock runs ahead of the server's): again shortly
+      b.all = null;
+      if (this.current && this.ballots.get(id) === b) b.timer = setTimeout(() => this.followAllBallots(id, b), 3000);
+    });
+  }
+  ballotsChanged(id) {
+    const old = this.msgs.get(id);
+    if (!old) return;
+    const v = this.withBallots(id, old);
+    this.msgs.set(id, v);
+    this.emit("msg-changed", id, v, old);
+  }
+  dropBallots(id) {
+    const b = this.ballots.get(id);
+    if (!b) return;
+    this.ballots.delete(id); clearTimeout(b.timer);
+    [...b.offs, b.all].forEach((f) => { try { f?.(); } catch (e) {} });
   }
   // the room went away under us: "ended", "kicked" or "left" (null if this room is no longer the one on screen)
   async whyGone() {

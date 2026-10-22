@@ -42,7 +42,7 @@ export const sendGif = (gif) => post(KIND.gif, gif);
 export async function post(kind, value, more = {}, { wait } = {}) {
   if (!room || room.gone) return false;
   if (room.readOnly) { toast(t("roNoPost")); return false; }
-  const [body, sealed] = kind.pack(value), ui = room.ui, uid = backend.uid, T = backend.stamp();
+  const [body, sealed, mark] = kind.pack(value), ui = room.ui, uid = backend.uid, T = backend.stamp();
   const rp = ui.reply && !!ui.reply.dm === (ui.view !== "all") ? ui.reply.id : null;
   if (rp) { sealed.r = rp; if (!room.cipher) body.rp = rp; }
   const m = room.members[uid] || me(); // the name this room knows me by
@@ -53,7 +53,7 @@ export async function post(kind, value, more = {}, { wait } = {}) {
   if (!to) {
     id = backend.pushKey(room.api.ref("msgs"));
     upd[at(`members/${uid}/lm`)] = id;
-    upd[at(`msgs/${id}`)] = room.cipher ? { by: uid, x: await room.cipher.seal({ ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T, ...kind.mark }
+    upd[at(`msgs/${id}`)] = room.cipher ? { by: uid, x: await room.cipher.seal({ ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T, ...kind.mark, ...mark }
       : { by: uid, name: m.name, avatar: m.avatar, ...body, at: T };
   } else {
     if (!room.members[ui.view]) { toast(t("peerLeft")); return false; }

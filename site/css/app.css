@@ -595,6 +595,12 @@ html.l10n .splash p { visibility: hidden; }
 .opt.on .st-i { color: var(--accent-ink); }
 .opt:disabled { cursor: default; opacity: 1; }
 .pollbox.closed .opt { opacity: .8; }
+.pollflag { display: flex; align-items: flex-start; gap: var(--sp-3); margin-top: 14px; cursor: pointer; }
+.pollflag input { flex: none; width: 20px; height: 20px; margin-top: 1px; accent-color: var(--accent-ink); }
+.pollflag span { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-md); }
+.pollflag small { font-size: var(--fs-xs); line-height: 1.45; }
+.pollwhen { margin: var(--sp-2) 0 0 32px; display: flex; flex-direction: column; gap: var(--sp-2); }
+.pollwhen .lbl { margin-top: 0; }
 .voters > div { padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
 .voters p { margin: 2px 0 0; }
 .winners { display: flex; flex-wrap: wrap; gap: 6px; }

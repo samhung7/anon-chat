@@ -476,6 +476,79 @@ test("polls: one vote or several, only while open", async () => {
   await assertFails(vote("bob", "p0", null));
 });
 
+test("hidden polls: each sees only their own vote until it's revealed; then votes stop and everyone reads them", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  const at = (ms) => Date.now() + ms;
+  const poll = (id, rv) => post("alice", `msgs/${id}`, { by: "alice", name: "x", avatar: "🦊", poll: { q: "吃什麼", o: { 0: "甲", 1: "乙" }, m: false }, rv, at: T });
+  await assertFails(poll("h0", Date.now() - 1000)); // the reveal is ahead
+  await assertFails(poll("h0", at(8 * 24 * HOUR))); // within a week
+  await assertFails(post("alice", "msgs/h0", { by: "alice", name: "x", avatar: "🦊", text: "嗨", rv: at(HOUR), at: T })); // only on a poll
+  await assertSucceeds(poll("h1", at(HOUR)));
+  const pv = (uid, who = uid) => ref(db(uid), `rooms/${C}/pv/h1/${who}`);
+  await assertFails(set(ref(db("bob"), `rooms/${C}/msgs/h1/votes/bob`), "0")); // not where everyone reads it
+  await assertSucceeds(set(pv("bob"), "1"));
+  await assertSucceeds(set(pv("bob"), "0")); // changed
+  await assertFails(set(pv("bob", "carol"), "0")); // not for someone else
+  await assertFails(set(pv("bob"), "0,1")); // one vote
+  await assertSucceeds(get(pv("bob")));
+  await assertFails(get(pv("carol", "bob"))); // nobody else's
+  await assertFails(get(ref(db("alice"), `rooms/${C}/pv/h1`))); // the author's neither
+  await assertFails(update(ref(db("alice"), `rooms/${C}/msgs/h1`), { rv: at(60000) })); // the time can't change
+  // revealed: everyone reads, nobody changes
+  await admin((d) => set(ref(d, `rooms/${C}/msgs/h1/rv`), Date.now() - 1000));
+  await assertSucceeds(get(ref(db("carol"), `rooms/${C}/pv/h1`)));
+  await assertFails(set(pv("bob"), "1"));
+  await assertFails(set(pv("bob"), null));
+  await assertFails(set(pv("carol"), "1"));
+  // closing early reveals it, and stops votes
+  await assertSucceeds(poll("h2", at(HOUR)));
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/pv/h2/bob`), "0"));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/msgs/h2/closed`), true));
+  await assertSucceeds(get(ref(db("carol"), `rooms/${C}/pv/h2`)));
+  await assertFails(set(ref(db("carol"), `rooms/${C}/pv/h2/carol`), "0"));
+  // the votes go with the poll
+  await assertFails(set(ref(db("carol"), `rooms/${C}/pv/h2`), null));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "msgs/h2": null, "pv/h2": null }));
+});
+
+test("anonymous polls: one ballot each, under a key only its voter can tie to them", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  const poll = (id, more = {}) => post("alice", `msgs/${id}`, { by: "alice", name: "x", avatar: "🦊", poll: { q: "吃什麼", o: { 0: "甲", 1: "乙", 2: "丙" }, m: true }, an: true, ...more, at: T });
+  await assertSucceeds(poll("a1"));
+  const cast = (uid, k, v) => update(ref(db(uid), `rooms/${C}`), { [`av/a1/${uid}`]: k, [`ab/a1/${k}`]: v });
+  await assertFails(set(ref(db("bob"), `rooms/${C}/msgs/a1/votes/bob`), "0")); // not under a name
+  await assertFails(set(ref(db("bob"), `rooms/${C}/ab/a1/kb`), "0")); // a ballot needs its key named
+  await assertSucceeds(cast("bob", "kb", "0,2"));
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/ab/a1/kb`), "1")); // changed
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/ab/a1/kb`), "")); // taken back: left empty
+  await assertFails(set(ref(db("bob"), `rooms/${C}/ab/a1/kb`), null)); // never deleted
+  await assertFails(cast("bob", "kb2", "1")); // one key each
+  await assertFails(set(ref(db("bob"), `rooms/${C}/av/a1/bob`), "kb2"));
+  await assertFails(cast("carol", "kb", "1")); // nobody takes another's key
+  await assertFails(set(ref(db("carol"), `rooms/${C}/ab/a1/kb`), "1")); // or writes their ballot
+  await assertSucceeds(cast("carol", "kc", "1"));
+  await assertSucceeds(get(ref(db("alice"), `rooms/${C}/ab/a1`))); // the ballots are counted by everyone
+  await assertFails(get(ref(db("alice"), `rooms/${C}/av/a1`))); // but whose is whose isn't read
+  await assertFails(get(ref(db("alice"), `rooms/${C}/av/a1/bob`)));
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/av/a1/bob`)));
+  await assertFails(cast("dave", "kd", "0")); // not a member
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/msgs/a1/closed`), true));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/ab/a1/kb`), "0"));
+  // anonymous and hidden: before the reveal each reads only their own ballot
+  await assertSucceeds(poll("a2", { rv: Date.now() + HOUR }));
+  await assertSucceeds(update(ref(db("bob"), `rooms/${C}`), { "av/a2/bob": "kb", "ab/a2/kb": "1" }));
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/ab/a2/kb`)));
+  await assertFails(get(ref(db("carol"), `rooms/${C}/ab/a2/kb`)));
+  await assertFails(get(ref(db("carol"), `rooms/${C}/ab/a2`)));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/pv/a2/bob`), "1")); // not named either
+  await admin((d) => set(ref(d, `rooms/${C}/msgs/a2/rv`), Date.now() - 1000));
+  await assertSucceeds(get(ref(db("carol"), `rooms/${C}/ab/a2`)));
+  await assertFails(get(ref(db("carol"), `rooms/${C}/av/a2`)));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/ab/a2/kb`), "0"));
+  // a new room can't come with votes in it
+  await assertFails(update(ref(db("dave")), { [`rooms/ABCD`]: { meta: { owner: "dave", created: T, last: T }, members: { dave: member("d") }, names: { d: "dave" }, ab: { x: { k: "0" } } } }));
+});
+
 test("draws: who took part and who was drawn", async () => {
   await createRoom("alice"); await join("bob");
   const draw = (d) => post("bob", "msgs", { by: "bob", name: "x", avatar: "🦊", draw: d, at: T });
@@ -490,6 +563,10 @@ test("encrypted room: photos, polls and votes are sealed", async () => {
   await assertFails(post("bob", `msgs/m2`, { by: "bob", x: "c2VhbGVk", poll: { q: "明文", o: ["a", "b"], m: false }, at: T }));
   await assertSucceeds(set(ref(db("alice"), `rooms/${C}/msgs/m1/votes/alice`), "c2VhbGVk"));
   await assertFails(set(ref(db("alice"), `rooms/${C}/msgs/m1/votes/alice`), "0,1"));
+  // an anonymous or hidden poll is marked beside its sealed body, so the rules can follow its votes
+  await assertSucceeds(post("bob", "msgs/m3", { by: "bob", x: "c2VhbGVk", an: true, rv: Date.now() + HOUR, at: T }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "av/m3/alice": "ka", "ab/m3/ka": "c2VhbGVk" }));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/ab/m3/ka`), "0,1")); // sealed, not plain
 });
 
 // a question as the app asks it: who asked goes in qby (only they can read it), and asking is rate-limited like posting

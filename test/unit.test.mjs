@@ -158,7 +158,10 @@ test("kinds of message: each message is exactly one, and says itself in a line",
   assert.equal(snippet({ gif: {} }), "GIF");
   // what each kind stores, plain and sealed
   assert.deepEqual(KIND.text.pack("hi"), [{ text: "hi" }, { t: "hi" }]);
-  assert.deepEqual(KIND.poll.pack({ q: "Q" }), [{ poll: { q: "Q" } }, { p: { q: "Q" } }]);
+  assert.deepEqual(KIND.poll.pack({ q: "Q", o: ["a", "b"], m: false }), [{ poll: { q: "Q", o: ["a", "b"], m: false } }, { p: { q: "Q", o: ["a", "b"], m: false } }, {}]);
+  // anonymous and hidden polls are marked beside the poll, and beside its sealed body too
+  assert.deepEqual(KIND.poll.pack({ q: "Q", o: ["a", "b"], m: true, an: true, rv: 5 }),
+    [{ poll: { q: "Q", o: ["a", "b"], m: true }, an: true, rv: 5 }, { p: { q: "Q", o: ["a", "b"], m: true } }, { an: true, rv: 5 }]);
   assert.equal(KIND.poll.unsealed({ p: { q: "Q", o: ["a", "b"] } }, true), null, "no polls in private chats");
   assert.deepEqual(KIND.poll.unsealed({ p: { q: "Q", o: { 0: "a", 1: "b" }, m: "yes" } }, false), { poll: { q: "Q", o: ["a", "b"], m: false } });
 });

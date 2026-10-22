@@ -13,7 +13,7 @@ import { linkify } from "./richtext.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { photoUrl, photoImg, viewPhoto, dropPhoto } from "./photos.js?v=dev";
-import { livePoll, livePollView, pollView, pollVoters } from "./polls.js?v=dev";
+import { livePoll, livePollView, pollView, pollVoters, pollTags, pollFoot, keptApart, revealed, pollShut } from "./polls.js?v=dev";
 import { liveDraw, drawView } from "./draws.js?v=dev";
 import { gameCard, gameText, GAME } from "./games.js?v=dev";
 import { GAMES, DAY_RE } from "./puzzles.js?v=dev";
@@ -58,7 +58,7 @@ const cleanGif = (g) => ({ url: g.url.slice(0, LIMITS.gifUrl), w: Math.min(+g.w 
    preview(v)                shown at the top of its ⋯ menu; pinned(v) in the pinned bar
    notice(v)                 a notification's text
    actions                   more entries for its ⋯ menu: [action, label, when(v), run(id, v)]
-   removes(v)                more paths deleted with it; removed(v) what else to do once it's gone
+   removes(v, id)            more paths deleted with it; removed(v) what else to do once it's gone
    line                      shown as a line across the chat, its snippet, rather than as someone's bubble
    toSaved(v, pics)          its fields in an exported record; readSaved(m) the same, from an untrusted file
    savedText(m), savedHtml(m, src), savedBubble(m)   a saved one in a .txt file, an .html file, and on screen */
@@ -116,40 +116,59 @@ const photo = {
   savedHtml: (m, src) => (src ? `<img class="p" src="${esc(src)}" width="${+m.photo.w}" height="${+m.photo.h}" alt="${esc(t("photo"))}">` : savedHtmlText("📷 " + t("photo"))),
   savedBubble: () => el("div", { class: "bub ro" }, "📷 " + t("photo")),
 };
-// everyone's votes on a poll, { uid: [option, ...] }; each is "0" or "0,2", sealed in an encrypted room
+// one person's picks on a poll ("0" or "0,2", sealed in an encrypted room, bound by aad), as option numbers
+export async function openPicks(s, aad, poll) {
+  let picks = typeof s === "string" ? s : "";
+  if (room.cipher && picks) { const o = await room.open(room.cipher.aes, picks, aad); picks = typeof o === "string" ? o : ""; }
+  const list = [...new Set(picks ? picks.split(",").map(Number) : [])].filter((k) => Number.isInteger(k) && k >= 0 && k < poll.o.length);
+  return poll.m ? list : list.slice(0, 1);
+}
+// everyone's votes on a poll, { uid: [option, ...] }
 async function openVotes(raw, id, poll) {
   const out = {};
-  for (const [who, s] of Object.entries(raw || {})) {
-    let picks = typeof s === "string" ? s : "";
-    if (room.cipher && picks) { const o = await room.open(room.cipher.aes, picks, `v:${id}:${who}`); picks = typeof o === "string" ? o : ""; }
-    const list = [...new Set(picks ? picks.split(",").map(Number) : [])].filter((k) => Number.isInteger(k) && k >= 0 && k < poll.o.length);
-    if (list.length) out[who] = poll.m ? list : list.slice(0, 1);
-  }
+  for (const [who, s] of Object.entries(raw || {})) { const list = await openPicks(s, `v:${id}:${who}`, poll); if (list.length) out[who] = list; }
   return out;
 }
-const pollText = (p) => `📊 ${p.q} (${t(p.m ? "pollMultiTag" : "pollSingleTag")}${p.closed ? " · " + t("pollClosed") : ""})\n` +
-  p.o.map((o) => `· ${o.t}${t("colon")}${o.n}`).join("\n") + "\n" + t("pollVotes", { n: p.total });
+const pollText = (p) => `📊 ${p.q} (${pollTags(p)})\n` +
+  (p.pending ? "" : p.o.map((o) => `· ${o.t}${t("colon")}${o.n}`).join("\n") + "\n") + pollFoot(p);
+// anonymous (an) and hidden until rv are marked beside the poll, sealed or not, so the rules can follow its votes
+const pollMarks = (p) => ({ ...(p.an ? { an: true } : {}), ...(p.rv ? { rv: p.rv } : {}) });
 const poll = {
   name: "poll", stat: "polls", roomOnly: true,
   live: (v) => !!v.poll, saved: (m) => !!m.poll,
-  pack: (p) => [{ poll: p }, { p }],
+  pack: ({ q, o, m, ...more }) => [{ poll: { q, o, m }, ...pollMarks(more) }, { p: { q, o, m } }, pollMarks(more)],
   plain: (v) => (v.poll ? { poll: cleanPoll(v.poll) } : {}),
   unsealed: (p, dm) => (p.p && !dm ? { poll: cleanPoll(p.p) } : null),
-  async opened(out, raw, id) { if (out.poll && raw.votes) out.votes = await openVotes(raw.votes, id, out.poll); },
+  // the votes of an anonymous or hidden poll come apart (room.js followBallots)
+  async opened(out, raw, id) {
+    if (!out.poll) return;
+    out.an = raw.an === true; out.rv = Number.isFinite(raw.rv) ? raw.rv : 0;
+    if (keptApart(out)) delete out.votes;
+    else if (raw.votes) out.votes = await openVotes(raw.votes, id, out.poll);
+  },
   snippet: (v) => "📊 " + v.poll.q,
   bubble: (id, v) => el("div", { class: "bub pollbub" }, livePollView(id, v)),
   preview: (v) => quoteText(snippet(v)),
   refresh: (node, id, v) => node.querySelector(".pollbub")?.replaceChildren(livePollView(id, v)),
   actions: [
-    ["voters", "pollWho", () => true, (id, v) => pollVoters(v)],
-    ["close", "pollClose", (v) => !v.closed && v.by === backend.uid, async (id) => {
-      if (await confirmSheet(t("pollClose"), t("pollCloseBody"), t("pollClose"), "primary")) orToast(room.api.closePoll(id));
+    // nobody sees who voted how in an anonymous poll, or anyone's votes before a hidden one is revealed
+    ["voters", "pollWho", (v) => !v.an && revealed(v), (id, v) => pollVoters(v)],
+    ["close", "pollClose", (v) => !pollShut(v) && v.by === backend.uid, async (id, v) => {
+      const hid = !revealed(v);
+      if (await confirmSheet(t(hid ? "pollRevealNow" : "pollClose"), t(hid ? "pollRevealNowBody" : "pollCloseBody"), t(hid ? "pollRevealNow" : "pollClose"), "primary")) orToast(room.api.closePoll(id));
     }],
   ],
-  toSaved: (v) => { if (!v.poll) return {}; const { q, m, closed, total, o } = livePoll(v); return { poll: { q, m, closed: closed || undefined, total, o: o.map(({ t: label, n }) => ({ t: label, n })) } }; },
+  // its votes go with it
+  removes: (v, id) => (keptApart(v) ? { ["pv/" + id]: null, ["ab/" + id]: null, ["av/" + id]: null } : {}),
+  toSaved: (v) => {
+    if (!v.poll) return {};
+    const { q, m, an, rv, closed, early, pending, total, o } = livePoll(v);
+    return { poll: { q, m, an: an || undefined, rv: rv || undefined, closed: closed || undefined, early: early || undefined, pending: pending || undefined, total, o: o.map(({ t: label, n }) => ({ t: label, n })) } };
+  },
   readSaved: (m) => {
     const p = m?.poll, o = arr(p?.o).slice(0, LIMITS.pollOpts).map((x) => ({ t: str(x?.t, LIMITS.pollOpt), n: clamp(num(x?.n), 0, 9999) }));
-    return { poll: isObj(p) && o.length >= 2 ? { q: str(p.q, LIMITS.pollQ), m: p.m === true, closed: p.closed === true || undefined, total: clamp(num(p.total), 0, 9999), o } : undefined };
+    return { poll: isObj(p) && o.length >= 2 ? { q: str(p.q, LIMITS.pollQ), m: p.m === true, an: p.an === true || undefined, rv: num(p.rv) > 0 ? num(p.rv) : undefined,
+      closed: p.closed === true || undefined, early: p.early === true || undefined, pending: p.pending === true || undefined, total: clamp(num(p.total), 0, 9999), o } : undefined };
   },
   savedText: (m) => pollText(m.poll),
   savedHtml: (m) => savedHtmlText(pollText(m.poll)),
