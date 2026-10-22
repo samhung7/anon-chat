@@ -29,6 +29,7 @@ export const KEYS = {
   read: (code) => "chat-read:" + code,     // read up to here in the room
   dmRead: (code, other) => `chat-dmread:${code}:${other}`,
   myQs: (code) => "chat-myq:" + code,      // questions this device asked
+  postDraft: (code, id) => `chat-post-draft:${code}:${id}`, // a long post being written (id "new") or edited
   gamePrefix: "chat-game:",
   game: (code, day, g) => `chat-game:${code}:${day}:${g}`, // a game of the day under way
 };

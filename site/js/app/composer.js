@@ -36,8 +36,9 @@ export function send(text) {
   return text ? post(KIND.text, text) : false;
 }
 export const sendGif = (gif) => post(KIND.gif, gif);
-// one message of a kind to the room or the private chat on view; more: other paths written in the same update (a photo's picture)
-export async function post(kind, value, more = {}) {
+// one message of a kind to the room or the private chat on view; more: other paths written in the same update (a photo's
+// picture), or a function that makes them from the message's id (a long post's text). wait: resolve once it's written
+export async function post(kind, value, more = {}, { wait } = {}) {
   if (!room || room.gone) return false;
   if (room.readOnly) { toast(t("roNoPost")); return false; }
   const [body, sealed] = kind.pack(value), ui = room.ui, uid = backend.uid, T = backend.stamp();
@@ -45,13 +46,13 @@ export async function post(kind, value, more = {}) {
   if (rp) { sealed.r = rp; if (!room.cipher) body.rp = rp; }
   const m = room.members[uid] || me(); // the name this room knows me by
   const at = (path) => room.api.root(path);
-  const upd = { [at("meta/last")]: T, [at(`members/${uid}/ls`)]: T, ...more };
+  const upd = { [at("meta/last")]: T, [at(`members/${uid}/ls`)]: T };
   const to = ui.view === "all" ? null : ui.view, code = room.code;
   let id;
   if (!to) {
     id = backend.pushKey(room.api.ref("msgs"));
     upd[at(`members/${uid}/lm`)] = id;
-    upd[at(`msgs/${id}`)] = room.cipher ? { by: uid, x: await room.cipher.seal({ ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T }
+    upd[at(`msgs/${id}`)] = room.cipher ? { by: uid, x: await room.cipher.seal({ ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T, ...kind.mark }
       : { by: uid, name: m.name, avatar: m.avatar, ...body, at: T };
   } else {
     if (!room.members[ui.view]) { toast(t("peerLeft")); return false; }
@@ -62,9 +63,10 @@ export async function post(kind, value, more = {}) {
     upd[at(`${path}/${id}`)] = { by: uid, to: ui.view, x: await seal(key, sealed, "d:" + uid), at: T };
     upd[at(`members/${uid}/lm`)] = id;
   }
+  Object.assign(upd, typeof more === "function" ? await more(id) : more);
   $("#list .empty")?.remove(); cancelReply(); typing.stop();
-  posts.write(upd, to ? "dms" : kind.stat).then((ok) => ok && announce(code, id, to));
-  return true;
+  const sent = posts.write(upd, to ? "dms" : kind.stat).then((ok) => { if (ok) announce(code, id, to); return ok; });
+  return wait ? sent : true;
 }
 /* ---------- replying ---------- */
 export function startReply(id, v, dm) {

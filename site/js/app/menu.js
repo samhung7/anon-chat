@@ -39,6 +39,8 @@ const ENTRIES = [
   ["show", () => t("showScreen"), staff, () => openShow()],
   ["gameson", () => t("gamesOn"), () => owner() && room.meta?.ng, flip({ ng: false }, "gamesOnToast")],
   ["gamesoff", () => t("gamesOff"), () => owner() && !room.meta?.ng, flip({ ng: true }, "gamesOffToast")],
+  ["postsopen", () => t("postsOpen"), () => owner() && !room.meta?.po, flip({ po: true }, "postsOpenToast")],
+  ["postsclose", () => t("postsClose"), () => owner() && room.meta?.po, flip({ po: false }, "postsCloseToast")],
   ["reports", () => t("reportsMenu", { n: room.reportCount() }), staff, () => reportsSheet()],
   { group: "menuOwner" },
   ["cap", () => (room.meta?.cap ? t("capMenuN", { n: room.meta.cap }) : t("cap")), owner, () => capSheet()],

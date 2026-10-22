@@ -9,6 +9,7 @@ import { me } from "./identity.js?v=dev";
 import { savedKindOf } from "./kinds.js?v=dev";
 import { linkify } from "./richtext.js?v=dev";
 import { photoUrl } from "./photos.js?v=dev";
+import { loadBodies } from "./posts.js?v=dev";
 import { ansBox, qWho } from "./qa.js?v=dev";
 import { ARCHIVE, buildArchive, readArchive, countOf, toText, toHtml, personLabel } from "./archive.js?v=dev";
 import { home, showRecordScreen } from "./home.js?v=dev";
@@ -40,6 +41,7 @@ async function download(a, kind) {
 }
 export async function exportSheet() {
   if (!room) return;
+  await loadBodies(); // a long post's whole text goes in the file, not only its card
   const a = archive();
   const pick = await sheet(t("exportChat"), el("div", {},
     el("p", { class: "muted", text: t("exportCount", { n: countOf(a) }) }),

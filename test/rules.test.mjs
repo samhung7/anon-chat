@@ -682,3 +682,70 @@ test("mini-games in a Private Salon: the score is sealed", async () => {
   await assertFails(set(ref(db("alice"), `rooms/${C}/games/${D}/mm/alice`), { s: 76, t: 92, l: "0123", at: T }));
   await assertFails(set(ref(db("alice"), `rooms/${C}/games/${D}/qn/alice`), { x: "not sealed!", at: T }));
 });
+
+// a long post as the app sends it: the card in msgs/ (marked pt) and the whole text in posts/, in one update
+const longPost = (uid, id, { card = { t: "標題", s: "開頭", n: 120 }, body = { b: "# 標題\n內文" }, sealed = false, more = {} } = {}) =>
+  post(uid, `msgs/${id}`, sealed ? { by: uid, x: "c2VhbGVk", pt: true, at: T } : { by: uid, name: "x", avatar: "🦊", pt: true, post: card, at: T },
+    { more: { [`posts/${id}`]: { by: uid, at: T, ...body }, ...more } });
+
+test("long posts: hosts post them, members once the owner allows it; the text sits apart, written with its card", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertSucceeds(longPost("alice", "p1"));
+  await assertFails(longPost("bob", "p2")); // members only once the owner opens it up
+  await assertFails(set(ref(db("bob"), `rooms/${C}/meta/po`), true));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/mods/bob`), true));
+  await assertSucceeds(longPost("bob", "p2")); // a co-host may
+  await assertFails(longPost("carol", "p3"));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/po`), true));
+  await assertSucceeds(longPost("carol", "p3"));
+  // card and text belong together, and to their author
+  await assertFails(post("carol", "msgs/p4", { by: "carol", name: "x", avatar: "🦊", pt: true, post: { t: "t", s: "", n: 1 }, at: T })); // no text
+  await assertFails(post("carol", "msgs/p5", { by: "carol", name: "x", avatar: "🦊", post: { t: "t", s: "", n: 1 }, at: T }, { more: { "posts/p5": { by: "carol", at: T, b: "x" } } })); // not marked
+  await assertFails(post("carol", "msgs/p6", { by: "carol", name: "x", avatar: "🦊", text: "嗨", at: T }, { more: { "posts/p6": { by: "carol", at: T, b: "x" } } })); // a text with no post
+  await assertFails(longPost("carol", "p7", { body: { b: "x".repeat(20001) } }));
+  await assertSucceeds(longPost("carol", "p8", { body: { b: "x".repeat(20000) }, card: { t: "長", s: "x".repeat(200), n: 20000 } }));
+  await assertSucceeds(longPost("carol", "p9", { card: { t: "", s: "沒有標題", n: 4 } })); // the title may be left out
+  await assertFails(longPost("carol", "p9b", { card: { t: "x".repeat(61), s: "", n: 1 } }));
+  await assertFails(longPost("carol", "p9", { card: { t: "t", s: "", n: 1 }, body: { b: "x", x: "c2VhbGVk" } })); // no ciphertext in an open room
+  await assertFails(set(ref(db("bob"), `rooms/${C}/posts/p3`), { by: "bob", at: T, b: "換掉" })); // nobody writes over someone's post
+  // members read the text; the author edits it (card and text), nobody else
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/posts/p1`)));
+  await assertFails(get(ref(db("dave"), `rooms/${C}/posts/p1`)));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "msgs/p1/post": { t: "新標題", s: "新", n: 3 }, "msgs/p1/ed": T, "posts/p1/b": "新內文", "posts/p1/ed": T }));
+  await assertFails(update(ref(db("bob"), `rooms/${C}`), { "posts/p1/b": "亂改" }));
+  await assertFails(update(ref(db("bob"), `rooms/${C}`), { "msgs/p1/post": { t: "亂改", s: "", n: 1 } }));
+  // reactions as on any message
+  await assertSucceeds(set(ref(db("carol"), `rooms/${C}/msgs/p1/re/0/carol`), true));
+  // taken down with its card: the author, or the owner and co-hosts
+  await assertFails(update(ref(db("carol"), `rooms/${C}`), { "msgs/p1": null, "posts/p1": null }));
+  await assertSucceeds(update(ref(db("bob"), `rooms/${C}`), { "msgs/p1": null, "posts/p1": null }));
+  await assertSucceeds(update(ref(db("carol"), `rooms/${C}`), { "msgs/p3": null, "posts/p3": null }));
+  // the owner closes it again: members can't post new ones
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/po`), false));
+  await assertFails(longPost("carol", "p10"));
+  // a new room can't come with posts already in it
+  await assertFails(update(ref(db("dave")), { [`rooms/ABCD`]: { meta: { owner: "dave", created: T, last: T, priv: false }, members: { dave: member("d") }, names: { d: "dave" }, posts: { p: { by: "dave", at: T, b: "x" } } } }));
+  // a read-only room takes no new post or edit
+  await idle(24 * HOUR + 60000);
+  await assertFails(longPost("alice", "p11"));
+  await assertFails(update(ref(db("carol"), `rooms/${C}`), { "posts/p8/b": "晚了" }));
+});
+
+test("long posts: pictures are the author's own, already under files/", async () => {
+  await createRoom("alice"); await join("bob");
+  await admin((d) => update(ref(d, `rooms/${C}/files`), { f1: { by: "alice", at: Date.now() }, f2: { by: "bob", at: Date.now() } }));
+  await assertSucceeds(longPost("alice", "p1", { card: { t: "t", s: "", n: 9, p: { 0: { f: "f1", w: 800, h: 600 } } } }));
+  await assertFails(longPost("alice", "p2", { card: { t: "t", s: "", n: 9, p: { 0: { f: "f2", w: 800, h: 600 } } } }));
+  await assertFails(longPost("alice", "p3", { card: { t: "t", s: "", n: 9, p: { 0: { f: "nope", w: 800, h: 600 } } } }));
+  await assertFails(longPost("alice", "p4", { card: { t: "t", s: "", n: 9, p: { 9: { f: "f1", w: 800, h: 600 } } } })); // nine at most
+});
+
+test("long posts in a Private Salon: card and text are sealed", async () => {
+  await createEnc("alice"); await joinEnc("bob", H("b"));
+  await assertSucceeds(longPost("alice", "p1", { sealed: true, body: { x: "c2VhbGVk" } }));
+  await assertFails(longPost("alice", "p2", { sealed: true, body: { b: "明文" } }));
+  await assertFails(longPost("alice", "p3", { body: { x: "c2VhbGVk" } })); // a plain card
+  await assertFails(longPost("bob", "p4", { sealed: true, body: { x: "c2VhbGVk" } })); // members only once allowed
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "msgs/p1/x": "bmV3", "msgs/p1/ed": T, "posts/p1/x": "bmV3", "posts/p1/ed": T }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}`), { "posts/p1/x": "not base64!" }));
+});

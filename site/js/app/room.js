@@ -33,6 +33,7 @@ export class ViewState {
 class Emitter {
   #handlers = {};
   on(event, fn) { (this.#handlers[event] ||= []).push(fn); return this; }
+  un(event, fn) { this.#handlers[event] = (this.#handlers[event] || []).filter((f) => f !== fn); return this; }
   emit(event, ...args) { (this.#handlers[event] || []).forEach((fn) => fn(...args)); }
 }
 

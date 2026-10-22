@@ -10,6 +10,7 @@ import { kindOf, snippet } from "./kinds.js?v=dev";
 import { isBlocked, setBlocked } from "./blocking.js?v=dev";
 import { startReply, insertAtCursor, box } from "./composer.js?v=dev";
 import { openDm, pin, pinIds, react, jumpTo, setView } from "./chat.js?v=dev";
+import { postBody } from "./posts.js?v=dev";
 
 // [action, label, when(c), run(c), class]; c = { id, v, dm, mine, name }. Three groups set apart by a gap: the
 // message itself, its author, and keeping the room in order (blocking, reports, taking it down)
@@ -78,7 +79,8 @@ export function mention(name) {
 const REASONS = [0, 1, 2, 3];
 // what the operator gets of a message: its words (or what kind it is), the name it came under, a plain room's photo
 function seenOf(v) {
-  const seen = { who: v.by, t: String(typeof v.text === "string" && v.text ? v.text : snippet(v)).slice(0, LIMITS.text), n: String(room.author(v).name || "").slice(0, LIMITS.shownName) };
+  const said = kindOf(v).reported?.(v) ?? (typeof v.text === "string" && v.text ? v.text : snippet(v));
+  const seen = { who: v.by, t: String(said).slice(0, LIMITS.text), n: String(room.author(v).name || "").slice(0, LIMITS.shownName) };
   if (room.cipher) seen.enc = true;
   else if (v.img?.f) seen.f = v.img.f;
   if (!seen.t) delete seen.t;
@@ -89,6 +91,7 @@ async function reportMsg(id) {
   if (!a?.startsWith("r") || !room || room.gone) return;
   const v = room.msgs.get(id);
   if (!v) return;
+  if (v.post) await postBody(id, v).catch(() => null); // the operator gets the post's text as the reporter could read it
   room.api.report(id, +a.slice(1), seenOf(v)).then(() => toast(t("reportedToast")), (e) => toast(t(isDenied(e) ? "reportedAlready" : "tryAgain")));
 }
 export async function reportsSheet() {

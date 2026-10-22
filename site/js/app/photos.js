@@ -17,9 +17,9 @@ import { KIND } from "./kinds.js?v=dev";
 
 const PHOTO_EDGE = 1280, PHOTO_MAX = 300000, PHOTO_LIMIT = 330000, PHOTOS_AT_ONCE = 6;
 const PHOTO_SEALED = PHOTO_LIMIT + 28; // the IV and the AES-GCM tag
-const jpegUrl = (bytes) => URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
+export const jpegUrl = (bytes) => URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
 
-async function shrink(file) {
+export async function shrinkPhoto(file) {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
@@ -39,7 +39,7 @@ async function shrink(file) {
   } finally { URL.revokeObjectURL(url); }
 }
 const photoPath = (code, by, f, sealed) => `${code}/${by}/${f}.${sealed ? "bin" : "jpg"}`;
-async function upload(code, f, bytes, sealed) {
+export async function uploadPhoto(code, f, bytes, sealed) {
   const res = await fetch(`${PHOTOS.api}/photo/${photoPath(code, backend.uid, f, sealed)}`, {
     method: "PUT", body: bytes, headers: { Authorization: "Bearer " + (await backend.idToken()), "Content-Type": sealed ? "application/octet-stream" : "image/jpeg" },
   });
@@ -62,10 +62,10 @@ export async function sendPhotos(files) {
   try {
     for (const file of list.slice(0, PHOTOS_AT_ONCE)) {
       let p;
-      try { p = await shrink(file); } catch (e) { console.warn(e); toast(t("photoFail")); continue; }
+      try { p = await shrinkPhoto(file); } catch (e) { console.warn(e); toast(t("photoFail")); continue; }
       if (p.bytes.length > PHOTO_LIMIT || !room || room.gone) { toast(t("photoFail")); continue; }
       const r = room, uid = backend.uid, f = backend.pushKey(r.api.ref("files")), sealed = !!r.cipher;
-      try { await upload(r.code, f, sealed ? await r.cipher.sealRaw(p.bytes, `f:${uid}:${f}`) : p.bytes, sealed); }
+      try { await uploadPhoto(r.code, f, sealed ? await r.cipher.sealRaw(p.bytes, `f:${uid}:${f}`) : p.bytes, sealed); }
       catch (e) { console.warn(e); toast(t("photoFail")); continue; }
       r.imgs.set(f, Promise.resolve(jpegUrl(p.bytes))); // no need to fetch my own
       await post(KIND.photo, { f, w: p.w, h: p.h }, { [`rooms/${r.code}/files/${f}`]: { by: uid, at: backend.stamp() }, [`rooms/${r.code}/members/${uid}/lf`]: f });

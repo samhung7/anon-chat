@@ -11,7 +11,7 @@
    This file only connects the page's fixed buttons to the modules beside it:
      session.js   the room on screen          room.js     a Room: its data, kept live; api.js its writes
      crypto.js    end-to-end encryption        backend.js  the Firebase connection
-     kinds.js     text, GIF, photo, poll, draw, game (photos.js, polls.js, draws.js, games.js)
+     kinds.js     text, GIF, photo, poll, draw, game, long post (photos.js, polls.js, draws.js, games.js, posts.js)
      games.js     mini-games and their leaderboard (puzzles.js makes the puzzles, boards.js draws them)
      chat.js      the chat screen              composer.js the message box    actions.js a message's ⋯ menu
      menu.js      the room's ⋯ menu            people.js   members and owner tools

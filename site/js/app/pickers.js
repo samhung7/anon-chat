@@ -1,4 +1,4 @@
-/* The panels above the message box: ＋ (photo, poll, draw, games), emoji, and GIF search (KLIPY, which needs klipyKey
+/* The panels above the message box: ＋ (photo, poll, draw, long post, games), emoji, and GIF search (KLIPY, which needs klipyKey
    in js/config.js). */
 import { KLIPY_KEY, GIF_HOST } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
@@ -8,6 +8,7 @@ import { insertAtCursor, sendGif } from "./composer.js?v=dev";
 import { newPoll } from "./polls.js?v=dev";
 import { newDraw } from "./draws.js?v=dev";
 import { gamesSheet, gamesOn } from "./games.js?v=dev";
+import { newPost, canPost } from "./posts.js?v=dev";
 
 const EMOJI = {
   "😀": "😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😋 😜 🤪 😝 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😌 😔 😪 😴 😷 🤒 🤕 🤢 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 🤡 👻 👽 🤖 💩",
@@ -34,6 +35,7 @@ function morePanel(box) {
   // the file picker opens right inside the tap, or a phone may refuse to open it
   box.replaceChildren(el("div", { class: "morepanel" },
     item("photo", t("photo"), () => $("#photoFile").click()), item("poll", t("poll"), newPoll), item("draw", t("draw"), newDraw),
+    canPost() ? item("post", t("post"), newPost) : null,
     gamesOn() ? item("game", t("games"), gamesSheet) : null));
 }
 function emojiPanel(box) {

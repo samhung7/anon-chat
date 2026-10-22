@@ -35,7 +35,7 @@ room_write = o(
     j(fresh_room, not_banned, "newData.child('meta/owner').val() === auth.uid", "newData.child('members/' + auth.uid).exists()",
       "!newData.child('msgs').exists()", "!newData.child('files').exists()", "!newData.child('dm').exists()", "!newData.child('banned').exists()",
       "!newData.child('reports').exists()", "!newData.child('qs').exists()", "!newData.child('qq').exists()", "!newData.child('qby').exists()",
-      "!newData.child('push').exists()", "!newData.child('games').exists()"),
+      "!newData.child('push').exists()", "!newData.child('games').exists()", "!newData.child('posts').exists()"),
 )
 
 member_join = j(
@@ -145,6 +145,30 @@ GAME = {
     "r": {".validate": S(24) + r" && newData.val().matches(/^[0-4]{2}(,[0-4]{2}){0,7}$/)"},
     "$other": NO,
 }
+# a long post: its card in the chat (post, in a plain room: title t, excerpt s, length n, photos p; sealed inside x in an
+# encrypted one) and its whole text apart in posts/{id}, written together, so the message list stays small. pt marks the
+# message as one either way. The owner and co-hosts post them; everyone else too once the owner opens it up (meta/po).
+PROOM = "root.child('rooms/' + $code)"
+can_post = o(is_staff(PROOM), f"{PROOM}.child('meta/po').val() === true")
+POST_PIC = {
+    ".validate": "$i.matches(/^[0-8]$/) && newData.hasChildren(['f', 'w', 'h'])",
+    # a picture already in files/ (put there before the post), the author's own
+    "f": {".validate": PUSH_ID + f" && {PROOM}.child('files/' + newData.val() + '/by').val() === auth.uid"},
+    "w": {".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 4000"},
+    "h": {".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 4000"},
+    "$other": NO,
+}
+POST_CARD = {
+    ".validate": "newData.hasChildren(['t', 's', 'n']) && newData.parent().child('pt').val() === true" + NOT_ENC,
+    "t": {".validate": S(60)},   # the title may be empty
+    "s": {".validate": S(300)},
+    "n": {".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 20000"},
+    "p": {"$i": POST_PIC},
+    "$other": NO,
+}
+POST_MARK = {".validate": j("newData.val() === true", can_post,
+                            "newData.parent().parent().parent().child('posts/' + $id + '/by').val() === auth.uid",
+                            o(ENC("newData.parent().parent().parent()"), "newData.parent().hasChild('post')"))}
 MSG_ROOM = "newData.parent().parent().parent().parent()"   # from rooms/$code/msgs/$id/votes/$uid
 # a vote: the options picked, as "0" or "0,2"; sealed in an encrypted room. Only one option unless the poll allows more.
 VOTE = {
@@ -242,6 +266,7 @@ rules = {"rules": {
                        ".validate": "newData.val() === now"},
                 "cap": {".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 1000"},
                 "ng": {".validate": "newData.isBoolean()"},   # the owner turned the mini-games off
+                "po": {".validate": "newData.isBoolean()"},   # the owner lets everyone post long posts, not only the hosts
                 # members counted while there's a size limit: each person adds or removes themselves; the owner sets it
                 "n": {".write": j("auth != null", o(
                           j("newData.val() === data.val() + 1", "newData.parent().parent().child('members/' + auth.uid).exists()", "!data.parent().parent().child('members/' + auth.uid).exists()"),
@@ -283,13 +308,15 @@ rules = {"rules": {
                     ".write": msg_write,
                     ".validate": j("newData.hasChildren(['by', 'at'])", o(
                         j(ENC("newData.parent().parent()"), "newData.hasChild('x')"),
-                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", o(*[f"newData.hasChild('{k}')" for k in ("text", "gif", "img", "poll", "draw", "game")])))),
+                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", o(*[f"newData.hasChild('{k}')" for k in ("text", "gif", "img", "poll", "draw", "game", "post")])))),
                     "by": {".validate": "newData.isString()"},
                     "name": {".validate": S(24) + " && !" + ENC(MEMBER_ROOM)},
                     "avatar": {".validate": S(8) + " && !" + ENC(MEMBER_ROOM)},
                     "text": {".write": edit_field, ".validate": S(1000) + " && newData.val().length > 0 && !" + ENC(MEMBER_ROOM)},
                     "gif": dict(GIF, **{".validate": GIF[".validate"] + " && !" + ENC(MEMBER_ROOM)}),
-                    "img": IMG, "poll": POLL, "draw": DRAW, "game": GAME,
+                    "img": IMG, "poll": POLL, "draw": DRAW, "game": GAME, "pt": POST_MARK,
+                    # the author edits a long post's card along with its text
+                    "post": dict(POST_CARD, **{".write": edit_field}),
                     "x": {".write": edit_field, ".validate": SEALED(12000)},
                     "ed": {".write": j(edit_write, "data.parent().exists()"), ".validate": "newData.val() === now"},
                     "rp": {".validate": PUSH_ID + " && !" + ENC(MEMBER_ROOM)},   # the message this one replies to (sealed inside x when encrypted)
@@ -315,6 +342,27 @@ rules = {"rules": {
                     ".validate": "newData.hasChildren(['by', 'at'])",
                     "by": {".validate": "newData.isString()"},
                     "at": {".validate": "newData.val() === now"},
+                    "$other": NO,
+                },
+            },
+            # a long post's whole text (b; sealed as x, bound to the post's id), read only by whoever opens it
+            "posts": {
+                ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
+                "$id": {
+                    ".write": j("auth != null", o(
+                        j("!data.exists()", is_member(ROOM), not_banned, alive(ROOM), "newData.child('by').val() === auth.uid",
+                          f"{NEWROOM}.child('msgs/' + $id + '/pt').val() === true", f"{NEWROOM}.child('msgs/' + $id + '/by').val() === auth.uid"),
+                        # it goes with its card: the author, the owner and co-hosts, or StoaTalk's operator
+                        j("!newData.exists()", o("data.child('by').val() === auth.uid", is_staff(ROOM), is_admin)))),
+                    ".validate": j("newData.hasChildren(['by', 'at'])", o(
+                        j(ENC("newData.parent().parent()"), "newData.hasChild('x')", "!newData.hasChild('b')"),
+                        j("!" + ENC("newData.parent().parent()"), "newData.hasChild('b')", "!newData.hasChild('x')"))),
+                    "by": {".validate": "newData.isString()"},
+                    "at": {".validate": "newData.val() === now || newData.val() === data.val()"},
+                    "b": {".write": edit_field, ".validate": NONEMPTY(20000) + NOT_ENC},
+                    # 20,000 characters sealed: at most 60,000 bytes of UTF-8, about 80,100 characters of base64
+                    "x": {".write": edit_field, ".validate": SEALED(82000)},
+                    "ed": {".write": j(edit_write, "data.parent().exists()"), ".validate": "newData.val() === now"},
                     "$other": NO,
                 },
             },
@@ -406,7 +454,7 @@ rules = {"rules": {
     # the site's owner (Firebase console, or tools/cleanup/stats.mjs)
     "stats": {"$day": {"$k": {
         ".write": j("auth != null", r"$day.matches(/^20[0-9]{2}-[01][0-9]-[0-3][0-9]$/)",
-                    "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports|games)$/)",
+                    "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports|games|posts)$/)",
                     o(j("!data.exists()", "newData.val() === 1"), "newData.val() === data.val() + 1")),
         ".validate": "newData.isNumber()"}}},
     # StoaTalk's operator: who it is (set by hand in the Firebase console; each can see only their own entry), and
