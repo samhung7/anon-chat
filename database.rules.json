@@ -49,6 +49,14 @@
             ".write": "(auth != null) && ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true)) && (data.parent().parent().child('meta/last').val() >= now - 86400000)",
             ".validate": "newData.isString() && newData.val().length <= 4200 && newData.val().matches(/^[A-Za-z0-9_-]+$/) && newData.parent().child('enc').val() === true"
           },
+          "qr": {
+            ".write": "(auth != null) && ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true)) && (data.parent().parent().child('meta/last').val() >= now - 86400000)",
+            ".validate": "newData.isString() && newData.val().length <= 130 && newData.val().length > 0 && newData.parent().child('enc').val() !== true"
+          },
+          "xr": {
+            ".write": "(auth != null) && ((data.parent().parent().child('meta/owner').val() === auth.uid) || (data.parent().parent().child('meta/mods/' + auth.uid).val() === true)) && (data.parent().parent().child('meta/last').val() >= now - 86400000)",
+            ".validate": "newData.isString() && newData.val().length <= 1200 && newData.val().matches(/^[A-Za-z0-9_-]+$/) && newData.parent().child('enc').val() === true"
+          },
           "pins": {
             "$slot": {
               ".validate": "$slot.matches(/^[0-2]$/) && newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{1,32}$/)"

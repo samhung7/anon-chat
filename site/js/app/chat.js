@@ -21,6 +21,7 @@ import { syncPush } from "./push.js?v=dev";
 import { rememberRoom, forgetRoom, roomPath, showChat, home } from "./home.js?v=dev";
 import { archive, saveRecord, openRecord, exportSheet } from "./records.js?v=dev";
 import { editDesc } from "./menu.js?v=dev";
+import { renderQuick } from "./quick.js?v=dev";
 import { phase, hoursLeft, minutesLeft } from "./expiry.js?v=dev";
 
 export const LIST = () => $("#list");
@@ -45,7 +46,7 @@ function watchChat(r) {
   // the room's age is a matter of time, not only of what the database says: look again every half minute
   const tick = setInterval(() => { if (r.current && !r.gone) renderAge(); }, 30000);
   r.off.push(() => clearInterval(tick));
-  r.on("meta", () => { renderHeader(); renderDesc(); renderPins(); refreshNames(); renderAge(); })
+  r.on("meta", () => { renderHeader(); renderDesc(); renderPins(); refreshNames(); renderAge(); renderQuick(); })
     .on("ended", () => gone("ended"))
     .on("lost", checkGone)
     .on("arrivals", ({ joined, left }) => {
@@ -89,7 +90,7 @@ export async function gone(why) {
   leaveDevice(room.code);
   if (why === "self") return home();
   const text = t({ ended: "goneEnded", kicked: "goneKicked", left: "goneLeft" }[why]);
-  $("#composer").classList.add("off");
+  $("#composer").classList.add("off"); renderQuick();
   for (;;) {
     const a = await sheet(t("goneTitle"), el("p", { class: "muted", text: text + t("goneKeep") }), [["save", t("saveHere"), "primary"], ["export", t("downloadFile")], ["home", t("backHome")]]);
     if (a === "save") { const id = saveRecord(archive()); if (id) return openRecord(null, id); continue; }
@@ -236,6 +237,7 @@ export function renderView() {
     ta.value = ui.drafts[ui.view] || ""; ta.dispatchEvent(new Event("input"));
     ui.shown = ui.view; cancelReply(); typing.stop();
   }
+  renderQuick();
   renderDesc(); renderPins();
   const list = LIST();
   list.replaceChildren();
@@ -309,7 +311,7 @@ export function renderAge() {
   if (!room?.meta) return;
   const { state, left } = phase(room.meta.last, backend.now()), at = room.code + room.meta.last;
   const ro = state === "ro" || state === "gone";
-  if (ro !== room.readOnly) { room.readOnly = ro; if (ro) { cancelReply(); typing.stop(); closePicker(); } renderHeader(); }
+  if (ro !== room.readOnly) { room.readOnly = ro; if (ro) { cancelReply(); typing.stop(); closePicker(); } renderHeader(); renderQuick(); }
   // read-only: the message box gives way to how long the room has left, and a way to save it
   $("#composer").hidden = ro && !room.gone;
   box.hidden = !ro || room.gone;

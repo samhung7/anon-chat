@@ -9,6 +9,7 @@ import { newPoll } from "./polls.js?v=dev";
 import { newDraw } from "./draws.js?v=dev";
 import { gamesSheet, gamesOn } from "./games.js?v=dev";
 import { newPost, canPost } from "./posts.js?v=dev";
+import { renderQuick } from "./quick.js?v=dev";
 
 const EMOJI = {
   "😀": "😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😋 😜 🤪 😝 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😌 😔 😪 😴 😷 🤒 🤕 🤢 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 🤡 👻 👽 🤖 💩",
@@ -20,7 +21,7 @@ const EMOJI = {
 };
 let open = null; // "more" | "emoji" | "gif" | null
 export const pickerOpen = () => open;
-export function closePicker() { open = null; $("#picker").hidden = true; $("#composer").querySelectorAll(".tool").forEach((b) => b.setAttribute("aria-pressed", "false")); }
+export function closePicker() { open = null; $("#picker").hidden = true; $("#composer").querySelectorAll(".tool").forEach((b) => b.setAttribute("aria-pressed", "false")); renderQuick(); }
 export function openPicker(kind) {
   if (open === kind) return closePicker();
   open = kind;
@@ -28,6 +29,7 @@ export function openPicker(kind) {
   const box = $("#picker");
   box.hidden = false;
   box.classList.toggle("short", kind === "more");
+  renderQuick();
   ({ more: morePanel, emoji: emojiPanel, gif: gifPanel })[kind](box);
 }
 function morePanel(box) {

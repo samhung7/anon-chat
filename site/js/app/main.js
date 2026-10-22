@@ -18,7 +18,8 @@
      qa.js        lecture Q&A                  show.js     the projector screen
      lobby.js     opening and joining          home.js     screens and the home page
      records.js   export, import, saved records (archive.js: the record format)
-     identity.js  nickname and animal          notify.js   notifications    pickers.js emoji, GIF, ＋ */
+     identity.js  nickname and animal          notify.js   notifications    pickers.js emoji, GIF, ＋
+     quick.js     quick replies and the double-tap 👍 */
 import { KLIPY_KEY, IDLE_MS, params } from "./constants.js?v=dev";
 import { $ } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
@@ -28,6 +29,7 @@ import { showMe } from "./identity.js?v=dev";
 import { create, join, cleanCode } from "./lobby.js?v=dev";
 import { LIST, setView, markSeen, showJump } from "./chat.js?v=dev";
 import { send, cancelReply, typing, renderTyping, mentionBar, box } from "./composer.js?v=dev";
+import { renderQuick, wireQuick, wireDoubleTap } from "./quick.js?v=dev";
 import { ask } from "./qa.js?v=dev";
 import { sendPhotos } from "./photos.js?v=dev";
 import { menu, share } from "./menu.js?v=dev";
@@ -100,7 +102,8 @@ setInterval(() => room && !room.gone && renderTyping(), 2000);
 const ta = box();
 const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };
 ta.addEventListener("input", grow);
-ta.addEventListener("input", () => { typing.ping(); mentionBar(); });
+ta.addEventListener("input", () => { typing.ping(); mentionBar(); renderQuick(); });
+wireQuick(); wireDoubleTap(LIST());
 $("#mentionBar").addEventListener("mousedown", (e) => e.preventDefault()); // keep the keyboard up while picking a name
 LIST().addEventListener("scroll", () => { if (room) { markSeen(); showJump(); } }, { passive: true });
 ["touchstart", "wheel"].forEach((ev) => LIST().addEventListener(ev, () => { if (room) room.ui.touched = true; }, { passive: true }));
@@ -173,8 +176,8 @@ $("#composer").addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = ta.value;
   if (!text.trim()) return;
-  ta.value = ""; grow(); mentionBar();
-  if (!(await (room?.ui.view === "qa" ? ask(text) : send(text))) && !ta.value) { ta.value = text; grow(); } // not sent: give the text back
+  ta.value = ""; grow(); mentionBar(); renderQuick();
+  if (!(await (room?.ui.view === "qa" ? ask(text) : send(text))) && !ta.value) { ta.value = text; grow(); renderQuick(); } // not sent: give the text back
   else if (pickerOpen() === "emoji") closePicker();
   ta.focus();
 });
