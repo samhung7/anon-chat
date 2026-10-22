@@ -166,6 +166,7 @@ code { font-size: .9em; }
 .roomrow .txt b { font-weight: var(--fw-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .roomrow.ro .txt b { color: var(--muted); }
 .merow small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roomrow .unread { flex: none; min-width: 22px; padding: 0 7px; border-radius: var(--radius-pill); background: var(--accent-ink); color: var(--surface); font: var(--fw-semibold) var(--fs-xs)/22px var(--font-sans); text-align: center; font-variant-numeric: tabular-nums; }
 .roomrow .go { flex: none; width: 32px; height: 32px; display: grid; place-items: center; color: var(--accent-ink); }
 .roomrow .tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); }
 .roomrow .left { font-size: var(--fs-xs); color: var(--muted); }

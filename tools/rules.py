@@ -351,6 +351,7 @@ rules = {"rules": {
                 ".validate": "newData.val() === true"}},
             "msgs": {
                 ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
+                ".indexOn": ["at"],  # the home page counts a room's messages since this device last read it
                 "$id": {
                     ".write": msg_write,
                     ".validate": j("newData.hasChildren(['by', 'at'])", o(

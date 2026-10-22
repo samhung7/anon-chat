@@ -35,7 +35,7 @@ import { people } from "./people.js?v=dev";
 import { setNotify, watchVisibility } from "./notify.js?v=dev";
 import { openPicker, closePicker, pickerOpen } from "./pickers.js?v=dev";
 import { importFile, recordMenu, showRecordTab } from "./records.js?v=dev";
-import { home, homeMenu, backdrop, adoptOldRoom, turnResumePage } from "./home.js?v=dev";
+import { home, homeMenu, backdrop, adoptOldRoom, turnResumePage, showResume } from "./home.js?v=dev";
 
 I18N.apply();
 adoptOldRoom();
@@ -69,6 +69,8 @@ $("#resume").addEventListener("click", (e) => {
   if (b.dataset.code) join(b.dataset.code);
   else turnResumePage(b.dataset.a === "next" ? 1 : -1);
 });
+// back on the home page after a while away: the rooms' new-message counts may have grown
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("#home").hidden) showResume(); });
 $("#importFile").addEventListener("change", (e) => { importFile(e.target.files[0]); e.target.value = ""; });
 $("#record").addEventListener("click", (e) => {
   const a = e.target.closest("[data-a]")?.dataset.a, tab = e.target.closest("[data-tab]");
