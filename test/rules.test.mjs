@@ -749,3 +749,60 @@ test("long posts in a Private Salon: card and text are sealed", async () => {
   await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "msgs/p1/x": "bmV3", "msgs/p1/ed": T, "posts/p1/x": "bmV3", "posts/p1/ed": T }));
   await assertFails(update(ref(db("alice"), `rooms/${C}`), { "posts/p1/x": "not base64!" }));
 });
+
+// a comment as the app sends it: under pc/{post}, named in the card (cc), rate-limited (lc) and keeping the room going
+const comment = (uid, p, cid, body = { name: "x", avatar: "🦊", text: "好文" }, more = {}) =>
+  post(uid, `pc/${p}/${cid}`, { by: uid, at: T, ...body }, { field: "lc", more: { [`msgs/${p}/cc/${cid}`]: true, "meta/last": T, ...more } });
+
+test("comments under a long post: anyone in the room, named in its card, removed by their author or the hosts", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertSucceeds(longPost("alice", "p1"));
+  const msg = await say("alice", "一般訊息");
+  await assertSucceeds(comment("bob", "p1", "c1"));
+  await assertSucceeds(comment("carol", "p1", "c2", { name: "x", avatar: "🦊", text: "同意", rp: "c1" }));
+  await assertSucceeds(get(ref(db("bob"), `rooms/${C}/pc/p1`)));
+  await assertFails(get(ref(db("dave"), `rooms/${C}/pc/p1`)));
+  await assertFails(comment("dave", "p1", "c3")); // not in the room
+  await assertFails(comment("bob", msg, "c4")); // only under a long post
+  await assertFails(comment("bob", "p9", "c5")); // a post that isn't there
+  await assertFails(comment("bob", "p1", "c6", { name: "x", avatar: "🦊", text: "x".repeat(1001) }));
+  await assertFails(comment("bob", "p1", "c7", { name: "x", avatar: "🦊", text: "密", x: "c2VhbGVk" })); // no ciphertext in an open room
+  await assertFails(post("bob", "pc/p1/c8", { by: "bob", at: T, name: "x", avatar: "🦊", text: "沒登記" }, { field: "lc" })); // not named in the card
+  await assertFails(post("bob", "pc/p1/c9", { by: "carol", at: T, name: "x", avatar: "🦊", text: "冒名" }, { field: "lc", more: { "msgs/p1/cc/c9": true } }));
+  await assertFails(update(ref(db("bob"), `rooms/${C}`), { "msgs/p1/cc/zz": true })); // no comment behind it
+  // reactions, by each for themselves
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/pc/p1/c1/re/0/alice`), true));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/pc/p1/c1/re/0/bob`), true));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/pc/p1/nope/re/0/alice`), true));
+  // nobody changes someone else's words; the author deletes theirs (with its place in the card), the hosts anyone's
+  await assertFails(set(ref(db("carol"), `rooms/${C}/pc/p1/c1/text`), "改掉"));
+  await assertFails(update(ref(db("carol"), `rooms/${C}`), { "pc/p1/c1": null, "msgs/p1/cc/c1": null }));
+  await assertSucceeds(update(ref(db("bob"), `rooms/${C}`), { "pc/p1/c1": null, "msgs/p1/cc/c1": null }));
+  await assertSucceeds(comment("bob", "p1", "c10"));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "pc/p1/c10": null, "msgs/p1/cc/c10": null }));
+  // reported like a message, naming the post it's under; the operator gets it too
+  await assertFails(set(ref(db("bob"), `rooms/${C}/reports/zz/bob`), { r: 0, at: T, p: "p1" }));
+  await assertSucceeds(update(ref(db("bob")), { [`rooms/${C}/reports/c2/bob`]: { r: 0, at: T, p: "p1" },
+    [`ops/reports/${C}_c2_bob`]: { code: C, msg: "c2", p: "p1", by: "bob", who: "carol", r: 0, at: T, t: "同意" } }));
+  await assertFails(set(ref(db("alice"), `ops/reports/${C}_c2_alice`), { code: C, msg: "c2", p: "p1", by: "alice", who: "bob", r: 0, at: T })); // the real author
+  await makeAdmin("op");
+  await assertSucceeds(update(ref(opDb()), { [`ops/reports/${C}_c2_bob`]: null, [`rooms/${C}/pc/p1/c2`]: null, [`rooms/${C}/msgs/p1/cc/c2`]: null, [`rooms/${C}/reports/c2`]: null }));
+  // the post goes with all its comments: its author may take them, others can't
+  await assertSucceeds(comment("carol", "p1", "c11"));
+  await assertFails(update(ref(db("carol"), `rooms/${C}`), { "pc/p1": null }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { "msgs/p1": null, "posts/p1": null, "pc/p1": null }));
+  // a new room can't come with comments in it
+  await assertFails(update(ref(db("dave")), { [`rooms/ABCD`]: { meta: { owner: "dave", created: T, last: T }, members: { dave: member("d") }, names: { d: "dave" }, pc: { p: { c: { by: "dave", at: T, text: "x" } } } } }));
+  // a read-only room takes no new comment
+  await assertSucceeds(longPost("alice", "p2"));
+  await idle(24 * HOUR + 60000);
+  await assertFails(comment("bob", "p2", "c12"));
+});
+
+test("comments in a Private Salon are sealed", async () => {
+  await createEnc("alice"); await joinEnc("bob", H("b"));
+  await assertSucceeds(longPost("alice", "p1", { sealed: true, body: { x: "c2VhbGVk" } }));
+  await assertSucceeds(comment("bob", "p1", "c1", { x: "c2VhbGVk" }));
+  await assertFails(comment("bob", "p1", "c2", { name: "x", avatar: "🦊", text: "明文" }));
+  await assertFails(comment("bob", "p1", "c3", { x: "not sealed!" }));
+});

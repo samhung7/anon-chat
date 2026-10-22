@@ -5,7 +5,8 @@
    entering a room never downloads every post: only opening one does. Pictures go to the photo service like any photo,
    before the post, and the text names them on lines of their own (![](id)).
    The owner and co-hosts write them; the owner can let everyone (meta/po). What's being written is kept on this device
-   as it's typed (a page closed, a phone that drops the app, a room turning read-only), until it's published. */
+   as it's typed (a page closed, a phone that drops the app, a room turning read-only), until it's published.
+   Anyone can comment under a post, on its page (comments.js); the card counts them. */
 import { LIMITS, REACTS } from "./constants.js?v=dev";
 import { t, fmtTime } from "./text.js?v=dev";
 import { el, toast, icon, avatar, busy, orToast, confirmSheet } from "./dom.js?v=dev";
@@ -18,6 +19,7 @@ import { KIND } from "./kinds.js?v=dev";
 import { shrinkPhoto, uploadPhoto, jpegUrl, photoUrl, viewPhoto, dropPhoto } from "./photos.js?v=dev";
 import { phase } from "./expiry.js?v=dev";
 import { msgActions } from "./actions.js?v=dev";
+import { commentsView, commentCount, loadComments } from "./comments.js?v=dev";
 
 export const canPost = () => !!room && !room.gone && !room.readOnly && (room.isStaff() || room.meta?.po === true);
 const PIC_LINE = /^!\[[^\]]*\]\(([\w-]{1,32})\)$/;
@@ -81,12 +83,14 @@ export function postBody(id, v) {
 }
 // the text of a post already read on this device (for an export or a report, which can't wait)
 export const knownBody = (id) => room?.bodyText?.get(id) ?? null;
-// every post's text, before an export
+// every post's text and comments, before an export
 export async function loadBodies() {
   if (!room) return;
   const list = [...room.msgs.entries()].filter(([, v]) => v.post && !v.bad);
   if (list.length) busy(true);
-  try { await Promise.all(list.map(([id, v]) => postBody(id, v).catch(() => null))); } finally { if (list.length) busy(false); }
+  try {
+    await Promise.all(list.flatMap(([id, v]) => [postBody(id, v).catch(() => null), commentCount(v) ? loadComments(id).catch(() => null) : null]));
+  } finally { if (list.length) busy(false); }
 }
 
 /* ---------- the card in the chat ---------- */
@@ -96,11 +100,12 @@ export function postCard(id, v) {
     el("span", { class: "ptag" }, icon("post", "sm"), el("span", { text: t("post") })),
     p.t ? el("b", { class: "pt", text: p.t }) : null,
     p.s ? el("span", { class: "ps" + (p.t ? "" : " lead"), text: p.s }) : null,
-    el("span", { class: "pmore" }, el("span", { text: t("postReadMore") }), el("span", { class: "muted", text: t("postChars", { n: p.n.toLocaleString(I18N.lang) }) })));
+    el("span", { class: "pmore" }, el("span", { text: t("postReadMore") }), el("span", { class: "muted", text: t("postChars", { n: p.n.toLocaleString(I18N.lang) }) }),
+      commentCount(v) ? el("span", { class: "muted pcc", text: "💬 " + commentCount(v).toLocaleString(I18N.lang) }) : null));
 }
 // a saved one (in a record): the same card, opening the text the record kept
 export function savedPostCard(m) {
-  return el("button", { type: "button", class: "bub postbub ro", onclick: () => readPage(m.post.t, () => mdView(m.post.b || m.post.s, () => el("p", { class: "muted", text: "📷 " + t("photo") }))) },
+  return el("button", { type: "button", class: "bub postbub ro", onclick: () => readPage(m.post.t, () => mdView(m.post.b || m.post.s, () => el("p", { class: "muted", text: "📷 " + t("photo") })), m.post.c) },
     el("span", { class: "ptag" }, icon("post", "sm"), el("span", { text: t("post") })),
     m.post.t ? el("b", { class: "pt", text: m.post.t }) : null, m.post.s ? el("span", { class: "ps" + (m.post.t ? "" : " lead"), text: m.post.s }) : null);
 }
@@ -136,9 +141,12 @@ const bar = (title, right, onBack) => el("header", { class: "bar" },
 export function openPost(id) {
   const r = room, v0 = r?.msgs.get(id);
   if (!v0 || !v0.post) return toast(t("postGone"));
-  const body = el("div", { class: "pagebody" });
+  const top = el("div"), foot = el("footer", { class: "cfoot" }), cs = commentsView(id, foot);
+  const body = el("div", { class: "pagebody" }, top, cs.el);
   const more = el("button", { type: "button", class: "icon", "aria-label": t("msgMenu"), onclick: () => r.msgs.get(id) && msgActions(id, r.msgs.get(id), false) }, icon("more"));
   const ov = page("reader", bar(t("post"), more, () => ov.close()), body);
+  ov.querySelector(".page").append(foot);
+  ov.querySelector(".page").dataset.post = id;
   let shownEd = null;
   const draw = async () => {
     const v = r.msgs.get(id);
@@ -149,10 +157,10 @@ export function openPost(id) {
       return el("button", { type: "button", class: "chip" + (ids.includes(uid) ? " on" : ""), "aria-pressed": String(ids.includes(uid)),
         disabled: r.readOnly || r.gone || null, onclick: () => orToast(r.api.react(id, k, !ids.includes(uid))) }, ids.length ? `${emo} ${ids.length}` : emo);
     }));
-    if (shownEd === (v.ed || 0) && body.querySelector(".md, .pfail")) { body.querySelector(".re")?.replaceWith(reacts); return; }
+    if (shownEd === (v.ed || 0) && top.querySelector(".md, .pfail")) { top.querySelector(".re")?.replaceWith(reacts); return; }
     shownEd = v.ed || 0;
     const text = el("div", { class: "ptext" }, el("p", { class: "muted", text: t("loading") }));
-    body.replaceChildren(
+    top.replaceChildren(
       el("div", { class: "who" }, el("span", { class: "av" }, avatar(who.avatar)), el("span", { class: "nm", text: who.name + r.badge(v.by) }),
         el("time", { text: fmtTime(v.at) }), v.ed ? el("small", { class: "muted", text: t("edited") }) : null),
       v.post.t ? el("h2", { class: "ptitle", text: v.post.t }) : null, text, reacts);
@@ -163,12 +171,15 @@ export function openPost(id) {
   const changed = (cid) => { if (cid === id && ov.isConnected) draw(); };
   const removed = (cid) => { if (cid === id && ov.isConnected) { ov.close(); toast(t("postGone")); } };
   r.on("msg-changed", changed).on("msg-removed", removed);
-  ov.onClose = () => { r.un("msg-changed", changed); r.un("msg-removed", removed); };
+  ov.onClose = () => { r.un("msg-changed", changed); r.un("msg-removed", removed); cs.stop(); };
   draw();
 }
-// a read-only page of a post from a saved record
-function readPage(title, make) {
-  const body = el("div", { class: "pagebody" }, title ? el("h2", { class: "ptitle", text: title }) : null, make());
+// a read-only page of a post from a saved record, with the comments it kept
+function readPage(title, make, cs) {
+  const body = el("div", { class: "pagebody" }, title ? el("h2", { class: "ptitle", text: title }) : null, make(),
+    cs?.length ? el("section", { class: "comments" }, el("h3", { class: "chead", text: t("commentsN", { n: cs.length }) }),
+      el("ol", { class: "clist" }, cs.map((c) => el("li", { class: "cmt" }, el("span", { class: "av" }, avatar(c.a)),
+        el("div", { class: "cbody" }, el("div", { class: "cwho" }, el("b", { text: c.n })), el("div", { class: "ctext" }, linkify(c.t, false))))))) : null);
   const ov = page("reader", bar(t("post"), null, () => ov.close()), body);
 }
 // a picture in a live post: one the post carries, fetched as it comes near

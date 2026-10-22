@@ -244,7 +244,7 @@ export class Room extends Emitter {
       this.repOff = fb.onValue(this.api.ref("reports"), (s) => {
         if (!this.current) return;
         const prev = this.reports; this.reports = s.val() || {};
-        const more = Object.entries(this.reports).some(([id, by]) => Object.keys(by || {}).length > Object.keys(prev[id] || {}).length && this.msgs.has(id));
+        const more = Object.entries(this.reports).some(([id, by]) => Object.keys(by || {}).length > Object.keys(prev[id] || {}).length && this.reportLive(id));
         this.emit("reports", { more: !first && more });
         first = false;
       }, () => { this.repOff = null; });
@@ -268,5 +268,9 @@ export class Room extends Emitter {
     if (!meta) return "ended";
     return (await backend.val(this.api.ref("banned/" + this.uid))) ? "kicked" : "left";
   }
-  reportCount() { return this.isStaff() ? Object.keys(this.reports || {}).filter((id) => this.msgs.has(id)).length : 0; }
+  // the post a reported comment is under (reports/{comment}/{uid}.p), or null for a reported message
+  reportPost(id) { return Object.values(this.reports?.[id] || {}).find((x) => typeof x?.p === "string")?.p || null; }
+  // a report on something still here: a message, or a comment whose post is (the comment itself is checked when listed)
+  reportLive(id) { return this.msgs.has(this.reportPost(id) || id); }
+  reportCount() { return this.isStaff() ? Object.keys(this.reports || {}).filter((id) => this.reportLive(id)).length : 0; }
 }

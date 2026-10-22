@@ -35,7 +35,7 @@ room_write = o(
     j(fresh_room, not_banned, "newData.child('meta/owner').val() === auth.uid", "newData.child('members/' + auth.uid).exists()",
       "!newData.child('msgs').exists()", "!newData.child('files').exists()", "!newData.child('dm').exists()", "!newData.child('banned').exists()",
       "!newData.child('reports').exists()", "!newData.child('qs').exists()", "!newData.child('qq').exists()", "!newData.child('qby').exists()",
-      "!newData.child('push').exists()", "!newData.child('games').exists()", "!newData.child('posts').exists()"),
+      "!newData.child('push').exists()", "!newData.child('games').exists()", "!newData.child('posts').exists()", "!newData.child('pc').exists()"),
 )
 
 member_join = j(
@@ -183,16 +183,56 @@ VOTE = {
 EDIT_ROOM = "data.parent().parent().parent()"   # from rooms/$code/msgs/$id/<field>
 edit_write = j("auth != null", "data.parent().child('by').val() === auth.uid", is_member(EDIT_ROOM), alive(EDIT_ROOM))
 edit_field = j(edit_write, "data.exists()", "newData.exists()")
-# a report: one per person per message, with a reason (0 harassment, 1 spam, 2 inappropriate, 3 other), read by the owner and co-hosts
+# a report: one per person per message, with a reason (0 harassment, 1 spam, 2 inappropriate, 3 other), read by the owner and co-hosts.
+# A comment under a long post is reported the same way, under the comment's id, naming the post it's under (p)
 REP_ROOM = "data.parent().parent().parent()"   # from rooms/$code/reports/$msg/$uid
 REPORT = {
     ".write": j("auth != null", o(
-        j("auth.uid === $uid", "!data.exists()", "newData.exists()", is_member(REP_ROOM), f"{REP_ROOM}.child('msgs/' + $msg).exists()"),
+        j("auth.uid === $uid", "!data.exists()", "newData.exists()", is_member(REP_ROOM),
+          o(j("!newData.hasChild('p')", f"{REP_ROOM}.child('msgs/' + $msg).exists()"),
+            f"{REP_ROOM}.child('pc/' + newData.child('p').val() + '/' + $msg).exists()")),
         j("!newData.exists()", is_staff(REP_ROOM)))),
     ".validate": "newData.hasChildren(['r', 'at'])",
     "r": {".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"},
     "at": {".validate": "newData.val() === now"},
+    "p": {".validate": PUSH_ID},
     "$other": NO,
+}
+# comments under a long post: pc/{post}/{id}, apart from the post's text so opening a post fetches them only when shown.
+# Anyone in the room comments (words, a reply to another comment, reactions); each one is named in the post's card
+# (msgs/{post}/cc/{id}) in the same update, so the card counts them and everyone's chat hears of a new one. Commenting is
+# rate-limited like posting (lc names the comment) and keeps the room going (meta/last), like a message.
+CROOM = "root.child('rooms/' + $code)"
+NEWCROOM = "newData.parent().parent().parent()"   # from rooms/$code/pc/$post/$cid
+C_ENC = ENC(CROOM)
+COMMENT = {
+    ".write": j("auth != null", o(
+        j("!data.exists()", is_member(CROOM), not_banned, alive(CROOM), "newData.child('by').val() === auth.uid",
+          f"{NEWCROOM}.child('msgs/' + $post + '/pt').val() === true", f"{NEWCROOM}.child('msgs/' + $post + '/cc/' + $cid).val() === true",
+          f"{NEWCROOM}.child('members/' + auth.uid + '/ls').val() === now", f"{NEWCROOM}.child('members/' + auth.uid + '/lc').val() === $cid"),
+        # the author deletes it; so do the owner and co-hosts, and StoaTalk's operator acting on a report
+        j("!newData.exists()", o("data.child('by').val() === auth.uid", is_staff(CROOM), is_admin)))),
+    ".validate": j("newData.hasChildren(['by', 'at'])", o(j(C_ENC, "newData.hasChild('x')", "!newData.hasChild('text')"),
+                                                       j("!" + C_ENC, "newData.hasChildren(['text', 'name', 'avatar'])", "!newData.hasChild('x')"))),
+    "by": {".validate": "newData.isString()"},
+    "at": {".validate": "newData.val() === now || newData.val() === data.val()"},
+    "text": {".validate": NONEMPTY(1000) + " && !" + C_ENC},
+    "name": {".validate": S(24) + " && !" + C_ENC}, "avatar": {".validate": S(8) + " && !" + C_ENC},
+    "rp": {".validate": PUSH_ID + " && !" + C_ENC},   # the comment this one answers (sealed inside x when encrypted)
+    "x": {".validate": SEALED(6000) + " && " + C_ENC},   # {t, n, a, r?} sealed to the post and the author
+    "re": {"$k": {
+        ".validate": "$k.matches(/^[0-5]$/)",
+        "$uid": {".write": j("auth != null", "auth.uid === $uid", is_member(CROOM), alive(CROOM), "data.parent().parent().parent().exists()"),
+                 ".validate": "newData.val() === true"}}},
+    "$other": NO,
+}
+# a comment's place in its post's card: written with the comment, gone once the comment is
+CC_ROOM = "newData.parent().parent().parent().parent()"   # from rooms/$code/msgs/$id/cc/$cid
+CC = {
+    ".write": j("auth != null", o(
+        j("!data.exists()", "newData.val() === true", f"{CC_ROOM}.child('pc/' + $id + '/' + $cid + '/by').val() === auth.uid"),
+        j("!newData.exists()", f"!{CC_ROOM}.child('pc/' + $id + '/' + $cid).exists()"))),
+    ".validate": "newData.val() === true",
 }
 # "someone is typing": a server time, refreshed while they type, removed when they stop (or go)
 TYPING = lambda room, extra="true": {
@@ -287,7 +327,7 @@ rules = {"rules": {
                     "pk": {".validate": SEALED(120)},   # public key for end-to-end encrypted private messages
                     "joined": {".validate": "newData.isNumber()"},
                     "ls": {".validate": f"newData.val() === now && (!data.exists() || data.val() < now - {GAP})"},
-                    "lm": {".validate": PUSH_ID}, "lf": {".validate": PUSH_ID}, "lq": {".validate": PUSH_ID},
+                    "lm": {".validate": PUSH_ID}, "lf": {".validate": PUSH_ID}, "lq": {".validate": PUSH_ID}, "lc": {".validate": PUSH_ID},
                     "online": {".validate": "newData.isBoolean()"},
                     "$other": NO,
                 },
@@ -327,6 +367,7 @@ rules = {"rules": {
                                              alive("data.parent().parent().parent().parent().parent()")),
                                  ".validate": "newData.val() === true"}}},
                     "votes": {"$uid": VOTE},
+                    "cc": {"$cid": CC},
                     # the poll's author closes it; votes stop
                     "closed": {".write": j("auth != null", "data.parent().child('by').val() === auth.uid", alive(EDIT_ROOM)), ".validate": "newData.val() === true"},
                     "$other": NO,
@@ -364,6 +405,14 @@ rules = {"rules": {
                     "x": {".write": edit_field, ".validate": SEALED(82000)},
                     "ed": {".write": j(edit_write, "data.parent().exists()"), ".validate": "newData.val() === now"},
                     "$other": NO,
+                },
+            },
+            "pc": {
+                ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
+                "$post": {
+                    # all of a post's comments go with it: its author, the owner and co-hosts, or StoaTalk's operator
+                    ".write": j("auth != null", "!newData.exists()", o(f"{CROOM}.child('msgs/' + $post + '/by').val() === auth.uid", is_staff(CROOM), is_admin)),
+                    "$cid": COMMENT,
                 },
             },
             "dm": {"$pair": {
@@ -454,7 +503,7 @@ rules = {"rules": {
     # the site's owner (Firebase console, or tools/cleanup/stats.mjs)
     "stats": {"$day": {"$k": {
         ".write": j("auth != null", r"$day.matches(/^20[0-9]{2}-[01][0-9]-[0-3][0-9]$/)",
-                    "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports|games|posts)$/)",
+                    "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports|games|posts|comments)$/)",
                     o(j("!data.exists()", "newData.val() === 1"), "newData.val() === data.val() + 1")),
         ".validate": "newData.isNumber()"}}},
     # StoaTalk's operator: who it is (set by hand in the Firebase console; each can see only their own entry), and
@@ -470,12 +519,15 @@ rules = {"rules": {
                     j("!data.exists()", "newData.child('by').val() === auth.uid",
                       "$id === newData.child('code').val() + '_' + newData.child('msg').val() + '_' + auth.uid",
                       "root.child('rooms/' + newData.child('code').val() + '/members/' + auth.uid).exists()",
-                      "root.child('rooms/' + newData.child('code').val() + '/msgs/' + newData.child('msg').val() + '/by').val() === newData.child('who').val()",
+                      # a message, or a comment under the long post p
+                      o(j("!newData.hasChild('p')", "root.child('rooms/' + newData.child('code').val() + '/msgs/' + newData.child('msg').val() + '/by').val() === newData.child('who').val()"),
+                        "root.child('rooms/' + newData.child('code').val() + '/pc/' + newData.child('p').val() + '/' + newData.child('msg').val() + '/by').val() === newData.child('who').val()"),
                       "newData.child('who').val() !== auth.uid"),
                     j("!newData.exists()", is_admin))),
                 ".validate": "newData.hasChildren(['code', 'msg', 'by', 'who', 'r', 'at'])",
                 "code": {".validate": r"newData.isString() && newData.val().matches(/^[2-9A-HJKMNP-Z]{4}$/)"},
                 "msg": {".validate": PUSH_ID}, "by": {".validate": S(128)}, "who": {".validate": S(128)},
+                "p": {".validate": PUSH_ID},     # msg is a comment under this long post
                 "r": {".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"},
                 "at": {".validate": "newData.val() === now"},
                 "t": {".validate": S(1000)},     # the message as the reporter saw it (a photo, poll or GIF as a short label)

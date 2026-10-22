@@ -16,6 +16,7 @@ import { closePicker } from "./pickers.js?v=dev";
 import { renderQa, refreshWait, watchQa } from "./qa.js?v=dev";
 import { watchShow, SHOW } from "./show.js?v=dev";
 import { noteNew, offerNotify, hiddenUnread, notifyOn } from "./notify.js?v=dev";
+import { noteComments } from "./comments.js?v=dev";
 import { syncPush } from "./push.js?v=dev";
 import { rememberRoom, forgetRoom, roomPath, showChat, home } from "./home.js?v=dev";
 import { archive, saveRecord, openRecord, exportSheet } from "./records.js?v=dev";
@@ -57,7 +58,7 @@ function watchChat(r) {
       if (!r.pushSynced && r.members[backend.uid]) { r.pushSynced = true; if (notifyOn(r.code)) syncPush(r.code, true); }
     })
     .on("msg", (id, v) => { if (inRoomView()) addMsg(id, v); if (pinIds().includes(id)) renderPins(); noteNew(v, null); })
-    .on("msg-changed", (id, v, old) => { if (inRoomView()) updateMsg(id, v, old); })
+    .on("msg-changed", (id, v, old) => { if (inRoomView()) updateMsg(id, v, old); noteComments(id, v, old); })
     .on("msg-removed", (id) => { if (inRoomView()) document.getElementById("m-" + id)?.remove(); renderPins(); })
     .on("typing", renderTyping)
     .on("qs", renderHeader)

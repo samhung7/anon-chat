@@ -18,6 +18,7 @@ import { liveDraw, drawView } from "./draws.js?v=dev";
 import { gameCard, gameText, GAME } from "./games.js?v=dev";
 import { GAMES, DAY_RE } from "./puzzles.js?v=dev";
 import { postCard, savedPostCard, openPost, editPost, copyPost, knownBody, postName } from "./posts.js?v=dev";
+import { knownComments } from "./comments.js?v=dev";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 export { esc as escHtml };
@@ -187,8 +188,11 @@ const game = {
   savedBubble: (m) => el("div", { class: "bub gamebub ro" }, gameCard(m.game, false)),
 };
 
-// a long post (posts.js): its card here, its whole text apart in posts/{id}; pt marks it, sealed or not
-const postText = (m) => `📝 ${postName(m.post)}\n${m.post.b || m.post.s}`;
+// a long post (posts.js): its card here, its whole text apart in posts/{id}; pt marks it, sealed or not. Its comments
+// (comments.js) are counted in cc, and kept in a record as c: [{ n, a, t }]
+const commentsText = (cs) => (cs?.length ? `\n\n💬 ${t("commentsN", { n: cs.length })}\n` + cs.map((c) => `${c.a} ${c.n}${t("colon")}${c.t}`).join("\n") : "");
+const postText = (m) => `📝 ${postName(m.post)}\n${m.post.b || m.post.s}${commentsText(m.post.c)}`;
+const cleanComments = (cs) => arr(cs).slice(0, 2000).map((c) => ({ n: str(c?.n, 24) || "？", a: str(c?.a, 8) || "👤", t: str(c?.t, LIMITS.comment) })).filter((c) => c.t);
 const post = {
   name: "post", stat: "posts", roomOnly: true,
   live: (v) => !!v.post, saved: (m) => !!m.post,
@@ -199,6 +203,7 @@ const post = {
   async opened(out, raw, id) { if (out.post && raw.pt !== true) { delete out.post; Object.assign(out, { text: t("cantDecrypt"), bad: true }); } else if (out.post) out.pid = id; },
   snippet: (v) => "📝 " + postName(v.post),
   bubble: (id, v) => postCard(id, v),
+  refresh: (node, id, v) => node.querySelector(".postbub")?.replaceWith(postCard(id, v)), // the comment count
   preview: (v) => quoteText(snippet(v)),
   pinned: (v) => "📝 " + postName(v.post),
   notice: (v) => "📝 " + postName(v.post),
@@ -209,13 +214,21 @@ const post = {
     ["copypost", "postCopy", () => true, (id, v) => copyPost(id, v)],
     ["editpost", "postEdit", (v) => v.by === backend.uid && !room.readOnly && !room.gone, (id, v) => editPost(id, v)],
   ],
-  // the text, and any pictures, go with it
-  removes: (v) => Object.fromEntries([["posts/" + v.pid, null], ...(v.post.p || []).map((p) => ["files/" + p.f, null])]),
+  // the text, its comments and any pictures go with it
+  removes: (v) => Object.fromEntries([["posts/" + v.pid, null], ["pc/" + v.pid, null], ...(v.post.p || []).map((p) => ["files/" + p.f, null])]),
   removed: (v) => (v.post.p || []).forEach((p) => dropPhoto(room.code, v.by, p.f)),
-  toSaved: (v) => (v.post ? { post: { t: v.post.t, s: v.post.s, b: knownBody(v.pid) ?? undefined } } : {}),
-  readSaved: (m) => { const p = m?.post; return { post: isObj(p) && (str(p.t, LIMITS.postTitle) || str(p.s, LIMITS.postEx) || str(p.b, LIMITS.postBody)) ? { t: str(p.t, LIMITS.postTitle), s: str(p.s, LIMITS.postEx), b: str(p.b, LIMITS.postBody) || undefined } : undefined }; },
+  toSaved: (v) => {
+    if (!v.post) return {};
+    const cs = (knownComments(v.pid) || []).filter((c) => !c.bad).map((c) => ({ n: c.name, a: c.avatar, t: c.text }));
+    return { post: { t: v.post.t, s: v.post.s, b: knownBody(v.pid) ?? undefined, c: cs.length ? cs : undefined } };
+  },
+  readSaved: (m) => {
+    const p = m?.post, c = cleanComments(p?.c);
+    return { post: isObj(p) && (str(p.t, LIMITS.postTitle) || str(p.s, LIMITS.postEx) || str(p.b, LIMITS.postBody))
+      ? { t: str(p.t, LIMITS.postTitle), s: str(p.s, LIMITS.postEx), b: str(p.b, LIMITS.postBody) || undefined, c: c.length ? c : undefined } : undefined };
+  },
   savedText: postText,
-  savedHtml: (m) => `<div class="b">${m.post.t ? `<b>${esc("📝 " + m.post.t)}</b>\n\n` : "📝 "}${esc(m.post.b || m.post.s)}</div>`,
+  savedHtml: (m) => `<div class="b">${m.post.t ? `<b>${esc("📝 " + m.post.t)}</b>\n\n` : "📝 "}${esc(m.post.b || m.post.s)}${esc(commentsText(m.post.c))}</div>`,
   savedBubble: (m) => savedPostCard(m),
 };
 
