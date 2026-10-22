@@ -703,6 +703,40 @@ test("a quiet room: a warning in its 24th hour, then read-only with the hours le
   noErrors();
 });
 
+test("the home list counts each room's new messages, and 99+ from 100", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { title: "Book club" });
+  await joinByLink(bob, url, "Bob");
+  await say(alice, "welcome");
+  await bubble(bob, "welcome").waitFor();
+  await bob.locator("#chat .bar [data-a=home]").click();
+  const row = bob.locator("#resume .roomrow", { hasText: "Book club" });
+  await row.waitFor();
+  assert.equal(await row.locator(".unread").count(), 0, "read up to the newest: no count");
+  await say(alice, "one"); await say(alice, "two"); await say(alice, "three");
+  await bubble(alice, "three").waitFor();
+  await bob.reload();
+  await row.locator(".unread", { hasText: /^3/ }).waitFor();
+  await shot(bob, "unread-3");
+  // read: the count goes, at once
+  await row.click();
+  await bubble(bob, "three").waitFor();
+  await bob.locator("#chat .bar [data-a=home]").click();
+  await row.waitFor();
+  assert.equal(await row.locator(".unread").count(), 0);
+  // 100 or more say 99+
+  const at = Date.now(), msgs = {};
+  for (let i = 0; i < 120; i++) msgs["zz" + String(i).padStart(3, "0")] = { by: "someone", name: "Zed", avatar: "🦊", text: "m" + i, at: at + i };
+  await fetch(dbUrl(`rooms/${code}/msgs`), { method: "PATCH", headers: asOwner, body: JSON.stringify(msgs) });
+  await fetch(dbUrl(`rooms/${code}/meta/last`), { method: "PUT", headers: asOwner, body: String(at + 119) }); // as every message does
+  await bob.reload();
+  await row.locator(".unread", { hasText: /^99\+/ }).waitFor();
+  await shot(bob, "unread-99-light");
+  await bob.emulateMedia({ colorScheme: "dark" });
+  await shot(bob, "unread-99-dark");
+  noErrors();
+});
+
 // mini-games: the puzzles are made the same way here as in the page, so the test knows the answers
 const SHOTS = process.env.SHOTS; // a folder to save screenshots in, when set
 const shot = (page, name) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${name}.png` }) : null);

@@ -9,6 +9,7 @@ import { backend, asParam } from "./backend.js?v=dev";
 import { RoomCipher } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { me, askMe, showMe } from "./identity.js?v=dev";
+import { isBlocked } from "./blocking.js?v=dev";
 import { renderView, renderHeader, renderAge } from "./chat.js?v=dev";
 import { closePicker } from "./pickers.js?v=dev";
 import { SHOW, endShow, renderShow } from "./show.js?v=dev";
@@ -47,7 +48,7 @@ export function home() {
 }
 
 /* ---------- the rooms this device is in, most recently entered first ---------- */
-const MAX_ROOMS = 30, PAGE = 5;
+const MAX_ROOMS = 30, PAGE = 5, UNREAD_MAX = 100; // a room with 100 or more new messages shows 99+
 const myRooms = new StoredList(KEYS.rooms, (c) => typeof c === "string" && CODE_RE.test(c));
 export const rememberRoom = (code) => myRooms.save([code, ...myRooms.all().filter((c) => c !== code)].slice(0, MAX_ROOMS));
 export const forgetRoom = (code) => myRooms.save(myRooms.all().filter((c) => c !== code));
@@ -82,8 +83,17 @@ async function resumeRow(code, seen) {
   if (!inside) { forgetRoom(code); return null; }
   let title = meta.title || "";
   if (meta.enc) { try { title = (await (await RoomCipher.fromLink(store.get(KEYS.roomKey(code)))).unseal(meta.xt, "t"))?.t || ""; } catch (e) { title = ""; } }
-  return { code, t: title, enc: !!meta.enc, last: meta.last };
+  return { code, t: title, enc: !!meta.enc, last: meta.last, n: await unreadIn(code) };
 }
+// how many messages others wrote in a room since this device last read it (KEYS.read, set by chat.js markSeen);
+// a room this device never read here counts none, rather than all of its history
+async function unreadIn(code) {
+  const read = +store.get(KEYS.read(code)) || 0, { fb } = backend;
+  if (!read) return 0;
+  const msgs = await backend.val(fb.query(backend.roomRef(code, "msgs"), fb.orderByChild("at"), fb.startAfter(read), fb.limitToFirst(UNREAD_MAX)));
+  return Object.values(msgs || {}).filter((v) => v && v.by !== backend.uid && !isBlocked(v.by)).length;
+}
+const unreadText = (n) => (n >= UNREAD_MAX ? UNREAD_MAX - 1 + "+" : String(n));
 function renderResume() {
   const box = $("#resume"), rows = resumeRows, pages = Math.ceil(rows.length / PAGE);
   box.hidden = !rows.length;
@@ -93,6 +103,8 @@ function renderResume() {
   $(".roomlist", box).replaceChildren(...rows.slice(resumePage * PAGE, resumePage * PAGE + PAGE).map((r) => {
     // a read-only room (nobody spoke for 24 hours) says so, and how many hours it has left
     const p = typeof r.last === "number" ? phase(r.last, backend.now()) : null, ro = p?.state === "ro" || p?.state === "gone";
+    // a count from the list as last checked is gone at once for a room read since (the fresh one follows)
+    const n = r.n > 0 && !((+store.get(KEYS.read(r.code)) || 0) >= r.last) ? r.n : 0;
     return el("li", {},
       el("button", { type: "button", class: "roomrow" + (ro ? " ro" : ""), "data-code": r.code },
         // laid out like the room's own header: its name, then its code; a Private Salon's code carries a lock
@@ -100,6 +112,7 @@ function renderResume() {
           el("span", { class: "tags" }, el("span", { class: "code" + (r.enc ? " salon" : "") }, r.enc ? icon("salon") : null, r.code),
             ro ? el("span", { class: "tag warn" }, icon("hourglass"), t("roTag")) : null,
             ro ? el("span", { class: "left", text: t("roLeft", { h: hoursLeft(p.left) }) }) : null)),
+        n ? el("span", { class: "unread" }, el("span", { "aria-hidden": "true", text: unreadText(n) }), el("span", { class: "vh", text: t("jumpNew", { n: unreadText(n) }) })) : null,
         el("span", { class: "go" }, el("span", { class: "vh", text: t("backToRoom") }), icon("forward"))));
   }));
   $(".pager", box).hidden = pages < 2;
