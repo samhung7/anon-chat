@@ -9,6 +9,7 @@ import { deviceKeys, sharedKey, unseal } from "./crypto.js?v=dev";
 import { room as current } from "./session.js?v=dev";
 import { plainFields, unsealedFields, finishOpen, openPicks } from "./kinds.js?v=dev";
 import { RoomApi } from "./api.js?v=dev";
+import { cleanLive, cleanAsked, cleanKey, cleanScores, cleanPlayer, cleanChoice } from "./quizset.js?v=dev";
 
 export const pairKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
 // the key a nickname is claimed under: the name itself, lowercased, or in an encrypted room a keyed hash of it
@@ -38,7 +39,7 @@ class Emitter {
 }
 
 /* Events: meta, ended, lost, arrivals({ joined, left }), members, msg(id, v), msg-changed(id, v, old),
-   msg-removed(id), dm(other, id, v), typing, qs, qq({ more }), reports({ more }) */
+   msg-removed(id), dm(other, id, v), typing, qs, qq({ more }), reports({ more }), quiz(id) */
 export class Room extends Emitter {
   constructor(code, cipher) {
     super();
@@ -60,6 +61,7 @@ export class Room extends Emitter {
     this.dk = new Map();        // private-chat keys
     this.imgs = new Map();      // photo id -> blob: URL
     this.ballots = new Map();   // poll id -> its votes, when they're kept apart (followBallots)
+    this.quizzes = new Map();   // quiz id (its card's) -> where it's at (followQuiz)
     this.off = [];              // what stops each subscription
     this.gone = false; this.ready = false;
     this.readOnly = false;      // nobody spoke for 24 hours (js/app/expiry.js): read and save, nothing new
@@ -173,6 +175,7 @@ export class Room extends Emitter {
     on(fb.onChildAdded(msgs, (s) => this.queue(async () => {
       const v = this.withBallots(s.key, await this.openMsg(s.val(), null, s.key));
       this.msgs.set(s.key, v); this.lastAt = Math.max(this.lastAt, +v.at || 0);
+      if (v.quiz) this.followQuiz(s.key);
       this.emit("msg", s.key, v);
     }), lost));
     on(fb.onChildChanged(msgs, (s) => this.queue(async () => {
@@ -180,8 +183,9 @@ export class Room extends Emitter {
       this.msgs.set(s.key, v);
       this.emit("msg-changed", s.key, v, old);
     })));
-    on(fb.onChildRemoved(msgs, (s) => this.queue(() => { this.msgs.delete(s.key); this.dropBallots(s.key); this.emit("msg-removed", s.key); })));
+    on(fb.onChildRemoved(msgs, (s) => this.queue(() => { this.msgs.delete(s.key); this.dropBallots(s.key); this.dropQuiz(s.key); this.emit("msg-removed", s.key); })));
     on(() => [...this.ballots.keys()].forEach((id) => this.dropBallots(id)));
+    on(() => [...this.quizzes.keys()].forEach((id) => this.dropQuiz(id)));
     on(fb.onValue(api.ref("typing"), (s) => { this.typing = s.val() || {}; this.emit("typing"); }, () => {}));
     on(fb.onValue(api.ref("qs"), (s) => this.queue(async () => {
       this.qs = await this.openQs(s.val());
@@ -325,6 +329,82 @@ export class Room extends Emitter {
     if (!b) return;
     this.ballots.delete(id); clearTimeout(b.timer);
     [...b.offs, b.all].forEach((f) => { try { f?.(); } catch (e) {} });
+  }
+  /* ---------- quizzes (quiz.js) ----------
+     A quiz's card follows where it's at (qz/{id}/live). While it's on, the rest of it too: the questions as they're
+     asked, their right answers and scores once shown, who plays, my own answer to the question being asked, and (for
+     the owner and co-hosts, who may read them) everyone's answers to it. Once it's over, only its final scores. What
+     the hosts write is plain JSON in a plain room and sealed in a Private Salon, bound to where it sits (aad). */
+  followQuiz(z) {
+    let e = this.quizzes.get(z);
+    if (e) return e;
+    e = { live: null, q: {}, k: {}, s: {}, p: {}, mine: {}, all: {}, final: null, offs: [], more: [], i: null, iOffs: [] };
+    this.quizzes.set(z, e);
+    e.offs.push(backend.fb.onValue(this.api.ref(`qz/${z}/live`), (s) => this.queue(async () => {
+      e.live = cleanLive(s.val());
+      await this.quizMoved(z, e);
+      this.emit("quiz", z);
+    }), () => {}));
+    return e;
+  }
+  // a host's write as it reads: JSON in a plain room, sealed in an encrypted one
+  async openBlob(b, aad) {
+    if (typeof b !== "string") return null;
+    if (this.cipher) return this.open(this.cipher.aes, b, aad);
+    try { return JSON.parse(b); } catch (e) { return null; }
+  }
+  async openAnswer(z, i, uid, v) {
+    if (!v || typeof v !== "object") return null;
+    const c = cleanChoice(v.x ? (this.cipher ? await this.open(this.cipher.aes, v.x, `za:${z}:${i}:${uid}`) : null) : typeof v.c === "string" ? +v.c : null);
+    return c == null ? null : { c, at: +v.at || 0 };
+  }
+  async quizMoved(z, e) {
+    const { fb } = backend, ref = (p) => this.api.ref(`qz/${z}/${p}`), on = !!e.live && e.live.ph !== "end";
+    const each = async (raw, open) => {
+      const out = {};
+      for (const [k, v] of Object.entries(raw || {})) { const x = await open(k, v); if (x) out[k] = x; }
+      return out;
+    };
+    const open = async (uid, v) => (v?.x ? cleanPlayer(this.cipher && (await this.open(this.cipher.aes, v.x, `zp:${z}:${uid}`))) : cleanPlayer(v));
+    const follow = (path, field, open) => e.more.push(fb.onValue(ref(path), (s) => this.queue(async () => {
+      e[field] = await each(s.val(), open); this.emit("quiz", z);
+    }), () => {}));
+    if (on && !e.more.length) {
+      follow("q", "q", async (i, v) => cleanAsked(await this.openBlob(v, `zq:${z}:${i}`)));
+      follow("k", "k", async (i, v) => { const k = cleanKey(await this.openBlob(v, `zk:${z}:${i}`)); return k.length ? k : null; });
+      follow("s", "s", async (i, v) => cleanScores(await this.openBlob(v, `zr:${z}:${i}`)));
+      follow("p", "p", open);
+    } else if (!on && e.more.length) { e.more.forEach((f) => f()); e.more = []; }
+    // the question being asked: my answer to it, and for the hosts everyone's
+    const i = on ? e.live.i : null;
+    if (i !== e.i) {
+      e.iOffs.forEach((f) => f()); e.iOffs = []; e.i = i;
+      if (i != null) {
+        e.iOffs.push(fb.onValue(ref(`a/${i}/${this.uid}`), (s) => this.queue(async () => {
+          const a = await this.openAnswer(z, i, this.uid, s.val());
+          if (a) e.mine[i] = a; else if (e.mine[i]) delete e.mine[i]; // (an answer the server turned down goes again)
+          this.emit("quiz", z);
+        }), () => {}));
+        if (this.isStaff()) e.iOffs.push(fb.onValue(ref(`a/${i}`), (s) => this.queue(async () => {
+          e.all[i] = await each(s.val(), (uid, v) => this.openAnswer(z, i, uid, v)); this.emit("quiz", z);
+        }), () => {}));
+      }
+    }
+    // over: the scores after its last question and who played, fetched once (apart from the queue, which it would hold up)
+    if (e.live?.ph === "end" && !e.final && !e.fetching) {
+      e.fetching = true;
+      Promise.all([backend.val(ref("s/" + e.live.i)), backend.val(ref("p"))]).then(([s, p]) => this.queue(async () => {
+        e.final = cleanScores(await this.openBlob(s, `zr:${z}:${e.live.i}`)) || { n: [], g: {}, sc: {}, r: {}, ms: {} };
+        e.p = await each(p, open);
+        this.emit("quiz", z);
+      }), () => { e.fetching = false; });
+    }
+  }
+  dropQuiz(z) {
+    const e = this.quizzes.get(z);
+    if (!e) return;
+    this.quizzes.delete(z);
+    [...e.offs, ...e.more, ...e.iOffs].forEach((f) => { try { f(); } catch (e) {} });
   }
   // the room went away under us: "ended", "kicked" or "left" (null if this room is no longer the one on screen)
   async whyGone() {

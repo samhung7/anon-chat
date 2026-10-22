@@ -1,4 +1,4 @@
-/* The panels above the message box: ＋ (photo, poll, draw, long post, games), emoji, and GIF search (KLIPY, which needs klipyKey
+/* The panels above the message box: ＋ (photo, poll, draw, long post, quiz, games), emoji, and GIF search (KLIPY, which needs klipyKey
    in js/config.js). */
 import { KLIPY_KEY, GIF_HOST } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
@@ -9,6 +9,8 @@ import { newPoll } from "./polls.js?v=dev";
 import { newDraw } from "./draws.js?v=dev";
 import { gamesSheet, gamesOn } from "./games.js?v=dev";
 import { newPost, canPost } from "./posts.js?v=dev";
+import { quizSheet } from "./quizedit.js?v=dev";
+import { room } from "./session.js?v=dev";
 import { renderQuick } from "./quick.js?v=dev";
 
 const EMOJI = {
@@ -38,6 +40,7 @@ function morePanel(box) {
   box.replaceChildren(el("div", { class: "morepanel" },
     item("photo", t("photo"), () => $("#photoFile").click()), item("poll", t("poll"), newPoll), item("draw", t("draw"), newDraw),
     canPost() ? item("post", t("post"), newPost) : null,
+    room?.isStaff() && !room.readOnly ? item("trophy", t("quiz"), quizSheet) : null,
     gamesOn() ? item("game", t("games"), gamesSheet) : null));
 }
 function emojiPanel(box) {

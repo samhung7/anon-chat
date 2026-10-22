@@ -174,3 +174,54 @@ test("a message's time gains the month and day from yesterday back, and the year
   assert.equal(fmtTime(new Date(2025, 2, 5, 10, 26), now), "3/5/2025, 10:26");
   assert.match(fmtWhen(new Date(2026, 9, 18, 23, 5)), /October 18, 2026.*23:05/);
 });
+
+test("quiz: a set is cleaned, asked without its answers, scored by speed, ranked, and kept in a file", async () => {
+  const Q = await import(new URL("quizset.js?v=dev", APP));
+  const set = Q.cleanSet({ t: " 期中 ", q: [
+    { t: "2+2?", o: ["3", "", "4", "5"], c: [2], d: 20, p: 1 },
+    { t: "雙倍", o: ["a", "b"], c: [0, 1], d: 7, p: 2 },   // 7 isn't a time on offer: 20
+    { t: "", o: ["x"], c: [9] },
+    "not a question",
+  ] });
+  assert.equal(set.t, "期中");
+  assert.equal(set.q.length, 3);
+  assert.deepEqual(set.q[1].o, ["a", "b", "", ""]);
+  assert.equal(set.q[1].d, 20);
+  assert.deepEqual(set.q[2].c, []);
+  assert.deepEqual(Q.setProblem(set), { i: 2, why: "qzNeedQ" });
+  assert.equal(Q.problem({ ...set.q[2], t: "?", o: ["a", "b", "", ""] }), "qzNeedRight");
+  assert.equal(Q.problem({ ...set.q[2], t: "?" }), "qzNeedOpts");
+  assert.deepEqual(Q.setProblem({ t: "", q: set.q }), { i: -1, why: "qzNeedTitle" });
+  // asked: the empty option goes, and the right answer follows it
+  const [pub, key] = Q.asked(set.q[0]);
+  assert.deepEqual(pub, { t: "2+2?", o: ["3", "4", "5"], d: 20, p: 1 });
+  assert.deepEqual(key, [1]);
+  // points: all of them at once, half at the last moment, double on a double question
+  assert.equal(Q.points(pub, 0), 1000);
+  assert.equal(Q.points(pub, 10000), 750);
+  assert.equal(Q.points(pub, 99999), 500);
+  assert.equal(Q.points({ ...pub, p: 2 }, 0), 2000);
+  assert.equal(Q.points({ ...pub, p: 0 }, 0), 0);
+  // scores: only players count; a wrong answer or none gets nothing; totals carry on; ties go to the faster
+  const at = 1e12, players = { a: {}, b: {}, c: {}, d: {} };
+  const s1 = Q.settle(pub, key, { a: { c: 1, at: at + 2000 }, b: { c: 1, at: at + 10000 }, c: { c: 0, at: at + 1000 }, x: { c: 1, at } }, players, null, at);
+  assert.deepEqual(s1.n, [1, 2, 0]);
+  assert.deepEqual(s1.g, { a: 950, b: 750, c: 0, d: 0 });
+  const s2 = Q.settle(pub, key, { b: { c: 1, at: at + 2000 }, c: { c: 1, at } }, players, s1, at);
+  assert.deepEqual(s2.sc, { a: 950, b: 1700, c: 1000, d: 0 });
+  assert.deepEqual(s2.r, { a: 1, b: 2, c: 1, d: 0 });
+  assert.deepEqual(Q.ranking(s2).map((r) => [r.uid, r.rank]), [["b", 1], ["c", 2], ["a", 3], ["d", 4]]);
+  assert.deepEqual(Q.ranking({ sc: { a: 5, b: 5 }, ms: { a: 1, b: 1 }, r: {} }).map((r) => r.rank), [1, 1]);
+  assert.deepEqual(Q.cleanScores(JSON.parse(JSON.stringify(s2))), s2);
+  // read from the room, untrusted
+  assert.equal(Q.cleanAsked({ t: "x", o: ["only one"] }), null);
+  assert.deepEqual(Q.cleanKey([1, 1, 7, "2", -1]), [1]);
+  assert.equal(Q.cleanLive({ ph: "q", i: "3", at: 1 }), null);
+  assert.equal(Q.cleanChoice(4), null);
+  // a file: what goes out comes back; anything else is refused
+  assert.deepEqual(Q.fromFile(Q.toFile(set)), set);
+  assert.equal(Q.fromFile("{}"), null);
+  assert.equal(Q.fromFile("not json"), null);
+  assert.equal(Q.fromFile(JSON.stringify({ kind: "stoatalk-quiz", v: 1, t: "x", q: [] })), null);
+  assert.match(Q.scoresCsv([[1, 'A "b", c', 900, 1]], ["Rank", "Name", "Points", "Right"]), /^﻿Rank,Name,Points,Right\r\n1,"A ""b"", c",900,1\r\n$/);
+});

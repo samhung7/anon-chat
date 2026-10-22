@@ -110,8 +110,8 @@ export function savedPostCard(m) {
     m.post.t ? el("b", { class: "pt", text: m.post.t }) : null, m.post.s ? el("span", { class: "ps" + (m.post.t ? "" : " lead"), text: m.post.s }) : null);
 }
 
-/* ---------- a page over the chat, which the back button closes ---------- */
-function page(cls, head, body) {
+/* ---------- a page over the chat, which the back button closes (quizedit.js has one too) ---------- */
+export function page(cls, head, body) {
   const ov = el("div", { class: "overlay pagewrap" });
   const box = el("div", { class: "page " + cls, role: "dialog" }, head, body);
   ov.append(box);
@@ -132,7 +132,7 @@ function page(cls, head, body) {
   document.body.append(ov);
   return ov;
 }
-const bar = (title, right, onBack) => el("header", { class: "bar" },
+export const bar = (title, right, onBack) => el("header", { class: "bar" },
   el("button", { type: "button", class: "icon", "aria-label": t("close"), "data-a": "back", onclick: onBack }, icon("back")),
   el("div", { class: "ttl" }, el("b", { text: title })), right);
 

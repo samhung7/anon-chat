@@ -103,4 +103,15 @@ export class RoomApi {
   /* ---------- mini-games ---------- */
   // my score for a game of the day: written once, never changed
   gameScore(day, g, rec) { return this.set(`games/${day}/${g}/${this.uid}`, rec); }
+
+  /* ---------- quizzes (quiz.js; the layout is in tools/rules.py QUIZ) ---------- */
+  quizJoin(z, rec) { return this.set(`qz/${z}/p/${this.uid}`, rec); }
+  // a player leaves, or a host takes one out
+  quizDrop(z, uid = this.uid) { return this.set(`qz/${z}/p/${uid}`, null); }
+  // my answer to question i: once, while answering is open
+  quizAnswer(z, i, rec) { return this.set(`qz/${z}/a/${i}/${this.uid}`, rec); }
+  // a host moves the quiz on (fields under qz/{z}), which keeps the room going like a message does
+  quizStep(z, fields) {
+    return this.update({ ...Object.fromEntries(Object.entries(fields).map(([k, v]) => [`qz/${z}/${k}`, v])), "meta/last": backend.stamp() });
+  }
 }

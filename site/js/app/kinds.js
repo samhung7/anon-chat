@@ -1,4 +1,4 @@
-/* The kinds of message: text, GIF, photo, poll, draw, a mini-game's result and a long post. Each kind says, in one place, how it is stored (plain
+/* The kinds of message: text, GIF, photo, poll, draw, a mini-game's result, a long post and a quiz. Each kind says, in one place, how it is stored (plain
    and sealed), cleaned, shown, summed up in a line, offered in a message's ⋯ menu, and kept in an exported record.
    Everything else asks the kind (kindOf / savedKindOf) instead of checking fields, so a new kind is one more
    object here. Order matters: a message is the first kind that claims it, and text claims what's left.
@@ -19,6 +19,7 @@ import { gameCard, gameText, GAME } from "./games.js?v=dev";
 import { GAMES, DAY_RE } from "./puzzles.js?v=dev";
 import { postCard, savedPostCard, openPost, editPost, copyPost, knownBody, postName } from "./posts.js?v=dev";
 import { knownComments } from "./comments.js?v=dev";
+import { quizCard, savedQuizCard, quizResult } from "./quiz.js?v=dev";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 export { esc as escHtml };
@@ -252,6 +253,35 @@ const post = {
   savedBubble: (m) => savedPostCard(m),
 };
 
+// a quiz (quiz.js): its card here, { t (title), n (questions) }, and the quiz itself apart in qz/{id}; qm marks it, sealed
+// or not. A record keeps its result as r: [{ n, a, s }], best first
+const cleanQuiz = (x) => (isObj(x) && str(x.t, 60) ? { t: str(x.t, 60), n: clamp(Math.round(num(x.n)), 1, 100) } : null);
+const quizText = (m) => `🏆 ${m.quiz.t} (${t("qzN", { n: m.quiz.n })})` + (m.quiz.r?.length ? "\n" + m.quiz.r.map((r, i) => `${i + 1}. ${r.a} ${r.n}${t("colon")}${r.s}`).join("\n") : "");
+const quiz = {
+  name: "quiz", stat: "quizzes", roomOnly: true,
+  live: (v) => !!v.quiz, saved: (m) => !!m.quiz,
+  pack: (x) => [{ quiz: x, qm: true }, { qz: x }], mark: { qm: true },
+  plain: (v) => ("quiz" in v ? { quiz: v.qm === true ? cleanQuiz(v.quiz) : null } : {}),
+  unsealed: (p, dm) => (p.qz && !dm ? { quiz: cleanQuiz(p.qz) } : null),
+  // sealed as a quiz but not marked as one (the rules check the mark): not shown as one
+  async opened(out, raw, id) { if (out.quiz && raw.qm !== true) { delete out.quiz; Object.assign(out, { text: t("cantDecrypt"), bad: true }); } else if (out.quiz) out.zid = id; },
+  snippet: (v) => "🏆 " + v.quiz.t,
+  bubble: (id, v) => quizCard(id, v),
+  preview: (v) => quoteText(snippet(v)),
+  pinned: (v) => "🏆 " + v.quiz.t,
+  notice: (v) => `🏆 ${t("quiz")}${t("colon")}${v.quiz.t}`,
+  // the quiz goes with its card
+  removes: (v, id) => ({ ["qz/" + id]: null }),
+  toSaved: (v) => { if (!v.quiz) return {}; const r = quizResult(v.zid); return { quiz: { ...v.quiz, r: r.length ? r : undefined } }; },
+  readSaved: (m) => {
+    const q = cleanQuiz(m?.quiz), r = arr(m?.quiz?.r).slice(0, 300).map((x) => ({ n: str(x?.n, 24) || "？", a: str(x?.a, 8) || "👤", s: clamp(Math.round(num(x?.s)), 0, 200000) }));
+    return { quiz: q ? { ...q, r: r.length ? r : undefined } : undefined };
+  },
+  savedText: quizText,
+  savedHtml: (m) => savedHtmlText(quizText(m)),
+  savedBubble: (m) => savedQuizCard(m),
+};
+
 // a line saying someone went (composer.js goneNote): left (ev "l", under the name they had) or removed by a host (ev "k",
 // naming them in tn and ta). Not a message anyone wrote: no bubble, menu or reactions, and not kept in an exported record
 const goneName = (n, a) => `${str(a, 8) || "👤"} ${str(n, 24) || "？"}`;
@@ -264,8 +294,8 @@ const gone = {
   toSaved: () => ({}), readSaved: () => ({}),
 };
 
-export const KIND = { text, gif, photo, poll, draw, game, post };
-const KINDS = [gone, gif, photo, poll, draw, game, post, text];
+export const KIND = { text, gif, photo, poll, draw, game, post, quiz };
+const KINDS = [gone, gif, photo, poll, draw, game, post, quiz, text];
 export const kindOf = (v) => KINDS.find((k) => k.live(v));
 export const savedKindOf = (m) => KINDS.find((k) => k.saved(m));
 export const snippet = (v) => kindOf(v).snippet(v).replace(/\s+/g, " ").slice(0, 80);
@@ -278,7 +308,7 @@ export async function finishOpen(out, raw, id) { for (const k of KINDS) await k.
 
 // a message's fields in an exported record (pics collects the photos an .html file carries), and from an untrusted one
 export const toSaved = (v, pics, m) => Object.assign(m, ...KINDS.map((k) => k.toSaved(v, pics, m)));
-export const readSaved = (m) => Object.assign({}, ...[text, gif, photo, poll, draw, game, post].map((k) => k.readSaved(m)));
+export const readSaved = (m) => Object.assign({}, ...[text, gif, photo, poll, draw, game, post, quiz].map((k) => k.readSaved(m)));
 // reactions as counts per emoji, kept in a record
 export function readReactions(r) {
   if (!isObj(r)) return undefined;

@@ -934,3 +934,122 @@ test("comments in a Private Salon are sealed", async () => {
   await assertFails(comment("bob", "p1", "c2", { name: "x", avatar: "🦊", text: "明文" }));
   await assertFails(comment("bob", "p1", "c3", { x: "not sealed!" }));
 });
+
+// a quiz: its card and qz/{id} go in together, written by the owner or a co-host
+const Z = (id) => `rooms/${C}/qz/${id}`;
+const live = (extra = {}) => ({ ph: "lobby", i: "00", at: Date.now(), d: 20, n: 3, ...extra });
+const newQuiz = (uid, id, { sealed = false, card = { t: "期中複習", n: 3 }, src = sealed ? "c2VhbGVk" : '{"t":"期中複習","q":[]}', more = {} } = {}) =>
+  post(uid, `msgs/${id}`, sealed ? { by: uid, x: "c2VhbGVk", qm: true, at: T } : { by: uid, name: "x", avatar: "🦊", qm: true, quiz: card, at: T },
+    { more: { [`qz/${id}/by`]: uid, [`qz/${id}/src`]: src, [`qz/${id}/live`]: live(), "meta/last": T, ...more } });
+// the host opens question i, answering from now (the rules allow the host to set it a few seconds ahead)
+const askQ = (uid, id, i, q = '{"t":"1+1?","o":["1","2"]}', { at = Date.now(), d = 20 } = {}) =>
+  update(ref(db(uid), Z(id)), { [`q/${i}`]: q, live: live({ ph: "q", i, at, d }) });
+const answer = (uid, id, i, c = "1", { sealed = false } = {}) => set(ref(db(uid), `${Z(id)}/a/${i}/${uid}`), sealed ? { x: "c2VhbGVk", at: T } : { c, at: T });
+const joinQuiz = (uid, id, { sealed = false } = {}) => set(ref(db(uid), `${Z(id)}/p/${uid}`), sealed ? { x: "c2VhbGVk", at: T } : { n: uid, a: "🦊", at: T });
+
+test("quiz: the owner and co-hosts run one; its card and qz/{id} go in and out together", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertSucceeds(newQuiz("alice", "z1"));
+  await assertFails(newQuiz("bob", "z2"));   // only the hosts
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/mods/bob`), true));
+  await assertSucceeds(newQuiz("bob", "z2"));
+  // card and quiz belong together
+  await assertFails(post("alice", "msgs/z3", { by: "alice", name: "x", avatar: "🦊", qm: true, quiz: { t: "t", n: 3 }, at: T }));   // no quiz
+  await assertFails(post("alice", "msgs/z4", { by: "alice", name: "x", avatar: "🦊", quiz: { t: "t", n: 3 }, at: T }, { more: { "qz/z4/by": "alice" } }));   // not marked
+  await assertFails(newQuiz("alice", "z5", { card: { t: "", n: 3 } }));
+  await assertFails(newQuiz("alice", "z6", { card: { t: "t", n: 101 } }));
+  await assertFails(newQuiz("alice", "z7", { more: { "qz/z7/by": "bob" } }));
+  await assertFails(newQuiz("alice", "z8", { sealed: true }));   // sealed only in a Private Salon
+  // the whole set, answers and all, is for the hosts only; the rest for everyone in the room
+  await assertSucceeds(get(ref(db("alice"), `${Z("z1")}/src`)));
+  await assertSucceeds(get(ref(db("bob"), `${Z("z1")}/src`)));   // a co-host
+  await assertFails(get(ref(db("carol"), `${Z("z1")}/src`)));
+  await assertFails(get(ref(db("carol"), Z("z1"))));
+  await assertSucceeds(get(ref(db("carol"), `${Z("z1")}/live`)));
+  await assertFails(get(ref(db("dave"), `${Z("z1")}/live`)));
+  await assertFails(set(ref(db("carol"), `${Z("z1")}/live`), live({ ph: "end" })));   // only the hosts move it on
+  await assertFails(set(ref(db("carol"), `${Z("z1")}/k/00`), "1"));
+  await assertFails(set(ref(db("alice"), `${Z("z1")}/live`), live({ ph: "nope" })));
+  await assertFails(set(ref(db("alice"), `${Z("z1")}/live`), live({ i: "3" })));
+  await assertFails(set(ref(db("alice"), `${Z("z1")}/live`), live({ at: Date.now() + 60000 })));   // a few seconds ahead at most
+  await assertFails(set(ref(db("alice"), `${Z("z9")}/live`), live()));   // no card, no quiz
+  // taken down with its card, by the author or a host; never on its own while the card stays
+  await assertFails(set(ref(db("carol"), Z("z1")), null));
+  await assertFails(set(ref(db("alice"), Z("z1")), null));
+  await assertFails(update(ref(db("carol"), `rooms/${C}`), { "msgs/z1": null, "qz/z1": null }));
+  await assertSucceeds(update(ref(db("bob"), `rooms/${C}`), { "msgs/z1": null, "qz/z1": null }));
+  // a new room can't come with a quiz in it
+  await assertFails(update(ref(db("dave")), { [`rooms/ABCD`]: { meta: { owner: "dave", created: T, last: T }, members: { dave: member("d") }, qz: { z: { by: "dave" } } } }));
+  // nor a read-only room take a new one
+  await idle(24 * HOUR + 60000);
+  await assertFails(newQuiz("alice", "z10"));
+});
+
+test("quiz: players join, answer once while answering is open by the server's clock, and read others' answers only after", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertSucceeds(newQuiz("alice", "z1"));
+  await assertFails(joinQuiz("dave", "z1"));   // not in the room
+  await assertSucceeds(joinQuiz("bob", "z1"));
+  await assertFails(joinQuiz("bob", "z1"));   // once
+  await assertFails(set(ref(db("bob"), `${Z("z1")}/p/carol`), { n: "c", a: "🦊", at: T }));   // only yourself
+  await assertFails(set(ref(db("carol"), `${Z("z1")}/p/carol`), { x: "c2VhbGVk", at: T }));
+  // nothing to answer in the lobby
+  await assertFails(answer("bob", "z1", "00"));
+  // the host asks question 00, answering from a few seconds on: too early is refused
+  await assertSucceeds(askQ("alice", "z1", "00", undefined, { at: Date.now() + 4000 }));
+  await assertFails(answer("bob", "z1", "00"));
+  await admin((d) => set(ref(d, `${Z("z1")}/live/at`), Date.now() - 1000));
+  await assertFails(answer("carol", "z1", "00"));   // not playing
+  await assertFails(answer("bob", "z1", "01"));   // not the question being asked
+  await assertFails(answer("bob", "z1", "00", "4"));
+  await assertFails(set(ref(db("bob"), `${Z("z1")}/a/00/bob`), { c: "1", at: 5 }));   // the server's time, not the phone's
+  await assertSucceeds(answer("bob", "z1", "00", "2"));
+  await assertFails(answer("bob", "z1", "00", "1"));   // no changing it
+  // while answering, each reads only their own; the hosts read them all
+  await assertSucceeds(get(ref(db("bob"), `${Z("z1")}/a/00/bob`)));
+  await assertFails(get(ref(db("carol"), `${Z("z1")}/a/00`)));
+  await assertFails(get(ref(db("carol"), `${Z("z1")}/a/00/bob`)));
+  await assertSucceeds(get(ref(db("alice"), `${Z("z1")}/a/00`)));
+  // joining once it's begun is still open, unless the host locks it
+  await assertSucceeds(joinQuiz("carol", "z1"));
+  await assertSucceeds(answer("carol", "z1", "00", "0"));
+  await join("erin");
+  await assertSucceeds(set(ref(db("alice"), `${Z("z1")}/live/lock`), true));
+  await assertFails(joinQuiz("erin", "z1"));
+  // after the time (and its 1.5 seconds to arrive) no more answers
+  await assertSucceeds(askQ("alice", "z1", "01", undefined, { at: Date.now(), d: 5 }));
+  await admin((d) => set(ref(d, `${Z("z1")}/live/at`), Date.now() - 7000));
+  await assertFails(answer("bob", "z1", "01"));
+  // once the answer is shown, everyone reads everyone's answers to it, and the scores
+  await assertSucceeds(update(ref(db("alice"), Z("z1")), { "live/ph": "rev", "k/01": "1", "s/01": '{"sc":{"bob":950}}' }));
+  await assertSucceeds(get(ref(db("carol"), `${Z("z1")}/a/01`)));
+  await assertSucceeds(get(ref(db("carol"), `${Z("z1")}/a/00`)));   // an earlier question
+  await assertSucceeds(get(ref(db("carol"), `${Z("z1")}/k`)));
+  await assertSucceeds(get(ref(db("carol"), `${Z("z1")}/s`)));
+  await assertFails(answer("carol", "z1", "01"));
+  // the next question: its answers are kept apart again
+  await assertSucceeds(askQ("alice", "z1", "02"));
+  await assertFails(get(ref(db("carol"), `${Z("z1")}/a/02`)));
+  await assertSucceeds(get(ref(db("carol"), `${Z("z1")}/a/01`)));
+  // a player leaves, or the host takes one out
+  await assertSucceeds(set(ref(db("alice"), `${Z("z1")}/p/bob`), null));
+  await assertFails(answer("bob", "z1", "02"));
+  await assertSucceeds(set(ref(db("carol"), `${Z("z1")}/p/carol`), null));
+  // the end: nobody joins
+  await assertSucceeds(update(ref(db("alice"), Z("z1")), { "live/ph": "end" }));
+  await assertSucceeds(set(ref(db("alice"), `${Z("z1")}/live/lock`), false));
+  await assertFails(joinQuiz("erin", "z1"));
+});
+
+test("quiz in a Private Salon: the set, questions, answers and players are sealed", async () => {
+  await createEnc("alice"); await joinEnc("bob", H("b"));
+  await assertSucceeds(newQuiz("alice", "z1", { sealed: true }));
+  await assertFails(newQuiz("alice", "z2", { sealed: true, src: '{"t":"明文"}' }));
+  await assertFails(newQuiz("alice", "z3"));   // a plain card
+  await assertFails(joinQuiz("bob", "z1"));
+  await assertSucceeds(joinQuiz("bob", "z1", { sealed: true }));
+  await assertFails(askQ("alice", "z1", "00", '{"t":"明文"}'));
+  await assertSucceeds(askQ("alice", "z1", "00", "c2VhbGVk"));
+  await assertFails(answer("bob", "z1", "00", "1"));
+  await assertSucceeds(answer("bob", "z1", "00", null, { sealed: true }));
+});

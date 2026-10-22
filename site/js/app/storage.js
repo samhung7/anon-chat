@@ -32,6 +32,7 @@ export const KEYS = {
   dmRead: (code, other) => `chat-dmread:${code}:${other}`,
   myQs: (code) => "chat-myq:" + code,      // questions this device asked
   postDraft: (code, id) => `chat-post-draft:${code}:${id}`, // a long post being written (id "new") or edited
+  quizAuto: "chat-quiz-auto",          // a quiz I run goes on to the next question by itself
   gamePrefix: "chat-game:",
   game: (code, day, g) => `chat-game:${code}:${day}:${g}`, // a game of the day under way
 };

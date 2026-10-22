@@ -36,7 +36,7 @@ room_write = o(
       "!newData.child('msgs').exists()", "!newData.child('files').exists()", "!newData.child('dm').exists()", "!newData.child('banned').exists()",
       "!newData.child('reports').exists()", "!newData.child('qs').exists()", "!newData.child('qq').exists()", "!newData.child('qby').exists()",
       "!newData.child('push').exists()", "!newData.child('games').exists()", "!newData.child('posts').exists()", "!newData.child('pc').exists()",
-      "!newData.child('pv').exists()", "!newData.child('ab').exists()", "!newData.child('av').exists()"),
+      "!newData.child('pv').exists()", "!newData.child('ab').exists()", "!newData.child('av').exists()", "!newData.child('qz').exists()"),
 )
 
 member_join = j(
@@ -229,6 +229,91 @@ BALLOT_KEYS = {"$m": {
                          "newData.parent().parent().parent().child('ab/' + $m + '/' + newData.val()).exists()"),
              ".validate": PUSH_ID},
 }}
+# a quiz's card in the chat (quiz, in a plain room: title t and how many questions n; sealed inside x in an encrypted one).
+# qm marks the message as one either way, written by the owner or a co-host with the quiz itself (qz/{id}, below)
+QUIZ_CARD = {
+    ".validate": "newData.hasChildren(['t', 'n']) && newData.parent().child('qm').val() === true" + NOT_ENC,
+    "t": {".validate": NONEMPTY(60)},
+    "n": {".validate": NUM(1, 100)},
+    "$other": NO,
+}
+QUIZ_MARK = {".validate": j("newData.val() === true", is_staff(PROOM),
+                            "newData.parent().parent().parent().child('qz/' + $id + '/by').val() === auth.uid",
+                            o(ENC("newData.parent().parent().parent()"), "newData.parent().hasChild('quiz')"))}
+# A quiz (競答, site/js/app/quiz.js): a Kahoot-style contest the owner or a co-host runs, kept under its card's id in
+# qz/{id}. What players may see is let out a step at a time, so nobody reads ahead or copies:
+#   src     the whole set, answers and all: only the owner and co-hosts read it
+#   live    where it's at: ph (lobby, q answering, rev answer shown, end), i (the question, "00" to "99"), at (the server
+#           time answering opens, set a few seconds ahead so every phone has the question first), d (seconds to answer),
+#           n (how many questions), lock (no new players once it's begun)
+#   q/{i}   a question and its options, written as it's asked; k/{i} its right answers, written once answering is over
+#   p/{uid} who plays (their room name, sealed when encrypted); s/{i} the scores after each question, worked out by the host
+#   a/{i}/{uid}  each player's answer: written once, while answering is open (by the server's clock, with 1.5 s for the
+#           answer to arrive), stamped with the server's time. Nobody but the player and the hosts reads it until
+#           answering is over, so nobody waits to see what the others picked.
+# In a Private Salon everything but live and the times is sealed with the room key. Hosts' writes are plain JSON in a
+# plain room (only they write them; the page cleans what it reads).
+ZROOM = "root.child('rooms/' + $code)"
+ZQ = f"{ZROOM}.child('qz/' + $z)"
+ZL = f"{ZQ}.child('live')"
+Z_ENC = ENC(ZROOM)
+z_read = j("auth != null", is_member(ZROOM))
+# the owner or a co-host, in a room still open, for a quiz whose card is in (written in the same update, or before)
+z_host = lambda up: j("auth != null", is_staff(ZROOM), is_member(ZROOM), alive(ZROOM), "newData" + ".parent()" * up + ".child('by').exists()")
+BLOB = lambda n: o(j(Z_ENC, SEALED(n)), j("!" + Z_ENC, S(n)))
+Z_I = r"$i.matches(/^[0-9]{2}$/)"
+answering = j(f"{ZL}.child('ph').val() === 'q'", f"{ZL}.child('i').val() === $i", f"now >= {ZL}.child('at').val()",
+              f"now <= {ZL}.child('at').val() + {ZL}.child('d').val() * 1000 + 1500")
+QUIZ = {"$z": {
+    ".validate": r"$z.matches(/^[A-Za-z0-9_-]{1,32}$/)",
+    # all of it goes with its card, in the same update (by whoever deletes the card), or StoaTalk's operator clears it
+    ".write": j("auth != null", "!newData.exists()", o("!newData.parent().parent().child('msgs/' + $z).exists()", is_admin)),
+    "by": {".read": z_read,
+           ".write": j("auth != null", "!data.exists()", "newData.val() === auth.uid", is_staff(ZROOM), alive(ZROOM),
+                       "newData.parent().parent().parent().child('msgs/' + $z + '/qm').val() === true"),
+           ".validate": "newData.isString()"},
+    "src": {".read": j("auth != null", is_staff(ZROOM)), ".write": z_host(1), ".validate": BLOB(400000)},
+    "live": {
+        ".read": z_read, ".write": z_host(1),
+        ".validate": "newData.hasChildren(['ph', 'i', 'at', 'd', 'n'])",
+        "ph": {".validate": r"newData.isString() && newData.val().matches(/^(lobby|q|rev|end)$/)"},
+        "i": {".validate": r"newData.isString() && newData.val().matches(/^[0-9]{2}$/)"},
+        "at": {".validate": j("newData.isNumber()", o("newData.val() === data.val()", j("newData.val() >= now - 3000", "newData.val() <= now + 10000")))},
+        "d": {".validate": NUM(0, 240)}, "n": {".validate": NUM(1, 100)},
+        "lock": {".validate": "newData.isBoolean()"},
+        "$other": NO,
+    },
+    "q": {".read": z_read, "$i": {".write": z_host(2), ".validate": j(Z_I, BLOB(6000))}},
+    "k": {".read": z_read, "$i": {".write": z_host(2), ".validate": j(Z_I, BLOB(400))}},
+    "s": {".read": z_read, "$i": {".write": z_host(2), ".validate": j(Z_I, BLOB(100000))}},
+    "p": {".read": z_read, "$uid": {
+        ".write": j("auth != null", o(
+            j("auth.uid === $uid", "!data.exists()", "newData.exists()", is_member(ZROOM), not_banned, alive(ZROOM),
+              f"{ZL}.exists()", f"{ZL}.child('ph').val() !== 'end'", o(f"{ZL}.child('ph').val() === 'lobby'", f"{ZL}.child('lock').val() !== true")),
+            # a player leaves; the owner or a co-host takes one out
+            j("!newData.exists()", o("auth.uid === $uid", is_staff(ZROOM))))),
+        ".validate": j("newData.hasChild('at')", o(j(Z_ENC, "newData.hasChild('x')", "!newData.hasChild('n')"),
+                                                   j("!" + Z_ENC, "newData.hasChildren(['n', 'a'])", "!newData.hasChild('x')"))),
+        "n": {".validate": NONEMPTY(24) + " && !" + Z_ENC}, "a": {".validate": S(8) + " && !" + Z_ENC},
+        "x": {".validate": SEALED(600) + " && " + Z_ENC},   # {n, a} sealed to the quiz and the player
+        "at": {".validate": "newData.val() === now"},
+        "$other": NO,
+    }},
+    "a": {"$i": {
+        ".read": j("auth != null", o(is_staff(ZROOM), j(is_member(ZROOM), o(f"$i < {ZL}.child('i').val()", f"{ZL}.child('ph').val() !== 'q'")))),
+        "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": j("auth != null", "auth.uid === $uid", "!data.exists()", "newData.exists()", Z_I, is_member(ZROOM), not_banned,
+                        alive(ZROOM), f"{ZQ}.child('p/' + auth.uid).exists()", answering),
+            ".validate": j("newData.hasChild('at')", o(j(Z_ENC, "newData.hasChild('x')", "!newData.hasChild('c')"),
+                                                       j("!" + Z_ENC, "newData.hasChild('c')", "!newData.hasChild('x')"))),
+            "c": {".validate": r"newData.isString() && newData.val().matches(/^[0-3]$/) && !" + Z_ENC},
+            "x": {".validate": SEALED(200) + " && " + Z_ENC},   # the option, sealed to the quiz, the question and the player
+            "at": {".validate": "newData.val() === now"},
+            "$other": NO,
+        },
+    }},
+}}
 # the author edits a message's words: text in a plain room, the sealed x in an encrypted one; ed marks when
 EDIT_ROOM = "data.parent().parent().parent()"   # from rooms/$code/msgs/$id/<field>
 edit_write = j("auth != null", "data.parent().child('by').val() === auth.uid", is_member(EDIT_ROOM), alive(EDIT_ROOM))
@@ -405,13 +490,13 @@ rules = {"rules": {
                     ".write": msg_write,
                     ".validate": j("newData.hasChildren(['by', 'at'])", o(
                         j(ENC("newData.parent().parent()"), "newData.hasChild('x')"),
-                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", o(*[f"newData.hasChild('{k}')" for k in ("text", "gif", "img", "poll", "draw", "game", "post", "ev")])))),
+                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", o(*[f"newData.hasChild('{k}')" for k in ("text", "gif", "img", "poll", "draw", "game", "post", "quiz", "ev")])))),
                     "by": {".validate": "newData.isString()"},
                     "name": {".validate": S(24) + " && !" + ENC(MEMBER_ROOM)},
                     "avatar": {".validate": S(8) + " && !" + ENC(MEMBER_ROOM)},
                     "text": {".write": edit_field, ".validate": S(1000) + " && newData.val().length > 0 && !" + ENC(MEMBER_ROOM)},
                     "gif": dict(GIF, **{".validate": GIF[".validate"] + " && !" + ENC(MEMBER_ROOM)}),
-                    "img": IMG, "poll": POLL, "draw": DRAW, "game": GAME, "pt": POST_MARK,
+                    "img": IMG, "poll": POLL, "draw": DRAW, "game": GAME, "pt": POST_MARK, "quiz": QUIZ_CARD, "qm": QUIZ_MARK,
                     # the author edits a long post's card along with its text
                     "post": dict(POST_CARD, **{".write": edit_field}),
                     "x": {".write": edit_field, ".validate": SEALED(12000)},
@@ -570,6 +655,7 @@ rules = {"rules": {
                     "$other": NO,
                 }}},
             },
+            "qz": QUIZ,
             "$other": NO,
         }
     },
@@ -577,7 +663,7 @@ rules = {"rules": {
     # the site's owner (Firebase console, or tools/cleanup/stats.mjs)
     "stats": {"$day": {"$k": {
         ".write": j("auth != null", r"$day.matches(/^20[0-9]{2}-[01][0-9]-[0-3][0-9]$/)",
-                    "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports|games|posts|comments)$/)",
+                    "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports|games|posts|comments|quizzes)$/)",
                     o(j("!data.exists()", "newData.val() === 1"), "newData.val() === data.val() + 1")),
         ".validate": "newData.isNumber()"}}},
     # StoaTalk's operator: who it is (set by hand in the Firebase console; each can see only their own entry), and
