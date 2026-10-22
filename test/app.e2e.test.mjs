@@ -271,6 +271,12 @@ test("lecture Q&A: ask anonymously, upvote, answer, projector screen", async () 
   await alice.locator("#ansText").fill("A covered walkway.");
   await press(alice, "yes");
   await bob.locator(".qcard .qans", { hasText: "A covered walkway." }).waitFor({ state: "attached" }); // answered: folded under "answered"
+  // the host's ⋯ on an answered question: two steps, one under the other, not pushed to either side
+  await alice.locator("details.qdone summary").click();
+  await alice.locator(".qdone .qcard .qtools .more").click();
+  const [undo, remove] = await Promise.all(["done", "remove"].map((a) => sheet(alice).locator(`[data-a=${a}]`).boundingBox()));
+  assert.ok(remove.y >= undo.y + undo.height && Math.abs(undo.width - remove.width) < 2, "the two buttons are stacked, full width");
+  await alice.keyboard.press("Escape");
 
   // a poll too, which the projector shows beside the questions
   await alice.locator("#tabs [data-a=all]").click();
