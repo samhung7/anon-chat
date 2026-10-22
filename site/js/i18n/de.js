@@ -45,6 +45,11 @@ I18N.add("de", {
   // animals: the default nickname is the animal's name
   av0: "Bärchen", av1: "Fuchs", av2: "Panda", av3: "Tiger", av4: "Löwe", av5: "Frosch", av6: "Äffchen", av7: "Pinguin",
   av8: "Eule", av9: "Oktopus", av10: "Einhorn", av11: "Hündchen", av12: "Kätzchen", av13: "Häschen", av14: "Koala", av15: "Drache",
+  // a made-up nickname: a colour on an animal; a colour with a form for each gender ("a|b|c" for m|f|n) follows avg,
+  // the gender of each animal above
+  col0: "Roter|Rote|Rotes", col1: "Oranger|Orange|Oranges", col2: "Gelber|Gelbe|Gelbes", col3: "Grüner|Grüne|Grünes", col4: "Blauer|Blaue|Blaues",
+  col5: "Lila", col6: "Rosa", col7: "Goldener|Goldene|Goldenes", col8: "Silberner|Silberne|Silbernes", col9: "Weißer|Weiße|Weißes",
+  avg: "nmmmmmnmfmnnnnmm", nickMix: "{c} {a}",
 
   // common
   cancel: "Abbrechen",
@@ -75,6 +80,8 @@ I18N.add("de", {
 
   // identity
   nickname: "Spitzname",
+  rollNick: "Zufällig",
+  rollNickAria: "Zufälligen Spitznamen erstellen",
   meHint: "Ohne Anmeldung. Andere sehen nur diesen Namen und dieses Bild. Jeder Spitzname kann pro Raum nur einmal vergeben werden.",
   meFirst: "Wer bist du?",
   meRetry: "Wähl einen anderen Spitznamen",

@@ -45,6 +45,11 @@ I18N.add("ja", {
   // animals: the default nickname is the animal's name
   av0: "クマ", av1: "キツネ", av2: "パンダ", av3: "トラ", av4: "ライオン", av5: "カエル", av6: "サル", av7: "ペンギン",
   av8: "フクロウ", av9: "タコ", av10: "ユニコーン", av11: "子犬", av12: "子猫", av13: "ウサギ", av14: "コアラ", av15: "ドラゴン",
+  // a made-up nickname: a colour on an animal; a colour with a form for each gender ("a|b|c" for m|f|n) follows avg,
+  // the gender of each animal above
+  col0: "赤い", col1: "オレンジの", col2: "黄色い", col3: "緑の", col4: "青い",
+  col5: "紫の", col6: "ピンクの", col7: "金色の", col8: "銀色の", col9: "白い",
+  avg: "", nickMix: "{c}{a}",
 
   // common
   cancel: "キャンセル",
@@ -75,6 +80,8 @@ I18N.add("ja", {
 
   // identity
   nickname: "ニックネーム",
+  rollNick: "ランダム",
+  rollNickAria: "ニックネームをランダムに作る",
   meHint: "登録は不要です。ほかの人に表示されるのはこの名前とアイコンだけ。同じルーム内でニックネームの重複はできません。",
   meFirst: "プロフィールを選びましょう",
   meRetry: "別のニックネームを選んでください",

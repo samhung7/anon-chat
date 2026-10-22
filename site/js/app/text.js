@@ -15,3 +15,10 @@ export const fmtWhen = (at) => new Date(at).toLocaleString(I18N.lang, { year: "n
 export const fmtFull = (at) => new Date(at).toLocaleString(I18N.lang, { hour12: false });
 // [emoji, name] for each animal
 export const avatars = () => ANIMALS.map((a, i) => [a, t("av" + i)]);
+// a random nickname: colour c on animal i, as the language puts the two together ("Red Fox", "Zorro rojo", "紅狐狸");
+// a colour with a form for each gender ("rojo|roja") takes the animal's (avg: m, f or n for each animal, in order)
+export const COLOURS = 10;
+export function colourNick(c, i) {
+  const forms = t("col" + c).split("|");
+  return t("nickMix", { c: forms["mfn".indexOf(t("avg")[i])] || forms[0], a: t("av" + i) });
+}

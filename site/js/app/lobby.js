@@ -7,7 +7,7 @@ import { store, KEYS } from "./storage.js?v=dev";
 import { backend, isDenied, isBusy, within } from "./backend.js?v=dev";
 import { RoomCipher, deviceKeys, b64u, KEY_RE, RAW_KEY_RE } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
-import { me, ensureMe, askMe, memberRecord, meFields, saveMe } from "./identity.js?v=dev";
+import { me, ensureMe, askMe, memberRecord, meFields, saveMe, rollMe } from "./identity.js?v=dev";
 import { nameClaim } from "./room.js?v=dev";
 import { enter } from "./chat.js?v=dev";
 import { share } from "./menu.js?v=dev";
@@ -42,7 +42,7 @@ export async function create() {
     el("div", { class: "grp" }, el("label", { class: "lbl", for: "newTitle", text: t("roomName") }), title),
     el("div", { class: "grp" }, el("span", { class: "lbl", text: t("roomType") }), seg, encNote),
     el("div", { class: "grp part" }, el("h3", { text: t("meFirst") }), el("p", { class: "hint", text: t("meHint") }), f.grid,
-      el("label", { class: "lbl", for: "meName", text: t("nickname") }), f.input));
+      el("label", { class: "lbl", for: "meName", text: t("nickname") }), f.row));
   const go = await sheet(t("newRoom"), body, [["no", t("cancel")], ["yes", t("start"), "primary"]], { onOpen: (ov) => {
     const start = ov.querySelector("[data-a=yes]");
     seg.addEventListener("click", (e) => {
@@ -123,7 +123,7 @@ export async function join(raw) {
     if (meta.cap && (meta.n || 0) >= meta.cap) { toast(t("capFull")); return; }
     let m = await asking(ensureMe, !me());
     if (!m) return;
-    for (let tries = 0; ; tries++) {
+    for (let tries = 0, rolls = 0; ; tries++) {
       const k = await nameClaim(cipher, m.name);
       const holder = await backend.val(ref("names/" + k));
       const at = (path) => `rooms/${code}/${path}`;
@@ -140,6 +140,7 @@ export async function join(raw) {
         const taken = holder && holder !== uid; // someone here already goes by this name
         if (meta.cap && tries < 3 && !taken) continue;
         if (!taken) { toast(t("cantJoin")); return; }
+        if (m.col != null && rolls++ < 10) { m = saveMe(rollMe()); continue; } // a made-up name: make up another
         m = await asking(() => askMe(false, t("nameTakenJoin", { name: m.name }), false));
         if (!m) return;
       }
