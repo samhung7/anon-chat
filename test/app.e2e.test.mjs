@@ -905,6 +905,11 @@ test("long posts: hosts write one on its own page, the chat shows a card, the te
   await until(async () => (await dbGet(`rooms/${code}/meta/po`)) === true);
   await writePost(bob, "", "no title needed");
   await alice.locator("#list .postbub .ps.lead", { hasText: "no title needed" }).waitFor();
+  await alice.locator("#list .postbub", { hasText: "no title needed" }).click();
+  await alice.locator(".reader .md", { hasText: "no title needed" }).waitFor();
+  assert.equal((await alice.locator(".reader .pagebody > div").first().textContent()).includes("null"), false);
+  await alice.locator(".reader .bar [data-a=back]").click();
+  await alice.locator(".reader").waitFor({ state: "detached" });
   await writePost(bob, "From Bob", "hello from a member");
   await alice.locator("#list .postbub", { hasText: "From Bob" }).waitFor();
   const bobs = Object.entries(await dbGet(`rooms/${code}/msgs`)).find(([, v]) => v.by !== msgs[id].by && v.post.t)[0];
@@ -937,6 +942,94 @@ test("long posts in a Private Salon: the card and the text are sealed, and membe
   const body = await dbGet(`rooms/${code}/posts/${id}`);
   assert.equal(body.b, undefined);
   assert.ok(body.x && !JSON.stringify(body).includes("only") && !JSON.stringify(msgs).includes("Secret"));
+  noErrors();
+});
+
+// writes a comment on the open post's page
+async function comment(page, text) {
+  await page.locator(".reader .cin").fill(text);
+  await page.locator(".reader .cfoot .btn.primary").click();
+  await page.locator(".reader .cmt .ctext", { hasText: text }).waitFor();
+}
+
+test("comments under a long post: on its page only, counted on the card, the author told; replies, reactions, reports, deleting, exports", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  await writePost(alice, "Ideas", "what do you think?");
+  const card = bob.locator("#list .postbub", { hasText: "Ideas" });
+  await card.click();
+  await bob.locator(".reader .cnone").waitFor();
+  await comment(bob, "love it");
+  // not in the chat; the card counts it, and the post's author hears of it
+  await alice.locator(".toast", { hasText: "Bob commented on your long post" }).waitFor();
+  await alice.locator("#list .postbub .pcc", { hasText: "1" }).waitFor();
+  assert.equal(await alice.locator("#list .bub", { hasText: "love it" }).count(), 0);
+  const [id] = Object.keys(await dbGet(`rooms/${code}/msgs`));
+  const [cid] = Object.keys(await dbGet(`rooms/${code}/pc/${id}`));
+  assert.equal((await dbGet(`rooms/${code}/msgs/${id}/cc`))[cid], true);
+
+  // Bob closes the page; Alice answers him by name, and he's told
+  await bob.locator(".reader .bar [data-a=back]").click();
+  await bob.locator(".reader").waitFor({ state: "detached" });
+  await alice.locator("#list .postbub", { hasText: "Ideas" }).click();
+  await alice.locator(".reader .cmt", { hasText: "love it" }).locator(".icon").click();
+  await press(alice, "reply");
+  await alice.locator(".reader .creply", { hasText: "Bob" }).waitFor();
+  await comment(alice, "thanks @Bob");
+  await bob.locator(".toast", { hasText: "Alice mentioned you" }).waitFor();
+  await alice.locator(".reader .cmt", { hasText: "thanks" }).locator(".cquote", { hasText: "love it" }).waitFor();
+
+  // reactions, as on a message
+  await card.click();
+  await bob.locator(".reader .cmt", { hasText: "thanks" }).locator(".icon").click();
+  await sheet(bob).locator("[data-a=re1]").click();
+  await alice.locator(".reader .cmt", { hasText: "thanks" }).locator(".chip", { hasText: "1" }).waitFor();
+
+  // an export keeps the comments with the post
+  await alice.locator(".reader .bar [data-a=back]").click();
+  await menuPick(alice, "export");
+  const [file] = await Promise.all([alice.waitForEvent("download"), press(alice, "json")]);
+  const a = JSON.parse(readFileSync(await file.path(), "utf8"));
+  assert.deepEqual(a.messages[0].post.c.map((c) => [c.n, c.t]), [["Bob", "love it"], ["Alice", "thanks @Bob"]]);
+
+  // Bob reports Alice's comment... to Alice, the owner, who sees it among the reports; then Bob deletes his own
+  await bob.locator(".reader .cmt", { hasText: "thanks" }).locator(".icon").click();
+  await press(bob, "report");
+  await press(bob, "r1");
+  await alice.locator("#chat .bar [data-a=menu] .dot").waitFor();
+  await menuPick(alice, "reports");
+  await sheet(alice).locator(".replist li", { hasText: "thanks @Bob" }).waitFor();
+  await alice.keyboard.press("Escape");
+  await bob.locator(".reader .cmt.mine").locator(".icon").click();
+  await press(bob, "del");
+  await press(bob, "yes");
+  await bob.locator(".reader .cmt", { hasText: "love it" }).waitFor({ state: "detached" });
+  await until(async () => !(await dbGet(`rooms/${code}/msgs/${id}/cc/${cid}`)));
+  await bob.locator(".reader .chead", { hasText: "Comments · 1" }).waitFor();
+
+  // the post goes with its comments
+  await bob.locator(".reader .bar [data-a=back]").click();
+  await alice.locator("#list .msg.mine .more").first().click();
+  await press(alice, "del");
+  await press(alice, "yes");
+  await until(async () => (await dbGet(`rooms/${code}/pc/${id}`)) === null);
+  noErrors();
+});
+
+test("comments in a Private Salon are sealed", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  await writePost(alice, "Secret plan", "for us");
+  await bob.locator("#list .postbub", { hasText: "Secret plan" }).click();
+  await comment(bob, "count me in");
+  await alice.locator("#list .postbub", { hasText: "Secret plan" }).click();
+  await alice.locator(".reader .cmt .ctext", { hasText: "count me in" }).waitFor();
+  const [id] = Object.keys(await dbGet(`rooms/${code}/msgs`));
+  const pc = await dbGet(`rooms/${code}/pc/${id}`);
+  const [c] = Object.values(pc);
+  assert.ok(c.x && c.text === undefined && !JSON.stringify(pc).includes("count me") && !JSON.stringify(pc).includes("Bob"));
   noErrors();
 });
 

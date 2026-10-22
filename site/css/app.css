@@ -911,3 +911,27 @@ textarea.field { resize: vertical; font: inherit; line-height: 1.45; }
 .pfoot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); }
 .pfoot .link { margin-left: auto; }
 html.kb .writer .pagebody { padding-bottom: var(--sp-2); }
+/* comments under a post (js/app/comments.js): a list after the reactions, and a box at the foot of the page */
+.comments { margin-top: var(--sp-5); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+.chead { font-size: var(--fs-body); margin: 0 0 var(--sp-2); }
+.clist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.cmt { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
+.cmt:last-child { border-bottom: 0; }
+.cmt .av { flex: none; display: grid; place-items: center; width: 28px; height: 28px; font-size: 20px; line-height: 1; }
+.cmt .av img { width: 28px; height: 28px; border-radius: 50%; display: block; }
+.cbody { flex: 1; min-width: 0; }
+.cwho { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-sm); }
+.cwho time { font-size: var(--fs-xs); color: var(--muted); }
+.cquote { font-size: var(--fs-sm); color: var(--muted); border-left: 3px solid var(--line-strong); padding-left: var(--sp-2); margin: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctext { font-size: var(--fs-body); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.cmt .re { margin-top: 2px; justify-content: flex-start; }
+.cmt > .icon { flex: none; color: var(--muted); }
+.cnone { padding: var(--sp-2) 0; }
+.cfoot { border-top: 1px solid var(--line); background: var(--surface); padding: var(--sp-2) var(--sp-3) calc(var(--sp-2) + env(safe-area-inset-bottom)); }
+.cfoot:empty { display: none; }
+.crow { display: flex; align-items: flex-end; gap: var(--sp-2); }
+.cin { flex: 1; resize: none; min-height: 40px; max-height: 140px; line-height: 1.4; }
+.creply { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); margin-bottom: var(--sp-1); }
+.creply .rtxt { flex: 1; min-width: 0; color: var(--muted); border-left: 3px solid var(--accent-ink); padding-left: var(--sp-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cro { margin: 0; text-align: center; }
+html.kb .cfoot { padding-bottom: var(--sp-2); }

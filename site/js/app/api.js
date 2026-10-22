@@ -37,14 +37,19 @@ export class RoomApi {
   vote(id, picks) { return this.set(`msgs/${id}/votes/${this.uid}`, picks); }
   closePoll(id) { return this.set(`msgs/${id}/closed`, true); }
   pin(slot, id) { return this.set("meta/pins/" + slot, id); }
-  // a report goes to the room's owner and co-hosts, and to StoaTalk's operator with what the reporter saw (seen: t, n, f, enc)
+  // a report goes to the room's owner and co-hosts, and to StoaTalk's operator with what the reporter saw (seen: t, n, f, enc;
+  // p: the long post a reported comment is under)
   report(id, reason, seen) {
     const at = backend.stamp();
-    return backend.update({ [this.root(`reports/${id}/${this.uid}`)]: { r: reason, at },
+    return backend.update({ [this.root(`reports/${id}/${this.uid}`)]: { r: reason, at, ...(seen.p ? { p: seen.p } : {}) },
       [`ops/reports/${this.code}_${id}_${this.uid}`]: { code: this.code, msg: id, by: this.uid, r: reason, at, ...seen } });
   }
   dismissReport(id) { return this.set("reports/" + id, null); }
   dropReports(ids) { return this.update(Object.fromEntries(ids.map((id) => [id, null])), "reports"); }
+  /* ---------- comments under a long post ---------- */
+  reactComment(pid, id, k, on) { return this.set(`pc/${pid}/${id}/re/${k}/${this.uid}`, on ? true : null); }
+  // the comment and its place in the post's card; a host also clears any reports on it
+  removeComment(pid, id, staff) { return this.update({ [`pc/${pid}/${id}`]: null, [`msgs/${pid}/cc/${id}`]: null, ...(staff ? { ["reports/" + id]: null } : {}) }); }
   // where I say I'm typing: in the room, or in a private chat (pair)
   typingRef(pair) { return this.ref(pair ? `dmt/${pair}/${this.uid}` : `typing/${this.uid}`); }
 
