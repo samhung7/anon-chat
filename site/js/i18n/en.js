@@ -45,6 +45,11 @@ I18N.add("en", {
   // animals: the default nickname is the animal's name
   av0: "Bear", av1: "Fox", av2: "Panda", av3: "Tiger", av4: "Lion", av5: "Frog", av6: "Monkey", av7: "Penguin",
   av8: "Owl", av9: "Octopus", av10: "Unicorn", av11: "Puppy", av12: "Kitten", av13: "Rabbit", av14: "Koala", av15: "Dragon",
+  // a made-up nickname: a colour on an animal; a colour with a form for each gender ("a|b|c" for m|f|n) follows avg,
+  // the gender of each animal above
+  col0: "Red", col1: "Orange", col2: "Yellow", col3: "Green", col4: "Blue",
+  col5: "Purple", col6: "Pink", col7: "Golden", col8: "Silver", col9: "White",
+  avg: "", nickMix: "{c} {a}",
 
   // common
   cancel: "Cancel",
@@ -75,6 +80,8 @@ I18N.add("en", {
 
   // identity
   nickname: "Nickname",
+  rollNick: "Random",
+  rollNickAria: "Make up a random nickname",
   meHint: "No sign-up. Others only see this name and picture. Nicknames are unique within a room.",
   meFirst: "Choose who you are",
   meRetry: "Pick another nickname",

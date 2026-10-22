@@ -45,6 +45,11 @@ I18N.add("fr", {
   // animals: the default nickname is the animal's name
   av0: "Ourson", av1: "Renard", av2: "Panda", av3: "Tigre", av4: "Lion", av5: "Grenouille", av6: "Singe", av7: "Pingouin",
   av8: "Hibou", av9: "Pieuvre", av10: "Licorne", av11: "Chiot", av12: "Chaton", av13: "Lapin", av14: "Koala", av15: "Dragon",
+  // a made-up nickname: a colour on an animal; a colour with a form for each gender ("a|b|c" for m|f|n) follows avg,
+  // the gender of each animal above
+  col0: "rouge", col1: "orange", col2: "jaune", col3: "vert|verte", col4: "bleu|bleue",
+  col5: "violet|violette", col6: "rose", col7: "doré|dorée", col8: "argenté|argentée", col9: "blanc|blanche",
+  avg: "mmmmmfmmmffmmmmm", nickMix: "{a} {c}",
 
   // common
   cancel: "Annuler",
@@ -75,6 +80,8 @@ I18N.add("fr", {
 
   // identity
   nickname: "Pseudo",
+  rollNick: "Au hasard",
+  rollNickAria: "Créer un pseudo au hasard",
   meHint: "Sans inscription. Les autres ne voient que ce nom et cette image. Chaque pseudo est unique dans un salon.",
   meFirst: "Choisissez qui vous êtes",
   meRetry: "Choisissez un autre pseudo",

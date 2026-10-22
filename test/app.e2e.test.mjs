@@ -171,6 +171,34 @@ test("open room: create, join with the code, talk, react, reply, edit, delete", 
   noErrors();
 });
 
+test("a made-up nickname: 🎲 picks a colour and an animal, and one that is taken in the room is made up again", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Red Fox");
+  // 🎲 in the sheet: a colour on an animal, with that animal picked; picking another animal keeps the colour
+  await bob.goto(url);
+  await bob.locator(".nickrow .roll").click();
+  const made = await bob.locator("#meName").inputValue();
+  const [, colour, animal] = made.match(/^(Red|Orange|Yellow|Green|Blue|Purple|Pink|Golden|Silver|White) (.+)$/);
+  assert.equal(await sheet(bob).locator(".avpick [aria-pressed=true]").getAttribute("aria-label"), animal);
+  await sheet(bob).locator('.avpick [aria-label="Owl"]').click();
+  assert.equal(await bob.locator("#meName").inputValue(), colour + " Owl");
+  await press(bob, "yes");
+  await bob.locator("#chat").waitFor();
+  assert.ok(await dbGet(`rooms/${code}/names/${(colour + " owl").toLowerCase()}`), "joined under the name made up");
+  // someone whose made-up name is already taken in the room joins under another made-up one, without being asked
+  const carol = await person("c");
+  await carol.evaluate(() => localStorage.setItem("chat-me", JSON.stringify({ avatar: "🦊", name: "Red Fox", col: 0, auto: true })));
+  await carol.goto(url);
+  await carol.locator("#chat").waitFor();
+  const names = Object.keys(await dbGet(`rooms/${code}/names`));
+  assert.equal(names.length, 3);
+  assert.ok(names.includes("red fox"));
+  const mine = JSON.parse(await carol.evaluate(() => localStorage.getItem("chat-me")));
+  assert.notEqual(mine.name, "Red Fox");
+  assert.ok(names.includes(mine.name.toLowerCase()));
+  noErrors();
+});
+
 test("private salon: only ciphertext on the server, the link is needed, private messages are sealed", async () => {
   const alice = await person("a"), bob = await person("b"), carol = await person("c");
   const { code, url } = await createRoom(alice, "Alice", { priv: true, title: "Secret" });

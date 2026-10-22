@@ -45,6 +45,11 @@ I18N.add("zh-TW", {
   // animals: the default nickname is the animal's name
   av0: "小熊", av1: "狐狸", av2: "熊貓", av3: "老虎", av4: "獅子", av5: "青蛙", av6: "猴子", av7: "企鵝",
   av8: "貓頭鷹", av9: "章魚", av10: "獨角獸", av11: "小狗", av12: "小貓", av13: "兔子", av14: "無尾熊", av15: "小龍",
+  // a made-up nickname: a colour on an animal; a colour with a form for each gender ("a|b|c" for m|f|n) follows avg,
+  // the gender of each animal above
+  col0: "紅", col1: "橘", col2: "黃", col3: "綠", col4: "藍",
+  col5: "紫", col6: "粉紅", col7: "金", col8: "銀", col9: "白",
+  avg: "", nickMix: "{c}{a}",
 
   // common
   cancel: "取消",
@@ -75,6 +80,8 @@ I18N.add("zh-TW", {
 
   // identity
   nickname: "暱稱",
+  rollNick: "隨機",
+  rollNickAria: "隨機產生暱稱",
   meHint: "不用註冊，其他人只會看到這個名字和頭像。同一個聊天室裡暱稱不能重複。",
   meFirst: "先選一個身分",
   meRetry: "換一個暱稱",

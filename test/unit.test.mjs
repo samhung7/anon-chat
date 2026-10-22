@@ -31,6 +31,33 @@ test("every language has the same keys, and every t(\"key\") the page uses exist
   }
 });
 
+test("a made-up nickname (a colour on an animal) fits a nickname in every language, and no two are the same", async () => {
+  const { colourNick, COLOURS } = await import(new URL("text.js?v=dev", APP));
+  const { ANIMALS, LIMITS } = await import(new URL("constants.js?v=dev", APP));
+  const t = I18N.t;
+  try {
+    for (const [lang, d] of Object.entries(dicts)) {
+      I18N.t = (k, vars) => d[k].replace(/\{(\w+)\}/g, (m, v) => (vars && v in vars ? vars[v] : m));
+      assert.match(d.avg, new RegExp(`^(|[mfn]{${ANIMALS.length}})$`), lang + " avg");
+      const all = new Set();
+      for (let c = 0; c < COLOURS; c++) {
+        assert.ok(d["col" + c].split("|").length <= 3, `${lang} col${c}`);
+        if (d["col" + c].includes("|")) assert.ok(d.avg, `${lang} col${c} has a form for each gender, but there are no genders`);
+        for (let i = 0; i < ANIMALS.length; i++) {
+          const n = colourNick(c, i);
+          assert.ok(n.length <= LIMITS.name && !/[|{}]/.test(n), `${lang}: ${n}`);
+          all.add(n.toLowerCase());
+        }
+      }
+      assert.equal(all.size, COLOURS * ANIMALS.length, lang);
+    }
+    I18N.t = (k, vars) => dicts.fr[k].replace(/\{(\w+)\}/g, (m, v) => vars[v]);
+    assert.equal(colourNick(3, 5), "Grenouille verte");
+    I18N.t = (k, vars) => dicts.de[k].replace(/\{(\w+)\}/g, (m, v) => vars[v]);
+    assert.deepEqual([colourNick(0, 1), colourNick(0, 8), colourNick(0, 10)], ["Roter Fuchs", "Rote Eule", "Rotes Einhorn"]);
+  } finally { I18N.t = t; }
+});
+
 test("each module is imported with ?v=dev, preloaded by the page and kept by the service worker", () => {
   const sw = readFileSync(new URL("sw.js", SITE), "utf8"), page = readFileSync(new URL("index.html", SITE), "utf8");
   for (const f of MODULES) {

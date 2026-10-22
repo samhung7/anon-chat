@@ -45,6 +45,11 @@ I18N.add("es", {
   // animals: the default nickname is the animal's name
   av0: "Osito", av1: "Zorro", av2: "Panda", av3: "Tigre", av4: "León", av5: "Rana", av6: "Mono", av7: "Pingüino",
   av8: "Búho", av9: "Pulpo", av10: "Unicornio", av11: "Perrito", av12: "Gatito", av13: "Conejo", av14: "Koala", av15: "Dragón",
+  // a made-up nickname: a colour on an animal; a colour with a form for each gender ("a|b|c" for m|f|n) follows avg,
+  // the gender of each animal above
+  col0: "rojo|roja", col1: "naranja", col2: "amarillo|amarilla", col3: "verde", col4: "azul",
+  col5: "morado|morada", col6: "rosa", col7: "dorado|dorada", col8: "plateado|plateada", col9: "blanco|blanca",
+  avg: "mmmmmfmmmmmmmmmm", nickMix: "{a} {c}",
 
   // common
   cancel: "Cancelar",
@@ -75,6 +80,8 @@ I18N.add("es", {
 
   // identity
   nickname: "Apodo",
+  rollNick: "Al azar",
+  rollNickAria: "Crear un apodo al azar",
   meHint: "Sin registro. Los demás solo ven este nombre y esta imagen. Cada apodo es único dentro de una sala.",
   meFirst: "Elige quién eres",
   meRetry: "Elige otro apodo",

@@ -45,6 +45,11 @@ I18N.add("ko", {
   // animals: the default nickname is the animal's name
   av0: "곰돌이", av1: "여우", av2: "판다", av3: "호랑이", av4: "사자", av5: "개구리", av6: "원숭이", av7: "펭귄",
   av8: "부엉이", av9: "문어", av10: "유니콘", av11: "강아지", av12: "아기 고양이", av13: "토끼", av14: "코알라", av15: "아기 용",
+  // a made-up nickname: a colour on an animal; a colour with a form for each gender ("a|b|c" for m|f|n) follows avg,
+  // the gender of each animal above
+  col0: "빨간", col1: "주황", col2: "노란", col3: "초록", col4: "파란",
+  col5: "보라", col6: "분홍", col7: "금빛", col8: "은빛", col9: "하얀",
+  avg: "", nickMix: "{c} {a}",
 
   // common
   cancel: "취소",
@@ -75,6 +80,8 @@ I18N.add("ko", {
 
   // identity
   nickname: "닉네임",
+  rollNick: "랜덤",
+  rollNickAria: "닉네임 랜덤으로 만들기",
   meHint: "가입은 필요 없어요. 다른 사람에게는 이 이름과 사진만 보여요. 한 채팅방 안에서 닉네임은 겹칠 수 없어요.",
   meFirst: "프로필을 정해 주세요",
   meRetry: "다른 닉네임을 골라 주세요",
