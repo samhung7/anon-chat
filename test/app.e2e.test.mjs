@@ -426,6 +426,59 @@ test("polls and draws", async () => {
   noErrors();
 });
 
+for (const priv of [false, true]) test(`anonymous and hidden polls${priv ? " (encrypted)" : ""}`, async () => {
+  const alice = await person("a"), bob = await person("b"), carol = await person("c");
+  const { code, url } = await createRoom(alice, "Alice", { priv });
+  await joinByLink(bob, url, "Bob"); await joinByLink(carol, url, "Carol");
+  const newPoll = async (q, { anon = false, hide = false } = {}) => {
+    await alice.locator("#composer [data-a=more]").click();
+    await alice.locator("#picker .morebtn").nth(1).click();
+    await alice.locator("#pollQ").fill(q);
+    const opts = sheet(alice).locator(".pollopts input");
+    await opts.nth(0).fill("Tea"); await opts.nth(1).fill("Coffee");
+    if (anon) await alice.locator("#pollAnon").check();
+    if (hide) { await alice.locator("#pollHide").check(); await alice.locator("#pollWhen").selectOption("60"); }
+    await press(alice, "yes");
+  };
+  const box = (page, q) => page.locator("#list .pollbox", { hasText: q });
+  const counts = (page, q) => box(page, q).locator(".oc").allTextContents();
+
+  // anonymous and hidden: each sees only their own vote until it's revealed
+  await newPoll("Lunch?", { anon: true, hide: true });
+  await box(bob, "Lunch?").locator(".opt").nth(1).click();
+  await box(bob, "Lunch?").locator(".opt.on", { hasText: "Coffee" }).waitFor();
+  await box(carol, "Lunch?").locator(".opt").nth(0).click();
+  await box(carol, "Lunch?").locator(".opt.on", { hasText: "Tea" }).waitFor();
+  await box(bob, "Lunch?").locator(".pf", { hasText: "Results at" }).waitFor();
+  assert.deepEqual(await counts(bob, "Lunch?"), [], "no counts before it's revealed");
+  assert.equal(await box(alice, "Lunch?").locator(".opt.on").count(), 0);
+  const msgs = await dbGet(`rooms/${code}/msgs`), [id] = Object.keys(msgs).filter((k) => msgs[k].an);
+  assert.ok(msgs[id].rv > Date.now() + 50 * 60000 && !msgs[id].votes, "marked, and no votes on the message");
+  const keys = await dbGet(`rooms/${code}/av/${id}`), ballots = await dbGet(`rooms/${code}/ab/${id}`);
+  assert.equal(Object.keys(ballots).length, 2);
+  assert.ok(!Object.keys(ballots).some((k) => k.startsWith("emu")), "ballots aren't under anyone's id");
+  assert.deepEqual(Object.keys(keys).length, 2);
+  // Alice reveals it early: everyone sees the counts, nobody can vote, and nobody sees who voted how
+  await box(alice, "Lunch?").locator("xpath=ancestor::*[contains(@class,'msg')][1]").locator(".more").click();
+  assert.equal(await sheet(alice).locator('[data-a="voters"]').count(), 0, "no list of voters");
+  await press(alice, "close"); await press(alice, "yes");
+  for (const page of [alice, bob, carol]) await box(page, "Lunch?").locator(".ph small", { hasText: "Results out" }).waitFor();
+  await until(async () => (await counts(carol, "Lunch?")).join() === "1,1");
+  assert.ok(await box(bob, "Lunch?").locator(".opt").nth(0).isDisabled());
+
+  // hidden only, revealed when its time comes: then votes are locked, and who voted is shown
+  await newPoll("Dinner?", { hide: true });
+  await box(bob, "Dinner?").locator(".opt").nth(0).click();
+  await box(bob, "Dinner?").locator(".opt.on", { hasText: "Tea" }).waitFor();
+  assert.deepEqual(await counts(carol, "Dinner?"), []);
+  const m2 = await dbGet(`rooms/${code}/msgs`), [id2] = Object.keys(m2).filter((k) => m2[k].rv && !m2[k].an);
+  await fetch(dbUrl(`rooms/${code}/msgs/${id2}/rv`), { method: "PUT", headers: asOwner, body: JSON.stringify(Date.now() + 2000) });
+  await until(async () => (await counts(carol, "Dinner?")).join() === "1,0");
+  await box(carol, "Dinner?").locator(".ph small", { hasText: "Results out" }).waitFor();
+  assert.ok(await box(carol, "Dinner?").locator(".opt").nth(1).isDisabled(), "locked once revealed");
+  noErrors();
+});
+
 test("export to a file, import it back read-only, and end the room", async () => {
   const alice = await person("a"), bob = await person("b");
   const { code, url } = await createRoom(alice, "Alice", { title: "Keep me" });

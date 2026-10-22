@@ -35,6 +35,13 @@ export class RoomApi {
   // the message, and whatever goes with it (its picture, reports on it)
   remove(id, more = {}) { return this.update({ ["msgs/" + id]: null, ...more }); }
   vote(id, picks) { return this.set(`msgs/${id}/votes/${this.uid}`, picks); }
+  // a poll hidden until it's revealed keeps my vote apart, where nobody else reads it before then
+  hiddenVote(id, picks) { return this.set(`pv/${id}/${this.uid}`, picks); }
+  // an anonymous poll: my ballot under a key of my own, which only I can tie to me; the first names the key ("" takes it back)
+  ballot(id, key, picks, first) {
+    return first ? this.update({ [`av/${id}/${this.uid}`]: key, [`ab/${id}/${key}`]: picks }) : this.set(`ab/${id}/${key}`, picks);
+  }
+  ballotKey(id) { return backend.pushKey(this.ref("ab/" + id)); }
   closePoll(id) { return this.set(`msgs/${id}/closed`, true); }
   pin(slot, id) { return this.set("meta/pins/" + slot, id); }
   // a report goes to the room's owner and co-hosts, and to StoaTalk's operator with what the reporter saw (seen: t, n, f, enc;

@@ -178,7 +178,7 @@ function card(g) {
   // a message (a long post with its text and comments), or a comment under the long post g.p
   const takeDown = g.p
     ? { ...clear, [`rooms/${g.code}/pc/${g.p}/${g.msg}`]: null, [`rooms/${g.code}/msgs/${g.p}/cc/${g.msg}`]: null, [`rooms/${g.code}/reports/${g.msg}`]: null }
-    : { ...clear, [`rooms/${g.code}/msgs/${g.msg}`]: null, [`rooms/${g.code}/reports/${g.msg}`]: null, [`rooms/${g.code}/posts/${g.msg}`]: null, [`rooms/${g.code}/pc/${g.msg}`]: null, ...(g.f ? { [`rooms/${g.code}/files/${g.f}`]: null } : {}) };
+    : { ...clear, [`rooms/${g.code}/msgs/${g.msg}`]: null, [`rooms/${g.code}/reports/${g.msg}`]: null, [`rooms/${g.code}/posts/${g.msg}`]: null, [`rooms/${g.code}/pc/${g.msg}`]: null, [`rooms/${g.code}/pv/${g.msg}`]: null, [`rooms/${g.code}/ab/${g.msg}`]: null, [`rooms/${g.code}/av/${g.msg}`]: null, ...(g.f ? { [`rooms/${g.code}/files/${g.f}`]: null } : {}) };
   const what = g.p ? "留言" : "訊息";
   const counts = REASONS.map((name, k) => [name, g.reasons.filter((x) => x === k).length]).filter(([, n]) => n).map(([name, n]) => `${name} ×${n}`).join("、");
   const btn = (text, cls, fn) => { const b = el("button", { type: "button", class: cls, text }); b.onclick = () => fn(b); return b; };
