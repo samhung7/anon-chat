@@ -91,7 +91,7 @@ async function unreadIn(code) {
   const read = +store.get(KEYS.read(code)) || 0, { fb } = backend;
   if (!read) return 0;
   const msgs = await backend.val(fb.query(backend.roomRef(code, "msgs"), fb.orderByChild("at"), fb.startAfter(read), fb.limitToFirst(UNREAD_MAX)));
-  return Object.values(msgs || {}).filter((v) => v && v.by !== backend.uid && !isBlocked(v.by)).length;
+  return Object.values(msgs || {}).filter((v) => v && !v.ev && v.by !== backend.uid && !isBlocked(v.by)).length; // ev: a "left" or "removed" line, not a message
 }
 const unreadText = (n) => (n >= UNREAD_MAX ? UNREAD_MAX - 1 + "+" : String(n));
 function renderResume() {
