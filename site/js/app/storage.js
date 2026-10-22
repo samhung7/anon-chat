@@ -19,6 +19,8 @@ export const KEYS = {
   push: "chat-push",                   // this browser's push subscription as the push service sealed it
   askAnon: "chat-ask-anon",
   lang: "chat-lang",
+  quick: "chat-quick",                 // my own quick replies, once edited (until then, the presets in my language)
+  quickOff: "chat-quick-off",          // the row of quick replies is turned off
   records: "chat-records",
   emu: "chat-emu",
   emuUid: (as) => "chat-emu-uid" + (as || ""),

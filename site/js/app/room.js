@@ -161,6 +161,7 @@ export class Room extends Emitter {
       if (this.cipher) {
         meta.title = meta.xt ? (await this.cipher.unseal(meta.xt, "t"))?.t || "" : "";
         meta.desc = meta.xd ? (await this.cipher.unseal(meta.xd, "d"))?.t || "" : "";
+        meta.qr = meta.xr ? (await this.cipher.unseal(meta.xr, "r"))?.t || "" : "";
       }
       this.meta = meta;
       this.emit("meta");

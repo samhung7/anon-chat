@@ -10,6 +10,7 @@ import { pairKey } from "./room.js?v=dev";
 import { KIND, snippet } from "./kinds.js?v=dev";
 import { isBlocked } from "./blocking.js?v=dev";
 import { announce } from "./push.js?v=dev";
+import { renderQuick } from "./quick.js?v=dev";
 
 export const box = () => $("#text");
 
@@ -97,9 +98,9 @@ export function startReply(id, v, dm) {
   room.ui.reply = { id, dm };
   const bar = $("#replyBar");
   $(".rtxt", bar).replaceChildren(...tEl("replyingTo", { name: el("b", { text: room.author(v, dm).name }), text: snippet(v) }));
-  bar.hidden = false; box().focus();
+  bar.hidden = false; box().focus(); renderQuick();
 }
-export function cancelReply() { if (room) room.ui.reply = null; $("#replyBar").hidden = true; }
+export function cancelReply() { if (room) room.ui.reply = null; $("#replyBar").hidden = true; renderQuick(); }
 
 export function insertAtCursor(s) {
   const ta = box();
