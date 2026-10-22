@@ -1308,3 +1308,145 @@ test("on iPhone the keyboard doesn't cover a sheet being typed in", async () => 
   await ctx.close();
   noErrors();
 });
+
+// quizzes: the host writes a set on its own page; questions are filled in by number (0 the first)
+async function writeQuiz(page, title, questions) {
+  await page.locator("#composer [data-a=more]").click();
+  await page.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await press(page, "new");
+  const ed = page.locator(".qzedit");
+  await ed.locator(".qzetitle:focus").waitFor();
+  await ed.locator(".qzetitle").fill(title);
+  for (const [n, q] of questions.entries()) {
+    if (n) await ed.locator(".qzeadd").click();
+    const card = ed.locator(".qzeq").nth(n);
+    await card.locator("textarea").fill(q.t);
+    for (const [k, o] of q.o.entries()) await card.locator(".qzeo input").nth(k).fill(o);
+    if (q.right !== 0) { await card.locator(".qzeright").nth(0).click(); await card.locator(".qzeright").nth(q.right).click(); }
+    await card.locator("select").first().selectOption(String(q.d || 5));
+  }
+  return ed;
+}
+const quizPage = (page) => page.locator(".quizov");
+const quizBtn = (page, text) => quizPage(page).locator(".actions .btn", { hasText: text });
+
+test("quiz: the host writes a set and runs it; players join from the card, answer against the clock, and see the scores", async () => {
+  const alice = await person("a"), bob = await person("b"), carol = await person("c");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  await joinByLink(carol, url, "Carol");
+  // members don't get the quiz in the ＋ panel; the host does
+  await bob.locator("#composer [data-a=more]").click();
+  await bob.locator("#picker .morebtn").first().waitFor();
+  assert.equal(await bob.locator("#picker .morebtn", { hasText: "Quiz" }).count(), 0);
+  await bob.locator("#composer [data-a=more]").click();
+
+  const ed = await writeQuiz(alice, "Maths", [{ t: "2 + 2 = ?", o: ["3", "4", "5"], right: 1 }, { t: "Which is even?", o: ["7", "8"], right: 1 }]);
+  await ed.locator(".pfoot", { hasText: "Saved on this device" }).waitFor();
+  await shot(alice, "quiz-editor");
+  await ed.locator(".bar .btn.primary").click();   // Start quiz
+  await quizPage(alice).locator(".qzplayers, .muted", { hasText: "Nobody has joined yet" }).first().waitFor();
+  const [z] = Object.keys(await dbGet(`rooms/${code}/qz`));
+  const quiz = await dbGet(`rooms/${code}/qz/${z}`);
+  assert.equal(quiz.live.ph, "lobby");
+  assert.equal(JSON.parse(quiz.src).q[0].c[0], 1, "the whole set, answers and all, sits where only the hosts read it");
+  assert.equal(quiz.q, undefined, "no question is out yet");
+
+  // players come in from the card in the chat
+  const card = bob.locator(".quizbub", { hasText: "Maths" });
+  await card.locator(".btn", { hasText: "Play" }).click();
+  await quizPage(bob).locator(".qzjoin .btn", { hasText: "Play as" }).click();
+  await quizPage(bob).locator(".qzwait", { hasText: "You're in" }).waitFor();
+  await carol.locator(".quizbub .btn", { hasText: "Play" }).click();
+  await quizPage(carol).locator(".qzjoin .btn").click();
+  await quizPage(alice).locator(".qzplayers .chip").nth(1).waitFor();
+  await shot(alice, "quiz-lobby-host");
+  await shot(bob, "quiz-lobby-player");
+
+  // question 1: out first, answering a few seconds on; nobody else's answer can be seen while it's open
+  await quizBtn(alice, "Start").click();
+  await quizPage(bob).locator(".qzcount").waitFor();
+  await shot(bob, "quiz-get-ready");
+  const four = quizPage(bob).locator("button.qzopt", { hasText: "4" });
+  await bob.locator("button.qzopt:not([disabled])").first().waitFor({ timeout: 8000 });
+  await shot(bob, "quiz-answering");
+  await four.click();
+  await quizPage(bob).locator(".qzwait", { hasText: "Waiting for the others" }).waitFor();
+  assert.equal((await dbGet(`rooms/${code}/qz/${z}/k`)), null, "the right answer isn't out while answering");
+  await quizPage(carol).locator("button.qzopt", { hasText: "5" }).click();
+  // everyone has answered: the host's device closes it and works out the points
+  await quizPage(bob).locator(".qzme.ok", { hasText: "Right!" }).waitFor();
+  await quizPage(carol).locator(".qzme.no", { hasText: "Wrong" }).waitFor();
+  await quizPage(alice).locator(".lb li").nth(1).waitFor();
+  await shot(bob, "quiz-right");
+  await shot(alice, "quiz-reveal-host");
+  const s0 = JSON.parse(await dbGet(`rooms/${code}/qz/${z}/s/00`));
+  assert.deepEqual(s0.n, [0, 1, 1]);
+  assert.ok(s0.g[Object.keys(s0.g).find((uid) => s0.g[uid] > 0)] > 500, "a fast right answer gets more than half");
+
+  // question 2: Carol is right, Bob lets the time run out
+  await quizBtn(alice, "Next question").click();
+  await carol.locator("button.qzopt:not([disabled])").first().waitFor({ timeout: 8000 });
+  await quizPage(carol).locator("button.qzopt", { hasText: "8" }).click();
+  await quizPage(bob).locator(".qzme.no", { hasText: "No answer" }).waitFor({ timeout: 12000 });
+  // the end: the podium, in the quiz and on the card
+  await quizBtn(alice, "Final results").click();
+  await quizPage(bob).locator(".qzpodium li").nth(1).waitFor();
+  await shot(bob, "quiz-results");
+  await quizPage(bob).locator(".gmhead [aria-label=Close]").click();
+  await card.locator(".qzpodium li").nth(1).waitFor();
+  assert.match(await card.locator(".qzpodium li").first().textContent(), /Bob|Carol/);
+  await shot(bob, "quiz-card-done");
+  assert.equal((await dbGet(`rooms/${code}/qz/${z}/live`)).ph, "end");
+  // the host saves the scores and keeps the set
+  const [csv] = await Promise.all([alice.waitForEvent("download"), quizBtn(alice, "Export scores").click()]);
+  assert.match(csv.suggestedFilename(), /^quiz-.*\.csv$/);
+  noErrors();
+});
+
+test("quiz: a set goes out as a file and comes back in; in a Private Salon everything is sealed", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  const ed = await writeQuiz(alice, "Salon quiz", [{ t: "Capital of France?", o: ["Paris", "Rome"], right: 0, d: 10 }]);
+  await ed.locator(".pfoot", { hasText: "Saved on this device" }).waitFor();
+  await alice.keyboard.press("Escape");
+  await ed.waitFor({ state: "detached" });
+  // export, delete, import
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(alice).locator(".gmrow", { hasText: "Salon quiz" }).click();
+  const [file] = await Promise.all([alice.waitForEvent("download"), press(alice, "export")]);
+  assert.match(file.suggestedFilename(), /\.stoaquiz$/);
+  const path = await file.path();
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(alice).locator(".gmrow", { hasText: "Salon quiz" }).click();
+  await press(alice, "drop");
+  await press(alice, "yes");
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(alice).locator(".lbnone").waitFor();
+  await sheet(alice).locator("input[type=file]").setInputFiles(path);
+  await sheet(alice).locator(".gmrow", { hasText: "Salon quiz" }).click();
+  await press(alice, "start");
+  await quizPage(alice).waitFor();
+  // in the Salon: the card, the set, the players, the question, the answer, the key and the scores are sealed
+  await bob.locator(".quizbub .btn", { hasText: "Play" }).click();
+  await quizPage(bob).locator(".qzjoin .btn").click();
+  await quizPage(alice).locator(".qzplayers .chip").waitFor();
+  await quizBtn(alice, "Start").click();
+  await bob.locator("button.qzopt:not([disabled])").first().waitFor({ timeout: 8000 });
+  await quizPage(bob).locator("button.qzopt", { hasText: "Paris" }).click();
+  await quizPage(bob).locator(".qzme.ok", { hasText: "Right!" }).waitFor();
+  const [z] = Object.keys(await dbGet(`rooms/${code}/qz`));
+  const q = await dbGet(`rooms/${code}/qz/${z}`), m = await dbGet(`rooms/${code}/msgs/${z}`);
+  assert.ok(m.x && m.qm === true && !m.quiz, "the card is sealed");
+  for (const v of [q.src, q.q["00"], q.k["00"], q.s["00"], ...Object.values(q.p).map((p) => p.x), ...Object.values(q.a["00"]).map((a) => a.x)]) {
+    assert.match(v, /^[A-Za-z0-9_-]+$/);
+    assert.ok(!/Paris|France|Bob/.test(v));
+  }
+  await quizBtn(alice, "Final results").click();
+  await bob.locator(".quizbub .qzpodium li", { hasText: "Bob" }).waitFor();
+  noErrors();
+});
