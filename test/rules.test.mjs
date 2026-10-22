@@ -634,3 +634,51 @@ test("push announcements: a member stamps meta/pa, at most every 20 seconds", as
   await admin((d) => set(ref(d, `rooms/${C}/meta/pa`), Date.now() - 21000));
   await assertSucceeds(set(ref(db("carol"), `rooms/${C}/meta/pa`), T));
 });
+
+test("mini-games: each member writes their own score of the day once; members read them; the owner can turn games off", async () => {
+  await createRoom("alice"); await join("bob");
+  const D = "2026-10-22", score = (extra = {}) => ({ s: 76, t: 92, l: "0123,4512,1234", at: T, ...extra });
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/games/${D}/mm/bob`), score()));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/${D}/mm/bob`), score({ s: 100 })));   // once, never changed
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/${D}/mm/bob`), null));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/${D}/qn/alice`), score({ l: "3150624" })));   // only your own
+  await assertFails(set(ref(db("carol"), `rooms/${C}/games/${D}/qn/carol`), score({ l: "3150624" })));   // not in the room
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/${D}/xx/bob`), score()));   // no such game
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/22-10-2026/qn/bob`), score({ l: "3150624" })));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/${D}/qn/bob`), score({ s: 101, l: "3150624" })));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/${D}/qn/bob`), score({ l: "<script>" })));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/${D}/qn/bob`), score({ x: "sealed" })));   // sealed only in a Private Salon
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/${D}/qn/bob`), { s: 90, t: 30, at: T }));   // no record to check it by
+  await assertSucceeds(get(ref(db("alice"), `rooms/${C}/games/${D}`)));
+  await assertFails(get(ref(db("carol"), `rooms/${C}/games/${D}`)));
+  // games off: no new scores
+  await assertFails(set(ref(db("bob"), `rooms/${C}/meta/ng`), true));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/ng`), true));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/${D}/qn/bob`), score({ s: 90, l: "3150624" })));
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/meta/ng`), false));
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/games/${D}/qn/bob`), score({ s: 90, h: 0, m: 2, l: "3150624" })));
+  // a read-only room takes no new scores either; a new room starts with none
+  await idle(25 * 3600e3);
+  await assertFails(set(ref(db("bob"), `rooms/${C}/games/${D}/zp/bob`), score({ l: "0123456789abcdefghijklmnopqrstuvwxyz" })));
+  await assertFails(update(ref(db("dave")), { [`rooms/ABCD`]: { meta: { owner: "dave", created: T, last: T }, members: { dave: member("d") }, games: { [D]: { mm: { dave: score() } } } } }));
+});
+
+test("mini-games: a shared result carries the score its player has for that puzzle", async () => {
+  await createRoom("alice"); await join("bob");
+  const D = "2026-10-22", card = (extra = {}) => ({ by: "bob", name: "b", avatar: "🦊", at: T, game: { g: "mm", d: D, s: 76, t: 92, n: 3, r: "12,22,40", ...extra } });
+  await assertFails(post("bob", "msgs", card()));   // no score yet
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/games/${D}/mm/bob`), { s: 76, t: 92, l: "0123,4512,1234", at: T }));
+  await assertSucceeds(post("bob", "msgs", card()));
+  await assertFails(post("bob", "msgs", card({ s: 100 })));   // not the score on record
+  await assertFails(post("bob", "msgs", card({ g: "qn" })));
+  await assertFails(post("bob", "msgs", card({ r: "<b>" })));
+  await assertFails(post("bob", "msgs", card({ extra: 1 })));
+});
+
+test("mini-games in a Private Salon: the score is sealed", async () => {
+  await createEnc("alice");
+  const D = "2026-10-22";
+  await assertSucceeds(set(ref(db("alice"), `rooms/${C}/games/${D}/zp/alice`), { x: "c2VhbGVk", at: T }));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/games/${D}/mm/alice`), { s: 76, t: 92, l: "0123", at: T }));
+  await assertFails(set(ref(db("alice"), `rooms/${C}/games/${D}/qn/alice`), { x: "not sealed!", at: T }));
+});

@@ -56,7 +56,7 @@ const ACT_ICONS = {
   transfer: "owner", lock: "lock", unlock: "key", end: "end", leave: "leave",
   reply: "reply", copy: "copy", edit: "edit", pin: "pin", unpin: "pin", dm: "mail", at: "chat", report: "report",
   block: "block", unblock: "block", del: "delete", remove: "delete", save: "download", voters: "people",
-  now: "projector", done: "answered",
+  now: "projector", done: "answered", gameson: "game", gamesoff: "game",
 };
 const actBtn = ([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a },
   ACT_ICONS[a] ? [icon(ACT_ICONS[a]), el("span", { text: bare(label) })] : label);

@@ -35,7 +35,7 @@ room_write = o(
     j(fresh_room, not_banned, "newData.child('meta/owner').val() === auth.uid", "newData.child('members/' + auth.uid).exists()",
       "!newData.child('msgs').exists()", "!newData.child('files').exists()", "!newData.child('dm').exists()", "!newData.child('banned').exists()",
       "!newData.child('reports').exists()", "!newData.child('qs').exists()", "!newData.child('qq').exists()", "!newData.child('qby').exists()",
-      "!newData.child('push').exists()"),
+      "!newData.child('push').exists()", "!newData.child('games').exists()"),
 )
 
 member_join = j(
@@ -129,6 +129,22 @@ DRAW = {
     "w": LIST("/^[0-9]{1,3}$/", S(128)),
     "$other": NO,
 }
+GAME_ID = r"newData.isString() && newData.val().matches(/^(mm|qn|zp)$/)"   # the mini-games: mm Code Lock, qn Crowns, zp One Line
+DAY_ID = r"^20[0-9]{2}-[01][0-9]-[0-3][0-9]$"
+NUM = lambda lo, hi: f"newData.isNumber() && newData.val() >= {lo} && newData.val() <= {hi}"
+# a mini-game's result, shared by the player: which game (g), which day's puzzle (d), the score (s, 0 to 100, which in a
+# plain room must be the score the player has for it under games/), seconds played (t), tries (n), hints (h),
+# mistakes (m) and Code Lock's marks per try (r: right place and wrong place, "21,30")
+GAME_MSG_ROOM = "newData.parent().parent().parent().parent()"   # from rooms/$code/msgs/$id/game/<field>
+GAME = {
+    ".validate": "newData.hasChildren(['g', 'd', 's', 't'])" + NOT_ENC,
+    "g": {".validate": GAME_ID},
+    "d": {".validate": f"newData.isString() && newData.val().matches(/{DAY_ID}/)"},
+    "s": {".validate": j(NUM(0, 100), f"newData.val() === {GAME_MSG_ROOM}.child('games/' + newData.parent().child('d').val() + '/' + newData.parent().child('g').val() + '/' + auth.uid + '/s').val()")},
+    "t": {".validate": NUM(0, 86400)}, "n": {".validate": NUM(1, 8)}, "h": {".validate": NUM(0, 99)}, "m": {".validate": NUM(0, 999)},
+    "r": {".validate": S(24) + r" && newData.val().matches(/^[0-4]{2}(,[0-4]{2}){0,7}$/)"},
+    "$other": NO,
+}
 MSG_ROOM = "newData.parent().parent().parent().parent()"   # from rooms/$code/msgs/$id/votes/$uid
 # a vote: the options picked, as "0" or "0,2"; sealed in an encrypted room. Only one option unless the poll allows more.
 VOTE = {
@@ -164,6 +180,7 @@ TYPING = lambda room, extra="true": {
 # sits apart in qby/{id}, which only the asker can read, so a question can be anonymous even to the owner (and the
 # asker can still take it back). Asking is rate-limited like posting, with lq naming the question.
 QROOM = "root.child('rooms/' + $code)"
+GROOM = QROOM
 # (the owner's and co-hosts' own questions skip review)
 q_on = lambda queued: j(f"{QROOM}.child('meta/qa').val() === true", alive(QROOM),
                         f"{QROOM}.child('meta/qmod').val() === true" if queued else o(f"{QROOM}.child('meta/qmod').val() !== true", is_staff(QROOM)))
@@ -224,6 +241,7 @@ rules = {"rules": {
                 "pa": {".write": f"auth != null && data.parent().parent().child('members/' + auth.uid).exists() && (!data.exists() || data.val() < now - {QUIET})",
                        ".validate": "newData.val() === now"},
                 "cap": {".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 1000"},
+                "ng": {".validate": "newData.isBoolean()"},   # the owner turned the mini-games off
                 # members counted while there's a size limit: each person adds or removes themselves; the owner sets it
                 "n": {".write": j("auth != null", o(
                           j("newData.val() === data.val() + 1", "newData.parent().parent().child('members/' + auth.uid).exists()", "!data.parent().parent().child('members/' + auth.uid).exists()"),
@@ -265,13 +283,13 @@ rules = {"rules": {
                     ".write": msg_write,
                     ".validate": j("newData.hasChildren(['by', 'at'])", o(
                         j(ENC("newData.parent().parent()"), "newData.hasChild('x')"),
-                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", o(*[f"newData.hasChild('{k}')" for k in ("text", "gif", "img", "poll", "draw")])))),
+                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", o(*[f"newData.hasChild('{k}')" for k in ("text", "gif", "img", "poll", "draw", "game")])))),
                     "by": {".validate": "newData.isString()"},
                     "name": {".validate": S(24) + " && !" + ENC(MEMBER_ROOM)},
                     "avatar": {".validate": S(8) + " && !" + ENC(MEMBER_ROOM)},
                     "text": {".write": edit_field, ".validate": S(1000) + " && newData.val().length > 0 && !" + ENC(MEMBER_ROOM)},
                     "gif": dict(GIF, **{".validate": GIF[".validate"] + " && !" + ENC(MEMBER_ROOM)}),
-                    "img": IMG, "poll": POLL, "draw": DRAW,
+                    "img": IMG, "poll": POLL, "draw": DRAW, "game": GAME,
                     "x": {".write": edit_field, ".validate": SEALED(12000)},
                     "ed": {".write": j(edit_write, "data.parent().exists()"), ".validate": "newData.val() === now"},
                     "rp": {".validate": PUSH_ID + " && !" + ENC(MEMBER_ROOM)},   # the message this one replies to (sealed inside x when encrypted)
@@ -364,6 +382,23 @@ rules = {"rules": {
                 ".read": "auth != null && data.val() === auth.uid",
                 ".write": j("auth != null", "!data.exists()", "newData.val() === auth.uid", is_member(QROOM)),
             }},
+            # mini-games (site/js/app/games.js): each member's score for each day's puzzle of each game, written once by
+            # them and never changed; sealed (x) in an encrypted room. Every device checks a score against the puzzle,
+            # which it makes from the room's code and the day, before showing it
+            "games": {
+                ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
+                "$day": {"$g": {"$uid": {
+                    ".write": j("auth != null", "auth.uid === $uid", "!data.exists()", not_banned, f"$day.matches(/{DAY_ID}/)", "$g.matches(/^(mm|qn|zp)$/)",
+                                is_member(GROOM), alive(GROOM), f"{GROOM}.child('meta/ng').val() !== true"),
+                    ".validate": j("newData.hasChild('at')", o(j(ENC(GROOM), "newData.hasChild('x')", "!newData.hasChild('l')", "!newData.hasChild('s')"),
+                                                               j("!" + ENC(GROOM), "newData.hasChildren(['s', 't', 'l'])"))),
+                    "s": {".validate": NUM(0, 100)}, "t": {".validate": NUM(0, 86400)}, "h": {".validate": NUM(0, 99)}, "m": {".validate": NUM(0, 999)},
+                    "l": {".validate": S(48) + r" && newData.val().matches(/^[0-9a-z,]+$/)"},   # the game played back
+                    "x": {".validate": SEALED(600) + " && " + ENC(GROOM)},   # {s, t, h, m, l} sealed to day, game and player
+                    "at": {".validate": "newData.val() === now"},
+                    "$other": NO,
+                }}},
+            },
             "$other": NO,
         }
     },
@@ -371,7 +406,7 @@ rules = {"rules": {
     # the site's owner (Firebase console, or tools/cleanup/stats.mjs)
     "stats": {"$day": {"$k": {
         ".write": j("auth != null", r"$day.matches(/^20[0-9]{2}-[01][0-9]-[0-3][0-9]$/)",
-                    "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports)$/)",
+                    "$k.matches(/^(rooms|salons|joins|msgs|photos|polls|draws|dms|qa|qs|shows|exports|games)$/)",
                     o(j("!data.exists()", "newData.val() === 1"), "newData.val() === data.val() + 1")),
         ".validate": "newData.isNumber()"}}},
     # StoaTalk's operator: who it is (set by hand in the Firebase console; each can see only their own entry), and
