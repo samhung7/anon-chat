@@ -1450,3 +1450,66 @@ test("quiz: a set goes out as a file and comes back in; in a Private Salon every
   await bob.locator(".quizbub .qzpodium li", { hasText: "Bob" }).waitFor();
   noErrors();
 });
+
+for (const priv of [false, true]) test(`quiz pictures go to R2 with the quiz (${priv ? "sealed" : "as JPEG"}), show on the phones and the projector, and go with the card`, async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv });
+  await joinByLink(bob, url, "Bob");
+  const ed = await writeQuiz(alice, "Pictures", [{ t: "What colour is it?", o: ["Red", "Black"], right: 1, d: 10 }]);
+  await ed.locator(".qzeq .qzeimg input[type=file]").setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: PNG });
+  await ed.locator(".qzeq .qzeimg img[src^='data:image/jpeg']").waitFor();
+  await ed.locator(".bar .btn.primary").click();
+  await quizPage(alice).locator(".qzplayers, .muted", { hasText: "Nobody has joined yet" }).first().waitFor();
+  // the picture is in R2 under an id that starts with the quiz's; the room's copy of the set only says where
+  const [z] = Object.keys(await dbGet(`rooms/${code}/qz`));
+  const keys = [...photos.bucket.objects.keys()];
+  assert.equal(keys.length, 1);
+  assert.match(keys[0], new RegExp(`^${code}/emu[a-z0-9]+/${z.replace(/[-]/g, "\\-")}[A-Za-z0-9]{10}\\.${priv ? "bin" : "jpg"}$`));
+  const body = photos.bucket.objects.get(keys[0]).body;
+  assert.equal(body[0] === 0xff && body[1] === 0xd8, !priv, "sealed in a Salon");
+  if (!priv) {
+    const src = JSON.parse((await dbGet(`rooms/${code}/qz/${z}/src`)));
+    assert.ok(src.q[0].im && !src.q[0].img, "the set in the room points at the picture");
+  }
+  // the projector screen, from the quiz's page
+  const [show] = await Promise.all([alice.context().waitForEvent("page"), quizPage(alice).locator(".gmhead [aria-label='Show on the projector screen']").click()]);
+  await show.setViewportSize({ width: 1280, height: 720 });
+  await show.locator("#show .sqz.lobby").waitFor();
+  await bob.locator(".quizbub .btn", { hasText: "Play" }).click();
+  await quizPage(bob).locator(".qzjoin .btn").click();
+  await show.locator("#show .sqz.lobby .chip", { hasText: "Bob" }).waitFor();
+  await shot(show, "quiz-projector-lobby");
+  await quizBtn(alice, "Start").click();
+  // the picture comes with the question, on the phone and the projector, before answering opens
+  await quizPage(bob).locator(".qzpre img.qzimg[src^='blob:']").waitFor();
+  await show.locator("#show.quizon .sqz.pre img.qzimg[src^='blob:']").waitFor();
+  await bob.locator("button.qzopt:not([disabled])").first().waitFor({ timeout: 8000 });
+  await quizPage(bob).locator(".qzlive img.qzimg[src^='blob:']").waitFor();
+  await show.locator("#show .sqz.q .qzopt", { hasText: "Black" }).waitFor();
+  await show.locator("#show .sqz.q .sqzn", { hasText: "Answered 0 of 1" }).waitFor();
+  await shot(show, "quiz-projector-question");
+  await shot(bob, "quiz-picture");
+  await quizPage(bob).locator("button.qzopt", { hasText: "Black" }).click();
+  await show.locator("#show .sqz.rev .qzopt.right", { hasText: "Black" }).waitFor();
+  await show.locator("#show .sqz.rev .lb li", { hasText: "Bob" }).waitFor();
+  await shot(show, "quiz-projector-reveal");
+  await quizBtn(alice, "Final results").click();
+  await show.locator("#show .sqz.end .qzpodium li", { hasText: "Bob" }).waitFor();
+  await shot(show, "quiz-projector-results");
+  await show.close();
+  // the host keeps the set, picture and all, from the room
+  await quizBtn(alice, "Save to my sets").click();
+  await alice.locator(".toast", { hasText: "Saved to your question sets" }).waitFor();
+  const kept = await alice.evaluate(() => new Promise((ok) => {
+    const req = indexedDB.open("stoatalk");
+    req.onsuccess = () => { const all = req.result.transaction("quizzes").objectStore("quizzes").getAll(); all.onsuccess = () => ok(all.result.map((s) => !!s.q[0].img)); };
+  }));
+  assert.deepEqual(kept.sort(), [true, true]);
+  // the card goes, and the picture with it
+  await quizPage(alice).locator(".gmhead [aria-label=Close]").click();
+  await alice.locator("#list .msg.mine .more").first().click();
+  await press(alice, "del");
+  await press(alice, "yes");
+  await waitUntil(() => photos.bucket.objects.size === 0);
+  noErrors();
+});

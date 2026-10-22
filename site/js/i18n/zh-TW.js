@@ -685,4 +685,12 @@ I18N.add("zh-TW", {
   qzNeedQ: "第 {n} 題還沒有題目",
   qzNeedOpts: "第 {n} 題至少要有兩個選項",
   qzNeedRight: "第 {n} 題還沒有正確答案",
+  qzImg: "題目圖片",
+  qzImgAdd: "加一張圖片",
+  qzImgChange: "換圖片",
+  qzImgDrop: "移除圖片",
+  qzImgUp: "上傳圖片 {n} / {total}…",
+  qzImgFail: "圖片沒有上傳成功，請再試一次",
+  qzProject: "在投影畫面顯示",
+  qzShowJoin: "掃描 QR Code 進入聊天室，點競答卡片就能參加",
 });

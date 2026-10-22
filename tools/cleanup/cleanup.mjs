@@ -83,7 +83,8 @@ const { CLOUDFLARE_ACCOUNT_ID: account, R2_ACCESS_KEY_ID: keyId, R2_SECRET_ACCES
 if (account && keyId && secret) {
   const aws = new AwsClient({ accessKeyId: keyId, secretAccessKey: secret, service: "s3", region: "auto" });
   const bucket = s3Bucket((url, init) => aws.fetch(url, init), `https://${account}.r2.cloudflarestorage.com/${process.env.R2_BUCKET || "stoatalk-photos"}`);
-  const stray = await strayPhotos(await bucket.list(), (code) => db.ref(`rooms/${code}/files`).get().then((s) => s.val()));
+  const stray = await strayPhotos(await bucket.list(), (code) => db.ref(`rooms/${code}/files`).get().then((s) => s.val()), Date.now(),
+    (code, quiz) => db.ref(`rooms/${code}/qz/${quiz}/by`).get().then((s) => s.val()));
   console.log(`stray photos: ${stray.length}`);
   if (!process.env.DRY_RUN) for (const key of stray) await bucket.remove(key);
 } else console.log("R2 keys not set; photos skipped");

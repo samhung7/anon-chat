@@ -685,4 +685,12 @@ I18N.add("fr", {
   qzNeedQ: "La question {n} n'a pas encore d'énoncé",
   qzNeedOpts: "La question {n} doit avoir au moins deux options",
   qzNeedRight: "La question {n} n'a pas de bonne réponse cochée",
+  qzImg: "Image de la question",
+  qzImgAdd: "Ajouter une image",
+  qzImgChange: "Changer l’image",
+  qzImgDrop: "Retirer l’image",
+  qzImgUp: "Envoi des images {n} sur {total}…",
+  qzImgFail: "Les images n’ont pas pu être envoyées. Réessayez",
+  qzProject: "Afficher sur l’écran du projecteur",
+  qzShowJoin: "Scannez le QR Code pour entrer dans le salon, puis touchez la carte du quiz pour jouer",
 });

@@ -6,6 +6,8 @@
    them out, and asks the database, with the person's own ID token so the database rules decide, whether it may:
      PUT    /photo/{code}/{uid}/{id}.jpg|.bin   the signed-in person, a member of the room, adds their own photo
      DELETE /photo/{code}/{uid}/{id}             a member deletes a photo whose marker (files/{id}) is already gone
+   A quiz's pictures (site/js/app/quiz.js) go in the same way, with an id that starts with the quiz's (QUIZ_IMG) and no
+   marker of their own: one stays while its quiz (rooms/{code}/qz/{quiz}) is there.
      DELETE /room/{code}                         anyone deletes the photos of a room that no longer exists
    What a delete misses (a closed tab, a room that expired) the hourly cleanup (tools/cleanup) takes away.
 
@@ -22,6 +24,7 @@ import { verifier } from "./token.js";
 import { vapid, sealSub, openSub, send, validSubscription } from "./push.js";
 
 const CODE = /^[2-9A-HJKMNP-Z]{4}$/, UID = /^[A-Za-z0-9]{1,128}$/, ID = /^[A-Za-z0-9_-]{1,32}$/;
+export const QUIZ_IMG = /^([A-Za-z0-9_-]{20})[A-Za-z0-9]{10}$/; // a quiz's id (a 20-character push id), then 10 random letters and digits
 const MAX = 330000 + 28; // the page's largest photo, plus the IV and tag when sealed
 const TYPES = { jpg: "image/jpeg", bin: "application/octet-stream" };
 const CACHE = "public, max-age=3600"; // a deleted photo can linger in Cloudflare's cache for at most this long
@@ -90,7 +93,8 @@ export function makeHandler({ verify, read, fetcher = (...a) => fetch(...a) }) {
       if (req.method === "DELETE" && parts[0] === "photo" && parts.length === 4) {
         const [, code, by, id] = parts;
         if (!CODE.test(code) || !UID.test(by) || !ID.test(id)) return out(400);
-        if ((await read(`rooms/${code}/files/${id}`, token, env)) !== null) return out(409); // still shown
+        const quiz = QUIZ_IMG.exec(id);
+        if ((await read(quiz ? `rooms/${code}/qz/${quiz[1]}/by` : `rooms/${code}/files/${id}`, token, env)) !== null) return out(409); // still shown
         await bucket.delete([`${code}/${by}/${id}.jpg`, `${code}/${by}/${id}.bin`]);
         return out(204);
       }

@@ -6,6 +6,8 @@ import { t } from "./text.js?v=dev";
 import { el, toast, icon, sheet, confirmSheet, saveFile } from "./dom.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { page, bar } from "./posts.js?v=dev";
+import { b64u } from "./crypto.js?v=dev";
+import { shrinkPhoto } from "./photos.js?v=dev";
 import { QUIZ, SHAPES, blankQuestion, cleanSet, setProblem, toFile, fromFile } from "./quizset.js?v=dev";
 import { startQuiz, openQuiz } from "./quiz.js?v=dev";
 
@@ -37,6 +39,8 @@ export const library = {
 };
 const day = (at) => new Date(at).toLocaleDateString(I18N.lang, { year: "numeric", month: "numeric", day: "numeric" });
 const titleOf = (x) => x.t || t("qzUntitled");
+// a question's picture (base64url) as something an <img> shows
+export const imgSrc = (d) => "data:image/jpeg;base64," + d.replace(/-/g, "+").replace(/_/g, "/");
 
 /* ---------- from the ＋ panel ---------- */
 export async function quizSheet() {
@@ -72,7 +76,7 @@ export async function quizSheet() {
     file.addEventListener("change", async () => {
       const f = file.files[0]; file.value = "";
       if (!f) return;
-      const set = f.size < 2e6 ? fromFile(await f.text().catch(() => "")) : null;
+      const set = f.size < 30e6 ? fromFile(await f.text().catch(() => "")) : null;
       if (!set) return toast(t("qzBadFile"));
       try { await library.add(set); toast(t("qzImported", { t: titleOf(set) })); fill(); }
       catch (e) { console.error(e); toast(t("qzLibFail")); }
@@ -142,6 +146,24 @@ export function editSet(x, focusAt = -1) {
     const text = el("textarea", { class: "field", rows: 2, maxlength: QUIZ.question, placeholder: t("qzQPh"), "aria-label": t("qzQn", { n: i + 1 }) });
     text.value = q.t;
     text.addEventListener("input", () => { q.t = text.value; changed(); });
+    // one picture, shrunk on the device like a photo (smaller still: it goes to every phone in a few seconds)
+    const pic = el("input", { type: "file", accept: "image/*", hidden: true }), imgRow = el("div", { class: "qzeimg" });
+    const drawImg = () => imgRow.replaceChildren(...(q.img ? [
+      el("img", { src: imgSrc(q.img.d), width: q.img.w, height: q.img.h, alt: t("qzImg") }),
+      el("span", { class: "grow" }),
+      el("button", { type: "button", class: "link", onclick: () => pic.click(), text: t("qzImgChange") }),
+      el("button", { type: "button", class: "link danger", onclick: () => { delete q.img; drawImg(); changed(); }, text: t("qzImgDrop") }),
+    ] : [el("button", { type: "button", class: "btn small", onclick: () => pic.click() }, icon("photo", "sm"), el("span", { text: t("qzImgAdd") }))]), pic);
+    pic.addEventListener("change", async () => {
+      const f = pic.files[0]; pic.value = "";
+      if (!f) return;
+      try {
+        const p = await shrinkPhoto(f, QUIZ.imgEdge, QUIZ.imgMax), d = b64u(p.bytes);
+        if (d.length > QUIZ.imgChars) throw new Error("too big");
+        q.img = { d, w: p.w, h: p.h }; drawImg(); changed();
+      } catch (e) { console.warn(e); toast(t("photoFail")); }
+    });
+    drawImg();
     const opts = q.o.map((o, k) => {
       const input = el("input", { class: "field", maxlength: QUIZ.option, placeholder: t("qzOptPh", { n: k + 1 }), "aria-label": t("qzOptPh", { n: k + 1 }), value: o });
       input.addEventListener("input", () => { q.o[k] = input.value; changed(); });
@@ -155,7 +177,7 @@ export function editSet(x, focusAt = -1) {
       el("div", { class: "qzeh" }, el("b", { text: t("qzQn", { n: i + 1 }) }), el("span", { class: "grow" }),
         tool("up", t("qzUp"), () => move(i, -1), i === 0), tool("down", t("qzDown"), () => move(i, 1), i === set.q.length - 1),
         tool("delete", t("qzDelQ"), () => { set.q.splice(i, 1); if (!set.q.length) set.q.push(blankQuestion()); draw(); changed(); })),
-      text, el("div", { class: "qzeopts" }, opts),
+      text, imgRow, el("div", { class: "qzeopts" }, opts),
       el("div", { class: "qzemeta" },
         select(t("qzTime"), q.d, QUIZ.times, (n) => t("qzSec", { n }), (v) => (q.d = v)),
         select(t("qzPointsLbl"), q.p, QUIZ.points, (n) => t("qzPoints" + n), (v) => (q.p = v))));

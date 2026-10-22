@@ -685,4 +685,12 @@ I18N.add("ja", {
   qzNeedQ: "第 {n} 問の問題文がありません",
   qzNeedOpts: "第 {n} 問には選択肢が 2 つ以上必要です",
   qzNeedRight: "第 {n} 問の正解が選ばれていません",
+  qzImg: "問題の画像",
+  qzImgAdd: "画像を追加",
+  qzImgChange: "画像を変更",
+  qzImgDrop: "画像を削除",
+  qzImgUp: "画像をアップロード中 {n} / {total}…",
+  qzImgFail: "画像をアップロードできませんでした。もう一度お試しください",
+  qzProject: "プロジェクター画面に表示",
+  qzShowJoin: "QRコードを読み取ってルームに入り、クイズのカードをタップして参加",
 });

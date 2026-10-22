@@ -685,4 +685,12 @@ I18N.add("ko", {
   qzNeedQ: "{n}번 문제에 문제 내용이 없어요",
   qzNeedOpts: "{n}번 문제에는 보기가 2개 이상 필요해요",
   qzNeedRight: "{n}번 문제의 정답이 정해지지 않았어요",
+  qzImg: "문제 이미지",
+  qzImgAdd: "이미지 추가",
+  qzImgChange: "이미지 바꾸기",
+  qzImgDrop: "이미지 삭제",
+  qzImgUp: "이미지 업로드 중 {n} / {total}…",
+  qzImgFail: "이미지를 올리지 못했어요. 다시 시도해 주세요",
+  qzProject: "프로젝터 화면에 표시",
+  qzShowJoin: "QR 코드를 스캔해 방에 들어온 뒤 퀴즈 카드를 눌러 참가하세요",
 });

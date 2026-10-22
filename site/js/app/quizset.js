@@ -4,7 +4,9 @@
 
    A set: { t: title, q: [question] }. A question: { t: the question, o: up to 4 options, c: which options are right
    (one or more), d: seconds to answer, p: points (0 none, 1 standard, 2 double) }. A question as asked in the room
-   leaves out c, and an option left empty in the editor is left out, so o has 2 to 4 entries there. */
+   leaves out c, and an option left empty in the editor is left out, so o has 2 to 4 entries there.
+   A question may have a picture: in a set (the library, a file) img = { d: the JPEG as base64url, w, h }; in the room
+   the picture is in R2 and the question has im = { f: its id there, w, h } instead (quiz.js puts it there). */
 
 export const QUIZ = {
   title: 60, question: 200, option: 80, options: 4, questions: 100,
@@ -12,6 +14,8 @@ export const QUIZ = {
   lead: 4000,   // ms: each question is out this long before answering opens, so every phone has it first
   grace: 1500,  // ms: an answer sent just in time still gets in (the rules allow the same)
   max: 1000,    // points for a right answer at once; half of it for one in the last moment
+  imgEdge: 1024, imgMax: 160000, // a question's picture: at most this many pixels on its long side, and bytes
+  imgChars: 220000,              // ...and as base64url, with room to spare
 };
 export const SHAPES = ["▲", "◆", "●", "■"];
 export const FILE_KIND = "stoatalk-quiz";
@@ -19,6 +23,21 @@ export const FILE_KIND = "stoatalk-quiz";
 const str = (x, n) => (typeof x === "string" ? x.trim().slice(0, n) : "");
 const pick = (x, list, dflt) => (list.includes(x) ? x : dflt);
 export const pad = (i) => String(i).padStart(2, "0");
+const size = (x) => { const w = Math.round(+x.w), h = Math.round(+x.h); return w > 0 && h > 0 && w <= 4096 && h <= 4096 ? { w, h } : null; };
+// a question's picture as a set keeps it, or null
+export function cleanImg(x) {
+  if (!x || typeof x !== "object" || typeof x.d !== "string" || !x.d || x.d.length > QUIZ.imgChars || !/^[A-Za-z0-9_-]+$/.test(x.d)) return null;
+  const wh = size(x);
+  return wh && { d: x.d, ...wh };
+}
+// ...and as the room has it: where it is in R2 (its id starts with the quiz's; worker/src/index.js QUIZ_IMG)
+export const IMG_ID = /^[A-Za-z0-9_-]{20}[A-Za-z0-9]{10}$/;
+export function cleanImgRef(x) {
+  if (!x || typeof x !== "object" || typeof x.f !== "string" || !IMG_ID.test(x.f)) return null;
+  const wh = size(x);
+  return wh && { f: x.f, ...wh };
+}
+const withImg = (q, x) => { const img = cleanImg(x.img), im = cleanImgRef(x.im); if (img) q.img = img; if (im) q.im = im; return q; };
 
 export const blankQuestion = () => ({ t: "", o: ["", "", "", ""], c: [0], d: 20, p: 1 });
 // one question as kept in a set (o padded to 4 slots, for the editor), or null when it isn't one
@@ -27,7 +46,7 @@ export function cleanQuestion(x) {
   const o = (Array.isArray(x.o) ? x.o : []).slice(0, QUIZ.options).map((s) => str(s, QUIZ.option));
   while (o.length < QUIZ.options) o.push("");
   const c = [...new Set((Array.isArray(x.c) ? x.c : [x.c]).filter((k) => Number.isInteger(k) && k >= 0 && k < QUIZ.options))].sort();
-  return { t: str(x.t, QUIZ.question), o, c, d: pick(x.d, QUIZ.times, 20), p: pick(x.p, QUIZ.points, 1) };
+  return withImg({ t: str(x.t, QUIZ.question), o, c, d: pick(x.d, QUIZ.times, 20), p: pick(x.p, QUIZ.points, 1) }, x);
 }
 export function cleanSet(x) {
   if (!x || typeof x !== "object") return null;
@@ -50,7 +69,7 @@ export function setProblem(set) {
 // a question as it's asked (no right answers, no empty options) and its right answers in that order of options
 export function asked(q) {
   const keep = q.o.map((s, k) => (s ? k : -1)).filter((k) => k >= 0);
-  return [{ t: q.t, o: keep.map((k) => q.o[k]), d: q.d, p: q.p }, keep.map((k, n) => (q.c.includes(k) ? n : -1)).filter((n) => n >= 0)];
+  return [{ t: q.t, o: keep.map((k) => q.o[k]), d: q.d, p: q.p, ...(q.im ? { im: q.im } : {}) }, keep.map((k, n) => (q.c.includes(k) ? n : -1)).filter((n) => n >= 0)];
 }
 
 /* ---------- read from the room ---------- */
@@ -58,7 +77,9 @@ export function asked(q) {
 export function cleanAsked(x) {
   if (!x || typeof x !== "object") return null;
   const o = (Array.isArray(x.o) ? x.o : []).slice(0, QUIZ.options).map((s) => str(s, QUIZ.option));
-  return o.length >= 2 ? { t: str(x.t, QUIZ.question), o, d: pick(x.d, QUIZ.times, 20), p: pick(x.p, QUIZ.points, 1) } : null;
+  if (o.length < 2) return null;
+  const q = { t: str(x.t, QUIZ.question), o, d: pick(x.d, QUIZ.times, 20), p: pick(x.p, QUIZ.points, 1) }, im = cleanImgRef(x.im);
+  return im ? { ...q, im } : q;
 }
 export const cleanKey = (x) => (Array.isArray(x) ? [...new Set(x.filter((k) => Number.isInteger(k) && k >= 0 && k < QUIZ.options))] : []);
 export function cleanLive(x) {
@@ -104,13 +125,16 @@ export function ranking(s) {
 }
 
 /* ---------- a file to keep, or to bring into another room ---------- */
-export const toFile = (set) => JSON.stringify({ kind: FILE_KIND, v: 1, t: set.t, q: set.q.map(cleanQuestion) }, null, 1);
+// (a picture goes in the file itself; where a room kept one means nothing anywhere else)
+const noRef = ({ im, ...q }) => q;
+export const toFile = (set) => JSON.stringify({ kind: FILE_KIND, v: 1, t: set.t, q: set.q.map((q) => noRef(cleanQuestion(q))) }, null, 1);
 // a file's set, or null when it isn't one
 export function fromFile(text) {
   let x;
   try { x = JSON.parse(text); } catch (e) { return null; }
   if (!x || x.kind !== FILE_KIND || !Array.isArray(x.q)) return null;
   const set = cleanSet(x);
+  set.q = set.q.map(noRef);
   return set.q.length ? set : null;
 }
 // the scores as a spreadsheet: rank, name, points, right answers
