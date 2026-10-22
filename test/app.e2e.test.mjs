@@ -1007,6 +1007,8 @@ test("mini-games in a Private Salon: scores are sealed, and still make the leade
 async function writePost(page, title, body, { publish = true } = {}) {
   await page.locator("#composer [data-a=more]").click();
   await page.locator("#picker .morebtn", { hasText: "Long post" }).click();
+  // the page puts the cursor in the title a moment after it opens; typing before then can land in the wrong field
+  await page.locator(".writer .ptitlein:focus").waitFor();
   await page.locator(".writer .ptitlein").fill(title);
   await page.locator(".writer .pbody").fill(body);
   if (publish) { await page.locator(".writer .bar .btn.primary").click(); await page.locator(".writer").waitFor({ state: "detached" }); }
