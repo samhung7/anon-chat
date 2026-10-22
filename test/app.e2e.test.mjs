@@ -8,6 +8,7 @@ import { readFile, readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { chromium } from "playwright";
 import { startPhotoStub } from "./photo-stub.mjs";
+import * as P from "../site/js/app/puzzles.js";
 
 const NS = "demo-anon-chat";
 const EMU = "http://127.0.0.1:9000";
@@ -699,6 +700,140 @@ test("a quiet room: a warning in its 24th hour, then read-only with the hours le
   await carol.locator("#joinForm button").click();
   await carol.locator(".toast", { hasText: "read-only" }).waitFor();
   assert.ok(await dbGet(`rooms/${code}/meta`), "still there until its 24 read-only hours are up");
+  noErrors();
+});
+
+// mini-games: the puzzles are made the same way here as in the page, so the test knows the answers
+const SHOTS = process.env.SHOTS; // a folder to save screenshots in, when set
+const shot = (page, name) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${name}.png` }) : null);
+async function openGames(page) {
+  await page.locator("#composer [data-a=more]").click();
+  await page.locator("#picker .morebtn", { hasText: "Games" }).click();
+  return sheet(page).locator(".games");
+}
+// starts game g from the games sheet, past the rules shown the first time
+async function startGame(page, g) {
+  await (await openGames(page)).locator(`.gmrow[data-g=${g}]`).click();
+  await page.locator(".gameov").waitFor();
+  await press(page, "ok");
+}
+async function crack(page, guesses) {
+  for (const guess of guesses) {
+    for (const k of guess) await page.locator(`.mmkey[data-k="${k}"]`).click();
+    await page.locator(".mmkeys [data-a=ok]").click();
+  }
+}
+const gameDone = (page, score) => page.locator(".gmend .gscore b", { hasText: new RegExp(`^${score}$`) }).waitFor();
+const closeGame = (page) => page.locator(".gmend .btn", { hasText: /^Close$/ }).click();
+
+test("mini-games: today's puzzle once each, a shared result, the room's leaderboard, and the owner turning games off", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  const day = P.dayOf(Date.now()), seed = (g) => P.seedOf(code, day, g);
+
+  // Code Lock: one wrong try, then the code
+  const secret = P.mmSecret(seed("mm")), wrong = secret === "0000" ? "1111" : "0000";
+  const games = await openGames(alice);
+  await games.locator(".lbbox", { hasText: "Nobody has played yet" }).waitFor();
+  await shot(alice, "games-sheet-empty");
+  await alice.keyboard.press("Escape");
+  await startGame(alice, "mm");
+  await crack(alice, [wrong]);
+  await alice.locator(".gmstat", { hasText: "7 tries left" }).waitFor();
+  await shot(alice, "mm-playing");
+  await crack(alice, [secret]);
+  await gameDone(alice, 88);
+  await shot(alice, "mm-done");
+  const mm = Object.values(await dbGet(`rooms/${code}/games/${day}/mm`));
+  assert.deepEqual(mm.map((r) => [r.s, r.l]), [[88, `${wrong},${secret}`]]);
+  // shared to the room, where Bob plays the same puzzle from the card
+  await alice.locator(".gmend .btn", { hasText: "Share to the room" }).click();
+  const card = bob.locator(".gamebub", { hasText: "Code Lock" });
+  await card.locator(".gscore b", { hasText: "88" }).waitFor();
+  await card.locator(".gmmarks span").nth(1).waitFor();
+  await shot(bob, "mm-card");
+  await card.locator(".gmjoin").click();
+  await bob.locator(".gameov").waitFor();
+  await press(bob, "ok");
+  await crack(bob, [secret]);
+  await gameDone(bob, 100);
+  await closeGame(bob);
+  // played once a day: opening it again shows the score
+  await (await openGames(bob)).locator(".gmrow[data-g=mm] .gmst.done", { hasText: "100" }).waitFor();
+  await bob.locator(".gmrow[data-g=mm]").click();
+  await sheet(bob).locator(".gmresult .gscore b", { hasText: "100" }).waitFor();
+  await bob.keyboard.press("Escape");
+
+  // Crowns: one clashing crown (a mistake) and a hint, then the rest
+  const qn = P.qnPuzzle(seed("qn")), n = qn.n;
+  await startGame(bob, "qn");
+  const cell = (i) => bob.locator(`.qncell[data-i="${i}"]`);
+  await cell(qn.cols[0]).click(); await cell(qn.cols[0]).click();
+  const bad = n + qn.cols[0] + (qn.cols[0] < n - 1 ? 1 : -1); // corner to corner with row one's crown: always a clash
+  await cell(bad).click(); await cell(bad).click();
+  await bob.locator(".qncell.bad").first().waitFor();
+  await shot(bob, "qn-playing");
+  await cell(bad).click(); // a third tap clears it
+  await bob.locator(".gmhead [aria-label=Hint]").click();
+  await press(bob, "yes");
+  for (let r = 0; r < n; r++) {
+    if (await cell(r * n + qn.cols[r]).evaluate((b) => b.classList.contains("on"))) continue;
+    await cell(r * n + qn.cols[r]).click(); await cell(r * n + qn.cols[r]).click();
+  }
+  await gameDone(bob, 75); // 100 − 20 for the hint − 5 for the mistake
+  await closeGame(bob);
+
+  // One Line, drawn in one drag
+  const zp = P.zpPuzzle(seed("zp"));
+  await startGame(alice, "zp");
+  const box = await alice.locator(".zpgrid").boundingBox(), size = box.width / zp.n;
+  const at = (i) => [box.x + ((i % zp.n) + 0.5) * size, box.y + (Math.floor(i / zp.n) + 0.5) * size];
+  await alice.mouse.move(...at(zp.line[0])); await alice.mouse.down();
+  for (const i of zp.line.slice(1, 20)) await alice.mouse.move(...at(i), { steps: 2 });
+  await alice.mouse.up();
+  await shot(alice, "zp-playing");
+  await alice.mouse.move(...at(zp.line[19])); await alice.mouse.down();
+  for (const i of zp.line.slice(20)) await alice.mouse.move(...at(i), { steps: 2 });
+  await alice.mouse.up();
+  await gameDone(alice, 100);
+  await shot(alice, "zp-done");
+  await closeGame(alice);
+
+  // the leaderboard: today, all games (Bob 175, Alice 188), and one game with its time
+  const lb = (await openGames(bob)).locator(".lb li");
+  await lb.nth(1).waitFor();
+  const who = await lb.locator(".who").allTextContents();
+  assert.match(who[0], /Alice$/); assert.match(who[1], /Bob$/);
+  assert.deepEqual(await lb.locator(".pts").allTextContents(), ["188", "175"]);
+  await sheet(bob).locator(".lbseg [data-v=mm]").click();
+  assert.deepEqual(await lb.locator(".pts").allTextContents(), ["100", "88"]);
+  await sheet(bob).locator(".lbseg [data-v=week]").click();
+  await shot(bob, "leaderboard");
+  await bob.keyboard.press("Escape");
+
+  // the owner turns games off: no games in the ＋ panel, and no new scores
+  await menuPick(alice, "gamesoff");
+  await until(async () => (await dbGet(`rooms/${code}/meta`)).ng === true);
+  await bob.locator("#composer [data-a=more]").click();
+  await until(async () => (await bob.locator("#picker .morebtn").count()) === 3);
+  noErrors();
+});
+
+test("mini-games in a Private Salon: scores are sealed, and still make the leaderboard", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  const day = P.dayOf(Date.now()), secret = P.mmSecret(P.seedOf(code, day, "mm"));
+  await startGame(alice, "mm");
+  await crack(alice, [secret]);
+  await gameDone(alice, 100);
+  const [rec] = Object.values(await dbGet(`rooms/${code}/games/${day}/mm`));
+  assert.ok(rec.x && rec.s === undefined && rec.l === undefined, "only sealed");
+  await alice.locator(".gmend .btn", { hasText: "Share to the room" }).click();
+  await bob.locator(".gamebub .gscore b", { hasText: "100" }).waitFor();
+  const lb = (await openGames(bob)).locator(".lb li");
+  await lb.first().locator(".pts", { hasText: "100" }).waitFor();
   noErrors();
 });
 

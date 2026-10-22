@@ -1,4 +1,4 @@
-/* The panels above the message box: ＋ (photo, poll, draw), emoji, and GIF search (KLIPY, which needs klipyKey
+/* The panels above the message box: ＋ (photo, poll, draw, games), emoji, and GIF search (KLIPY, which needs klipyKey
    in js/config.js). */
 import { KLIPY_KEY, GIF_HOST } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
@@ -7,6 +7,7 @@ import { backend } from "./backend.js?v=dev";
 import { insertAtCursor, sendGif } from "./composer.js?v=dev";
 import { newPoll } from "./polls.js?v=dev";
 import { newDraw } from "./draws.js?v=dev";
+import { gamesSheet, gamesOn } from "./games.js?v=dev";
 
 const EMOJI = {
   "😀": "😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😋 😜 🤪 😝 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😌 😔 😪 😴 😷 🤒 🤕 🤢 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 🤡 👻 👽 🤖 💩",
@@ -32,7 +33,8 @@ function morePanel(box) {
   const item = (name, label, fn) => el("button", { type: "button", class: "morebtn", onclick: () => { fn(); closePicker(); } }, icon(name, "lg"), el("span", { text: label }));
   // the file picker opens right inside the tap, or a phone may refuse to open it
   box.replaceChildren(el("div", { class: "morepanel" },
-    item("photo", t("photo"), () => $("#photoFile").click()), item("poll", t("poll"), newPoll), item("draw", t("draw"), newDraw)));
+    item("photo", t("photo"), () => $("#photoFile").click()), item("poll", t("poll"), newPoll), item("draw", t("draw"), newDraw),
+    gamesOn() ? item("game", t("games"), gamesSheet) : null));
 }
 function emojiPanel(box) {
   const grid = el("div", { class: "emojigrid" });

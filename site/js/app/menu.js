@@ -37,6 +37,8 @@ const ENTRIES = [
   ["qmodoff", () => t("qModOff"), () => owner() && room.meta?.qa && room.meta.qmod, flip({ qmod: false }, "qModOffToast")],
   ["qmodon", () => t("qModOn"), () => owner() && room.meta?.qa && !room.meta.qmod, flip({ qmod: true }, "qModOnToast")],
   ["show", () => t("showScreen"), staff, () => openShow()],
+  ["gameson", () => t("gamesOn"), () => owner() && room.meta?.ng, flip({ ng: false }, "gamesOnToast")],
+  ["gamesoff", () => t("gamesOff"), () => owner() && !room.meta?.ng, flip({ ng: true }, "gamesOffToast")],
   ["reports", () => t("reportsMenu", { n: room.reportCount() }), staff, () => reportsSheet()],
   { group: "menuOwner" },
   ["cap", () => (room.meta?.cap ? t("capMenuN", { n: room.meta.cap }) : t("cap")), owner, () => capSheet()],

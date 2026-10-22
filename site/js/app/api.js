@@ -86,4 +86,8 @@ export class RoomApi {
   }
   deleteAnswer(id) { return this.set(`qs/${id}/ans`, null); }
   setQNow(id) { return this.set("meta/qnow", id); }
+
+  /* ---------- mini-games ---------- */
+  // my score for a game of the day: written once, never changed
+  gameScore(day, g, rec) { return this.set(`games/${day}/${g}/${this.uid}`, rec); }
 }

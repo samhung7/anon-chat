@@ -1,4 +1,4 @@
-/* The kinds of message: text, GIF, photo, poll and draw. Each kind says, in one place, how it is stored (plain
+/* The kinds of message: text, GIF, photo, poll, draw and a mini-game's result. Each kind says, in one place, how it is stored (plain
    and sealed), cleaned, shown, summed up in a line, offered in a message's ⋯ menu, and kept in an exported record.
    Everything else asks the kind (kindOf / savedKindOf) instead of checking fields, so a new kind is one more
    object here. Order matters: a message is the first kind that claims it, and text claims what's left.
@@ -15,6 +15,8 @@ import { backend } from "./backend.js?v=dev";
 import { photoUrl, photoImg, viewPhoto, dropPhoto } from "./photos.js?v=dev";
 import { livePoll, livePollView, pollView, pollVoters } from "./polls.js?v=dev";
 import { liveDraw, drawView } from "./draws.js?v=dev";
+import { gameCard, gameText, GAME } from "./games.js?v=dev";
+import { GAMES, DAY_RE } from "./puzzles.js?v=dev";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 export { esc as escHtml };
@@ -29,6 +31,10 @@ export { gifImg };
 const cleanImg = (i) => (i && typeof i.f === "string" && PUSH_ID.test(i.f) ? { f: i.f, w: Math.min(+i.w || 300, 4000), h: Math.min(+i.h || 300, 4000) } : null);
 const cleanPoll = (p) => { const o = listOf(p?.o).slice(0, LIMITS.pollOpts).map((x) => str(x, LIMITS.pollOpt)); return p && o.length >= 2 ? { q: str(p.q, LIMITS.pollQ), o, m: p.m === true } : null; };
 const cleanDraw = (d) => (d ? { t: str(d.t, LIMITS.drawTitle), p: listOf(d.p).slice(0, 200).map((x) => str(x, 128)), w: listOf(d.w).slice(0, 200).map((x) => str(x, 128)) } : null);
+const int = (x, hi) => (Number.isInteger(x) ? clamp(x, 0, hi) : 0);
+const cleanGame = (x) => (x && GAMES.includes(x.g) && DAY_RE.test(x.d) ? { g: x.g, d: x.d, s: int(x.s, 100), t: int(x.t, 86400),
+  ...(x.n ? { n: int(x.n, 8) } : {}), ...(x.h ? { h: int(x.h, 99) } : {}), ...(x.m ? { m: int(x.m, 999) } : {}),
+  ...(typeof x.r === "string" && /^[0-4]{2}(,[0-4]{2}){0,7}$/.test(x.r) ? { r: x.r } : {}) } : null);
 const cleanGif = (g) => ({ url: g.url.slice(0, LIMITS.gifUrl), w: Math.min(+g.w || 200, 2000), h: Math.min(+g.h || 200, 2000), title: String(g.title || "").slice(0, LIMITS.gifTitle) });
 
 /* Each kind:
@@ -156,8 +162,25 @@ const draw = {
   savedBubble: (m) => el("div", { class: "bub drawbub ro" }, drawView(m.draw)),
 };
 
-export const KIND = { text, gif, photo, poll, draw };
-const KINDS = [gif, photo, poll, draw, text];
+// a mini-game's result, shared by the player: { g, d (the day), s (score), t (seconds), n, h, m, r } (games.js)
+const game = {
+  name: "game", stat: "msgs", roomOnly: true,
+  live: (v) => !!v.game, saved: (m) => !!m.game,
+  pack: (x) => [{ game: x }, { gm: x }],
+  plain: (v) => (v.game ? { game: cleanGame(v.game) } : {}),
+  unsealed: (p, dm) => (p.gm && !dm ? { game: cleanGame(p.gm) } : null),
+  snippet: (v) => `🧩 ${t(GAME[v.game.g].name)} · ${t("gmPts", { n: v.game.s })}`,
+  bubble: (id, v) => el("div", { class: "bub gamebub" }, gameCard(v.game, true)),
+  preview: (v) => quoteText(snippet(v)),
+  toSaved: (v) => (v.game ? { game: v.game } : {}),
+  readSaved: (m) => ({ game: cleanGame(m?.game) || undefined }),
+  savedText: (m) => gameText(m.game),
+  savedHtml: (m) => savedHtmlText(gameText(m.game)),
+  savedBubble: (m) => el("div", { class: "bub gamebub ro" }, gameCard(m.game, false)),
+};
+
+export const KIND = { text, gif, photo, poll, draw, game };
+const KINDS = [gif, photo, poll, draw, game, text];
 export const kindOf = (v) => KINDS.find((k) => k.live(v));
 export const savedKindOf = (m) => KINDS.find((k) => k.saved(m));
 export const snippet = (v) => kindOf(v).snippet(v).replace(/\s+/g, " ").slice(0, 80);
@@ -170,7 +193,7 @@ export async function finishOpen(out, raw, id) { for (const k of KINDS) await k.
 
 // a message's fields in an exported record (pics collects the photos an .html file carries), and from an untrusted one
 export const toSaved = (v, pics, m) => Object.assign(m, ...KINDS.map((k) => k.toSaved(v, pics, m)));
-export const readSaved = (m) => Object.assign({}, ...[text, gif, photo, poll, draw].map((k) => k.readSaved(m)));
+export const readSaved = (m) => Object.assign({}, ...[text, gif, photo, poll, draw, game].map((k) => k.readSaved(m)));
 // reactions as counts per emoji, kept in a record
 export function readReactions(r) {
   if (!isObj(r)) return undefined;
