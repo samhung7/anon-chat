@@ -312,6 +312,8 @@ code { font-size: .9em; }
 /* groups in a long menu: more room between groups than inside one, and a small heading where it helps */
 .actions .agap { grid-column: 1 / -1; flex-basis: 100%; margin-top: var(--sp-2); color: var(--muted); font-size: var(--fs-xs); font-weight: var(--fw-semibold); padding: 0 2px; }
 .actions .agap:empty { margin-top: var(--sp-1); }
+.actions.grouped .agap { flex-basis: auto; }
+@media (min-width: 600px) { .actions.grouped { flex-direction: column; } }
 @media (min-width: 600px) { .sheet:has(.actions.many) { max-width: 600px; } .actions.many .btn { font-size: inherit; } .actions.three .btn { font-size: 14px; } }
 /* the room's description at the top of its ⋯ menu */
 .mdesc { background: var(--surface-2); border-radius: 12px; padding: 10px var(--sp-3); font-size: 14px; }

@@ -357,6 +357,12 @@ test("lecture Q&A: ask anonymously, upvote, answer, projector screen", async () 
   await alice.locator("#ansText").fill("A covered walkway.");
   await press(alice, "yes");
   await bob.locator(".qcard .qans", { hasText: "A covered walkway." }).waitFor({ state: "attached" }); // answered: folded under "answered"
+  // the host's ⋯ on an answered question: two steps, one under the other, not pushed to either side
+  await alice.locator("details.qdone summary").click();
+  await alice.locator(".qdone .qcard .qtools .more").click();
+  const [undo, remove] = await Promise.all(["done", "remove"].map((a) => sheet(alice).locator(`[data-a=${a}]`).boundingBox()));
+  assert.ok(remove.y >= undo.y + undo.height && Math.abs(undo.width - remove.width) < 2, "the two buttons are stacked, full width");
+  await alice.keyboard.press("Escape");
 
   // a poll too, which the projector shows beside the questions
   await alice.locator("#tabs [data-a=all]").click();
@@ -1001,6 +1007,8 @@ test("mini-games in a Private Salon: scores are sealed, and still make the leade
 async function writePost(page, title, body, { publish = true } = {}) {
   await page.locator("#composer [data-a=more]").click();
   await page.locator("#picker .morebtn", { hasText: "Long post" }).click();
+  // the page puts the cursor in the title a moment after it opens; typing before then can land in the wrong field
+  await page.locator(".writer .ptitlein:focus").waitFor();
   await page.locator(".writer .ptitlein").fill(title);
   await page.locator(".writer .pbody").fill(body);
   if (publish) { await page.locator(".writer .bar .btn.primary").click(); await page.locator(".writer").waitFor({ state: "detached" }); }

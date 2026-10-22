@@ -72,10 +72,11 @@ const actGap = (label) => el("div", { class: "agap", role: label ? "heading" : "
 export function sheet(title, body, buttons = [], { onOpen, cols, head } = {}) {
   return new Promise((res) => {
     const ov = el("div", { class: "overlay" });
-    const n = buttons.filter(Array.isArray).length;
+    // a short menu with groups stays one button per row: a pair side by side is for cancel and OK
+    const n = buttons.filter(Array.isArray).length, groups = n < buttons.length;
     const box = el("div", { class: "sheet", role: "dialog", "aria-label": title },
       head || (title ? el("h2", { text: title }) : null), body,
-      n ? el("div", { class: "actions" + (n > 3 ? " many" + (cols === 3 ? " three" : "") : n === 2 ? " pair" : "") },
+      n ? el("div", { class: "actions" + (n > 3 ? " many" + (cols === 3 ? " three" : "") : groups ? " grouped" : n === 2 ? " pair" : "") },
         buttons.map((b) => (Array.isArray(b) ? actBtn(b) : actGap(b.group)))) : null);
     ov.append(box);
     // a note sitting low over the room would cover the sheet's buttons: it goes back to the top
