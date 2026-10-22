@@ -163,7 +163,7 @@ export function openPost(id) {
     top.replaceChildren(
       el("div", { class: "who" }, el("span", { class: "av" }, avatar(who.avatar)), el("span", { class: "nm", text: who.name + r.badge(v.by) }),
         el("time", { text: fmtTime(v.at) }), v.ed ? el("small", { class: "muted", text: t("edited") }) : null),
-      v.post.t ? el("h2", { class: "ptitle", text: v.post.t }) : null, text, reacts);
+      v.post.t ? el("h2", { class: "ptitle", text: v.post.t }) : "", text, reacts); // (replaceChildren would write out a null)
     const b = await postBody(id, v).catch(() => null);
     if (!ov.isConnected) return;
     text.replaceChildren(b == null ? el("p", { class: "muted pfail", text: t("postLoadFail") }) : mdView(b, livePic(v)));

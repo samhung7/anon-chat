@@ -905,6 +905,11 @@ test("long posts: hosts write one on its own page, the chat shows a card, the te
   await until(async () => (await dbGet(`rooms/${code}/meta/po`)) === true);
   await writePost(bob, "", "no title needed");
   await alice.locator("#list .postbub .ps.lead", { hasText: "no title needed" }).waitFor();
+  await alice.locator("#list .postbub", { hasText: "no title needed" }).click();
+  await alice.locator(".reader .md", { hasText: "no title needed" }).waitFor();
+  assert.equal((await alice.locator(".reader .pagebody > div").first().textContent()).includes("null"), false);
+  await alice.locator(".reader .bar [data-a=back]").click();
+  await alice.locator(".reader").waitFor({ state: "detached" });
   await writePost(bob, "From Bob", "hello from a member");
   await alice.locator("#list .postbub", { hasText: "From Bob" }).waitFor();
   const bobs = Object.entries(await dbGet(`rooms/${code}/msgs`)).find(([, v]) => v.by !== msgs[id].by && v.post.t)[0];
