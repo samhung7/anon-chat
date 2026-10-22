@@ -506,7 +506,7 @@ code { font-size: .9em; }
 .pins li { display: flex; align-items: flex-start; gap: var(--sp-2); background: var(--accent-2); border-radius: 10px; padding: 7px 10px; }
 .pins li .go { flex: 1; min-width: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; padding: 0; white-space: pre-wrap; word-break: break-word; cursor: pointer; }
 .pins li small { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: var(--fs-xs); margin-bottom: 2px; }
-.pins li small .av { width: 16px; height: 16px; border-radius: 50%; }
+.pins li small .av { flex: none; width: 22px; height: 22px; border-radius: 50%; font-size: 17px; line-height: 22px; text-align: center; } /* as big as over a chat bubble */
 .pins li .unpin { flex: none; }
 /* replies */
 .rpq { display: block; max-width: 100%; border: 0; border-left: 3px solid var(--line-strong); background: var(--surface-2); color: var(--muted); font: inherit; font-size: 13px;
@@ -520,7 +520,7 @@ code { font-size: .9em; }
 @keyframes flash { 0%, 40% { box-shadow: 0 0 0 3px var(--accent-ink); } 100% { box-shadow: 0 0 0 0 transparent; } }
 /* a pinned GIF is a small thumbnail that never pushes the bar wider than the screen */
 .pins li .go { overflow: hidden; }
-.pins li .go img { display: block; max-width: 100%; max-height: 120px; width: auto; height: auto; border-radius: 8px; }
+.pins li .go img:not(.av) { display: block; max-width: 100%; max-height: 120px; width: auto; height: auto; border-radius: 8px; }
 .pins ul { grid-template-columns: minmax(0, 1fr); overflow-x: hidden; }
 .pins li { min-width: 0; }
 
