@@ -313,6 +313,41 @@ test("members leave on their own", async () => {
   await assertFails(say("bob"));
 });
 
+// the line saying someone went, written with the leaving: by the person leaving (l), or by the host removing someone (k)
+const leaveWithLine = (uid, line = {}, more = {}) => {
+  const id = push(ref(db(uid), `rooms/${C}/msgs`)).key;
+  return update(ref(db(uid), `rooms/${C}`), { [`members/${uid}`]: null, [`names/${uid}`]: null, [`msgs/${id}`]: { by: uid, name: uid, avatar: "🦊", ev: "l", at: T, ...line }, ...more });
+};
+const kickWithLine = (uid, who, line = {}, { fast = false } = {}) => post(uid, "msgs", { by: uid, name: uid, avatar: "🦊", ev: "k", tg: who, tn: who, ta: "🐼", at: T, ...line },
+  { fast, more: { [`members/${who}`]: null, [`names/${who}`]: null, [`banned/${who}`]: true } });
+test("someone went: a line in the chat, written along with the leaving or the removing", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol"); await join("dave");
+  // only as they really go, and in their own name
+  await assertFails(post("bob", "msgs", { by: "bob", name: "bob", avatar: "🦊", ev: "l", at: T })); // still here
+  await assertFails(leaveWithLine("bob", { by: "carol" }));
+  await assertFails(leaveWithLine("bob", { tg: "carol" }));
+  await assertSucceeds(leaveWithLine("bob"));
+  // not faster than the rate limit allows
+  await say("dave", "再見", { fast: true });
+  await assertFails(leaveWithLine("dave"));
+  // a removal only by someone who may remove them, and only of someone really removed in the same update
+  await assertFails(kickWithLine("carol", "dave"));
+  await assertFails(post("alice", "msgs", { by: "alice", name: "alice", avatar: "🦊", ev: "k", tg: "dave", tn: "dave", ta: "🐼", at: T }));
+  await assertFails(kickWithLine("alice", "bob")); // already gone
+  await assertFails(kickWithLine("alice", "dave", { ev: "l" }));
+  await assertSucceeds(kickWithLine("alice", "dave"));
+  await assertFails(join("dave"));
+});
+test("someone went, in a Private Salon: the names are sealed", async () => {
+  await createEnc("alice"); await joinEnc("bob", H("b")); await joinEnc("carol", H("c"));
+  const id = push(ref(db("bob"), `rooms/${C}/msgs`)).key;
+  const out = (uid, line) => update(ref(db(uid), `rooms/${C}`), { [`members/${uid}`]: null, [`names/${H(uid[0])}`]: null, [`msgs/${id}`]: { by: uid, at: T, ev: "l", ...line } });
+  await assertFails(out("bob", { name: "bob", avatar: "🦊" }));
+  await assertSucceeds(out("bob", { x: "c2VhbGVk" }));
+  await assertFails(post("alice", "msgs", { by: "alice", x: "c2VhbGVk", ev: "k", tg: "carol", tn: "carol", at: T }, { more: { "members/carol": null, "banned/carol": true } }));
+  await assertSucceeds(post("alice", "msgs", { by: "alice", x: "c2VhbGVk", ev: "k", tg: "carol", at: T }, { more: { "members/carol": null, "banned/carol": true } }));
+});
+
 test("nicknames are unique in a room, ignoring case", async () => {
   await createRoom("alice"); await join("bob", "Sam");
   await assertFails(join("carol", "Sam"));

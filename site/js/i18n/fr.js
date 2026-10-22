@@ -118,6 +118,8 @@ I18N.add("fr", {
   // inside a room
   joinedToast: "{who} a rejoint le salon",
   leftToast: "{who} est parti",
+  lineLeft: "{who} a quitté le salon",
+  lineKicked: "{who} a été retiré du salon",
   dmToast: "🔒 {who} vous a envoyé un message privé",
   openToRead: "Ouvrez le salon pour le lire",
   sentGif: "A envoyé un GIF",

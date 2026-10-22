@@ -59,6 +59,7 @@ const cleanGif = (g) => ({ url: g.url.slice(0, LIMITS.gifUrl), w: Math.min(+g.w 
    notice(v)                 a notification's text
    actions                   more entries for its ⋯ menu: [action, label, when(v), run(id, v)]
    removes(v)                more paths deleted with it; removed(v) what else to do once it's gone
+   line                      shown as a line across the chat, its snippet, rather than as someone's bubble
    toSaved(v, pics)          its fields in an exported record; readSaved(m) the same, from an untrusted file
    savedText(m), savedHtml(m, src), savedBubble(m)   a saved one in a .txt file, an .html file, and on screen */
 const text = {
@@ -232,8 +233,20 @@ const post = {
   savedBubble: (m) => savedPostCard(m),
 };
 
+// a line saying someone went (composer.js goneNote): left (ev "l", under the name they had) or removed by a host (ev "k",
+// naming them in tn and ta). Not a message anyone wrote: no bubble, menu or reactions, and not kept in an exported record
+const goneName = (n, a) => `${str(a, 8) || "👤"} ${str(n, 24) || "？"}`;
+const gone = {
+  name: "gone", line: true,
+  live: (v) => !v.bad && (v.ev === "l" || v.ev === "k"), saved: () => false,
+  plain: (v) => (v.ev === "k" ? { tn: str(v.tn, 24), ta: str(v.ta, 8) } : {}),
+  unsealed: (p) => (p.e === "l" ? {} : p.e === "k" ? { tn: str(p.tn, 24), ta: str(p.ta, 8) } : null),
+  snippet: (v) => (v.ev === "k" ? t("lineKicked", { who: goneName(v.tn, v.ta) }) : t("lineLeft", { who: goneName(v.name, v.avatar) })),
+  toSaved: () => ({}), readSaved: () => ({}),
+};
+
 export const KIND = { text, gif, photo, poll, draw, game, post };
-const KINDS = [gif, photo, poll, draw, game, post, text];
+const KINDS = [gone, gif, photo, poll, draw, game, post, text];
 export const kindOf = (v) => KINDS.find((k) => k.live(v));
 export const savedKindOf = (m) => KINDS.find((k) => k.saved(m));
 export const snippet = (v) => kindOf(v).snippet(v).replace(/\s+/g, " ").slice(0, 80);

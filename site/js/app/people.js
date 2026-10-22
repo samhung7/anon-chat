@@ -8,6 +8,7 @@ import { room } from "./session.js?v=dev";
 import { isBlocked, setBlocked } from "./blocking.js?v=dev";
 import { openDm } from "./chat.js?v=dev";
 import { mention } from "./actions.js?v=dev";
+import { goneNote, withNote } from "./composer.js?v=dev";
 import { failed } from "./lobby.js?v=dev";
 
 // the member list, grouped: owner, co-hosts, everyone else; pick: a title, and tapping someone picks them (to hand
@@ -77,7 +78,8 @@ export async function ownClaim(id) {
 async function kick(id) {
   const m = room.members[id];
   if (!m || !(await confirmSheet(t("kickTitle", { who: `${m.avatar} ${m.name}` }), t("kickBody"), t("kick")))) return;
-  room.api.kick(id, { claim: await ownClaim(id), count: countAfterLeaving(), unmod: room.isOwner() && room.isMod(id) })
+  const opts = { claim: await ownClaim(id), count: countAfterLeaving(), unmod: room.isOwner() && room.isMod(id) };
+  withNote((note) => room.api.kick(id, opts, note), await goneNote(room, "k", { id, name: m.name, avatar: m.avatar }))
     .then(() => toast(t("kickedToast", { name: m.name })), () => toast(t("kickFail")));
 }
 async function transferOwner(id) {

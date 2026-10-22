@@ -3,7 +3,7 @@
    here, read-only. Reading one back trusts nothing in it. */
 import { t, fmtFull } from "./text.js?v=dev";
 import { str, num, arr, isObj, clamp } from "./clean.js?v=dev";
-import { savedKindOf, toSaved, readSaved, readReactions, hasContent, escHtml as esc } from "./kinds.js?v=dev";
+import { kindOf, savedKindOf, toSaved, readSaved, readReactions, hasContent, escHtml as esc } from "./kinds.js?v=dev";
 import { REACTS } from "./constants.js?v=dev";
 
 export const ARCHIVE = "anon-chat-archive";
@@ -24,7 +24,7 @@ export function buildArchive(room, uid, self) {
     format: ARCHIVE, version: 1,
     title: meta.title || t("roomN", { code: room.code }), code: room.code, created: meta.created, exported: Date.now(),
     me: { name: self.name, avatar: self.avatar },
-    messages: [...room.msgs.values()].map((v) => Object.assign(one(v, room.author(v)), { owner: v.by === meta.owner || undefined, reactions: reacts(v) })),
+    messages: [...room.msgs.values()].filter((v) => !kindOf(v).line).map((v) => Object.assign(one(v, room.author(v)), { owner: v.by === meta.owner || undefined, reactions: reacts(v) })),
     dms: [...room.dms.entries()].filter(([, msgs]) => msgs.size).map(([other, msgs]) => {
       const them = room.who(other) || { name: t("someoneLeft"), avatar: "👤" };
       return { with: { name: them.name, avatar: them.avatar }, messages: [...msgs.values()].map((v) => one(v, v.by === uid ? self : them)) };

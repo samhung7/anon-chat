@@ -118,6 +118,8 @@ I18N.add("ko", {
   // inside a room
   joinedToast: "{who}님이 들어왔어요",
   leftToast: "{who}님이 나갔어요",
+  lineLeft: "{who}님이 채팅방을 나갔어요",
+  lineKicked: "{who}님이 채팅방에서 내보내졌어요",
   dmToast: "🔒 {who}님이 개인 메시지를 보냈어요",
   openToRead: "채팅방을 열어 확인하세요",
   sentGif: "GIF를 보냈어요",

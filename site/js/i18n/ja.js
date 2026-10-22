@@ -118,6 +118,8 @@ I18N.add("ja", {
   // inside a room
   joinedToast: "{who} さんが参加しました",
   leftToast: "{who} さんが退出しました",
+  lineLeft: "{who} さんがルームを退出しました",
+  lineKicked: "{who} さんはルームから退出させられました",
   dmToast: "🔒 {who} さんから個別メッセージが届きました",
   openToRead: "ルームを開いて確認してください",
   sentGif: "GIF を送信しました",

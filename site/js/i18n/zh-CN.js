@@ -118,6 +118,8 @@ I18N.add("zh-CN", {
   // inside a room
   joinedToast: "{who} 加入了",
   leftToast: "{who} 离开了",
+  lineLeft: "{who} 离开了聊天室",
+  lineKicked: "{who} 已被移出聊天室",
   dmToast: "🔒 {who} 给你发了一条私信",
   openToRead: "打开聊天室查看",
   sentGif: "发送了一张 GIF",

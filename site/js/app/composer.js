@@ -68,6 +68,30 @@ export async function post(kind, value, more = {}, { wait } = {}) {
   const sent = posts.write(upd, to ? "dms" : kind.stat).then((ok) => { if (ok) announce(code, id, to); return ok; });
   return wait ? sent : true;
 }
+/* ---------- someone went ----------
+   A line in the room saying someone left (ev "l", written by them in the update that takes them out) or was removed
+   (ev "k", written by the host who removes them, naming them). In a Private Salon the names are sealed like a message's.
+   Returns the paths, from the root, to write along with the leaving. */
+export async function goneNote(r, ev, them) {
+  const uid = backend.uid, T = backend.stamp(), id = backend.pushKey(r.api.ref("msgs"));
+  const m = r.members[uid] || me(), at = (path) => r.api.root(path);
+  const named = ev === "k" ? { tn: them.name, ta: them.avatar } : {};
+  const msg = r.cipher ? { by: uid, ev, x: await r.cipher.seal({ e: ev, ...named, n: m.name, a: m.avatar }, "m:" + uid), at: T }
+    : { by: uid, name: m.name, avatar: m.avatar, ev, ...named, at: T };
+  if (ev === "k") msg.tg = them.id;
+  const upd = { [at("msgs/" + id)]: msg };
+  // a host stays in the room, so it counts as their message: stamped like one
+  if (ev === "k") Object.assign(upd, { [at(`members/${uid}/ls`)]: T, [at(`members/${uid}/lm`)]: id });
+  return upd;
+}
+// write(note): the leaving with its line, tried again once a moment later (the rate limit); without it if it still won't go
+// (the room is read-only, say), since leaving matters more than the line
+export async function withNote(write, note) {
+  try { return await write(note); } catch {}
+  await pause(POST_GAP_MS);
+  try { return await write(note); } catch { return write({}); }
+}
+
 /* ---------- replying ---------- */
 export function startReply(id, v, dm) {
   room.ui.reply = { id, dm };

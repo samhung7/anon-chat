@@ -22,10 +22,10 @@ export class RoomApi {
     if (oldClaim) upd[`names/${oldClaim}`] = null;
     return this.update(upd);
   }
-  // count: the room's size count after I go, if it keeps one
-  leave({ claim, count }) {
+  // count: the room's size count after I go, if it keeps one; note: the line saying I left (goneNote), written with it
+  leave({ claim, count }, note = {}) {
     return backend.update({ [this.root(`members/${this.uid}`)]: null, [this.root(`push/${this.uid}`)]: null,
-      ...(claim ? { [this.root(`names/${claim}`)]: null } : {}), ...(count != null ? { [this.root("meta/n")]: count } : {}) });
+      ...(claim ? { [this.root(`names/${claim}`)]: null } : {}), ...(count != null ? { [this.root("meta/n")]: count } : {}), ...note });
   }
   holderOf(claim) { return backend.val(this.ref("names/" + claim)); }
 
@@ -59,13 +59,14 @@ export class RoomApi {
   setMod(id, on) { return this.set(`meta/mods/${id}`, on ? true : null); }
   // the owner hands the room to someone in it, and stays on as a co-host
   transfer(to) { return this.setMeta({ owner: to, [`mods/${to}`]: null, [`mods/${this.uid}`]: true }); }
-  // remove someone, who can't come back; claim: their nickname, freed if it's theirs; count: the size count after
-  kick(id, { claim, count, unmod }) {
-    const upd = { [`members/${id}`]: null, [`banned/${id}`]: true };
-    if (claim) upd[`names/${claim}`] = null;
-    if (count != null) upd["meta/n"] = count;
-    if (unmod) upd[`meta/mods/${id}`] = null;
-    return this.update(upd);
+  // remove someone, who can't come back; claim: their nickname, freed if it's theirs; count: the size count after;
+  // note: the line saying they were removed (goneNote), written with it
+  kick(id, { claim, count, unmod }, note = {}) {
+    const upd = { [this.root(`members/${id}`)]: null, [this.root(`banned/${id}`)]: true, ...note };
+    if (claim) upd[this.root(`names/${claim}`)] = null;
+    if (count != null) upd[this.root("meta/n")] = count;
+    if (unmod) upd[this.root(`meta/mods/${id}`)] = null;
+    return backend.update(upd);
   }
   end() { return backend.update({ [`rooms/${this.code}`]: null }); }
 

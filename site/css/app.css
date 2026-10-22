@@ -727,6 +727,10 @@ html.l10n .splash p { visibility: hidden; }
 .jump .jn:empty { display: none; }
 .newline { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-4) var(--sp-1) var(--sp-1); color: var(--accent-ink); font-size: var(--fs-xs); font-weight: var(--fw-semibold); }
 .newline::before, .newline::after { content: ""; flex: 1; border-top: 1px solid var(--accent-ink); }
+/* someone left or was removed: a quiet line across the chat, not anyone's bubble */
+.sysline { display: flex; justify-content: center; margin: var(--sp-2) var(--sp-1); }
+.sysline span { max-width: 90%; padding: 2px var(--sp-3); border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--muted); font-size: var(--fs-xs); text-align: center; overflow-wrap: anywhere; }
 .ment { font-weight: 600; color: var(--accent-ink); }
 .mine .ment { color: inherit; }
 .ment.self { background: var(--warn-bg); color: var(--warn); border-radius: 4px; padding: 0 2px; }
