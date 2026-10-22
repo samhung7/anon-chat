@@ -903,18 +903,20 @@ test("long posts: hosts write one on its own page, the chat shows a card, the te
   // the owner lets everyone write them; the owner can take one down, its text with it
   await menuPick(alice, "postsopen");
   await until(async () => (await dbGet(`rooms/${code}/meta/po`)) === true);
+  await writePost(bob, "", "no title needed");
+  await alice.locator("#list .postbub .ps.lead", { hasText: "no title needed" }).waitFor();
   await writePost(bob, "From Bob", "hello from a member");
   await alice.locator("#list .postbub", { hasText: "From Bob" }).waitFor();
-  const bobs = Object.entries(await dbGet(`rooms/${code}/msgs`)).find(([, v]) => v.by !== msgs[id].by)[0];
+  const bobs = Object.entries(await dbGet(`rooms/${code}/msgs`)).find(([, v]) => v.by !== msgs[id].by && v.post.t)[0];
   assert.ok(await dbGet(`rooms/${code}/posts/${bobs}`));
 
   // an export carries the whole text, not only the card
   await menuPick(alice, "export");
   const [file] = await Promise.all([alice.waitForEvent("download"), press(alice, "json")]);
   const a = JSON.parse(readFileSync(await file.path(), "utf8"));
-  assert.deepEqual(a.messages.map((m) => [m.post.t, m.post.b]), [["Weekly notes", "# Plan B\nnew words"], ["From Bob", "hello from a member"]]);
+  assert.deepEqual(a.messages.map((m) => [m.post.t, m.post.b]), [["Weekly notes", "# Plan B\nnew words"], ["", "no title needed"], ["From Bob", "hello from a member"]]);
 
-  await alice.locator("#list .msg:not(.mine) .more").first().click();
+  await alice.locator("#list .msg:not(.mine)", { hasText: "From Bob" }).locator(".more").click();
   await press(alice, "remove");
   await press(alice, "yes");
   await until(async () => (await dbGet(`rooms/${code}/posts/${bobs}`)) === null);

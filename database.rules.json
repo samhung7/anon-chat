@@ -275,7 +275,7 @@
             "post": {
               ".validate": "newData.hasChildren(['t', 's', 'n']) && newData.parent().child('pt').val() === true && !(newData.parent().parent().parent().child('meta/enc').val() === true)",
               "t": {
-                ".validate": "newData.isString() && newData.val().length <= 60 && newData.val().length > 0"
+                ".validate": "newData.isString() && newData.val().length <= 60"
               },
               "s": {
                 ".validate": "newData.isString() && newData.val().length <= 300"

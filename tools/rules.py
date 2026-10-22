@@ -160,7 +160,7 @@ POST_PIC = {
 }
 POST_CARD = {
     ".validate": "newData.hasChildren(['t', 's', 'n']) && newData.parent().child('pt').val() === true" + NOT_ENC,
-    "t": {".validate": NONEMPTY(60)},
+    "t": {".validate": S(60)},   # the title may be empty
     "s": {".validate": S(300)},
     "n": {".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 20000"},
     "p": {"$i": POST_PIC},

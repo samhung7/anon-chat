@@ -58,6 +58,8 @@ export function mdView(text, pic) {
   }
   return out;
 }
+// what a post goes by: its title, or without one its first words
+export const postName = (p) => p.t || (p.s ? (p.s.length > 40 ? p.s.slice(0, 40) + "…" : p.s) : t("post"));
 // the words without the marks, for the card's first lines, a notification or a file
 export const plainOf = (text) => String(text || "").split("\n").map((l) => l.trim()).filter((l) => l && !PIC_LINE.test(l) && !/^(-{3,}|\*{3,})$/.test(l))
   .map((l) => l.replace(/^(#{1,2}\s+|>\s?|[-*]\s+|\d{1,3}[.)]\s+)/, "").replace(/\*\*(.+?)\*\*/g, "$1")).join(" ").replace(/\s+/g, " ").trim();
@@ -92,15 +94,15 @@ export function postCard(id, v) {
   const p = v.post;
   return el("button", { type: "button", class: "bub postbub", onclick: () => openPost(id) },
     el("span", { class: "ptag" }, icon("post", "sm"), el("span", { text: t("post") })),
-    el("b", { class: "pt", text: p.t }),
-    p.s ? el("span", { class: "ps", text: p.s }) : null,
+    p.t ? el("b", { class: "pt", text: p.t }) : null,
+    p.s ? el("span", { class: "ps" + (p.t ? "" : " lead"), text: p.s }) : null,
     el("span", { class: "pmore" }, el("span", { text: t("postReadMore") }), el("span", { class: "muted", text: t("postChars", { n: p.n.toLocaleString(I18N.lang) }) })));
 }
 // a saved one (in a record): the same card, opening the text the record kept
 export function savedPostCard(m) {
   return el("button", { type: "button", class: "bub postbub ro", onclick: () => readPage(m.post.t, () => mdView(m.post.b || m.post.s, () => el("p", { class: "muted", text: "📷 " + t("photo") }))) },
     el("span", { class: "ptag" }, icon("post", "sm"), el("span", { text: t("post") })),
-    el("b", { class: "pt", text: m.post.t }), m.post.s ? el("span", { class: "ps", text: m.post.s }) : null);
+    m.post.t ? el("b", { class: "pt", text: m.post.t }) : null, m.post.s ? el("span", { class: "ps" + (m.post.t ? "" : " lead"), text: m.post.s }) : null);
 }
 
 /* ---------- a page over the chat, which the back button closes ---------- */
@@ -153,7 +155,7 @@ export function openPost(id) {
     body.replaceChildren(
       el("div", { class: "who" }, el("span", { class: "av" }, avatar(who.avatar)), el("span", { class: "nm", text: who.name + r.badge(v.by) }),
         el("time", { text: fmtTime(v.at) }), v.ed ? el("small", { class: "muted", text: t("edited") }) : null),
-      el("h2", { class: "ptitle", text: v.post.t }), text, reacts);
+      v.post.t ? el("h2", { class: "ptitle", text: v.post.t }) : null, text, reacts);
     const b = await postBody(id, v).catch(() => null);
     if (!ov.isConnected) return;
     text.replaceChildren(b == null ? el("p", { class: "muted pfail", text: t("postLoadFail") }) : mdView(b, livePic(v)));
@@ -166,7 +168,7 @@ export function openPost(id) {
 }
 // a read-only page of a post from a saved record
 function readPage(title, make) {
-  const body = el("div", { class: "pagebody" }, el("h2", { class: "ptitle", text: title }), make());
+  const body = el("div", { class: "pagebody" }, title ? el("h2", { class: "ptitle", text: title }) : null, make());
   const ov = page("reader", bar(t("post"), null, () => ov.close()), body);
 }
 // a picture in a live post: one the post carries, fetched as it comes near
@@ -181,7 +183,7 @@ const livePic = (v) => (f) => {
 export async function copyPost(id, v) {
   const b = await postBody(id, v).catch(() => null);
   if (b == null) return toast(t("postLoadFail"));
-  navigator.clipboard?.writeText(`${v.post.t}\n\n${b}`).then(() => toast(t("copied")), () => toast(t("cantCopy")));
+  navigator.clipboard?.writeText(v.post.t ? `${v.post.t}\n\n${b}` : b).then(() => toast(t("copied")), () => toast(t("cantCopy")));
 }
 
 /* ---------- writing ---------- */
@@ -221,7 +223,7 @@ function editor(id, v, b = "") {
     prevBtn.textContent = t(previewing ? "postWrite" : "postPreview");
     view.hidden = !previewing; ta.hidden = previewing;
     toolbar.querySelectorAll("[data-tool], .icon").forEach((x) => { if (x !== prevBtn) x.disabled = previewing; });
-    if (previewing) view.replaceChildren(el("h2", { class: "ptitle", text: title.value.trim() || t("postTitlePh") }), mdView(ta.value, picEl));
+    if (previewing) view.replaceChildren(title.value.trim() ? el("h2", { class: "ptitle", text: title.value.trim() }) : "", mdView(ta.value, picEl));
   } });
   const toolbar = el("div", { class: "ptools" },
     tool("b", t("postBold"), () => wrap("**", "**")), tool("h", t("postHeading"), () => prefix("## ")),
@@ -290,7 +292,6 @@ function editor(id, v, b = "") {
     const T = title.value.trim().slice(0, LIMITS.postTitle);
     // pictures the text no longer names are left out; a line naming one this post doesn't carry is dropped
     const text = ta.value.split("\n").filter((l) => { const m = l.trim().match(PIC_LINE); return !m || added.has(m[1]) || had.has(m[1]); }).join("\n").trim().slice(0, LIMITS.postBody);
-    if (!T) { title.focus(); return toast(t("postNeedTitle")); }
     if (!plainOf(text) && !picsIn(text).length) { ta.focus(); return toast(t("postNeedBody")); }
     if (r !== room || r.gone) return close();
     if (r.readOnly) { keep(); return toast(t("roNoPost")); }

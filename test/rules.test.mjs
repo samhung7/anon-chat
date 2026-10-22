@@ -704,7 +704,8 @@ test("long posts: hosts post them, members once the owner allows it; the text si
   await assertFails(post("carol", "msgs/p6", { by: "carol", name: "x", avatar: "🦊", text: "嗨", at: T }, { more: { "posts/p6": { by: "carol", at: T, b: "x" } } })); // a text with no post
   await assertFails(longPost("carol", "p7", { body: { b: "x".repeat(20001) } }));
   await assertSucceeds(longPost("carol", "p8", { body: { b: "x".repeat(20000) }, card: { t: "長", s: "x".repeat(200), n: 20000 } }));
-  await assertFails(longPost("carol", "p9", { card: { t: "", s: "", n: 1 } }));
+  await assertSucceeds(longPost("carol", "p9", { card: { t: "", s: "沒有標題", n: 4 } })); // the title may be left out
+  await assertFails(longPost("carol", "p9b", { card: { t: "x".repeat(61), s: "", n: 1 } }));
   await assertFails(longPost("carol", "p9", { card: { t: "t", s: "", n: 1 }, body: { b: "x", x: "c2VhbGVk" } })); // no ciphertext in an open room
   await assertFails(set(ref(db("bob"), `rooms/${C}/posts/p3`), { by: "bob", at: T, b: "換掉" })); // nobody writes over someone's post
   // members read the text; the author edits it (card and text), nobody else

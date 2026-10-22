@@ -17,7 +17,7 @@ import { livePoll, livePollView, pollView, pollVoters } from "./polls.js?v=dev";
 import { liveDraw, drawView } from "./draws.js?v=dev";
 import { gameCard, gameText, GAME } from "./games.js?v=dev";
 import { GAMES, DAY_RE } from "./puzzles.js?v=dev";
-import { postCard, savedPostCard, openPost, editPost, copyPost, knownBody } from "./posts.js?v=dev";
+import { postCard, savedPostCard, openPost, editPost, copyPost, knownBody, postName } from "./posts.js?v=dev";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 export { esc as escHtml };
@@ -36,9 +36,10 @@ const int = (x, hi) => (Number.isInteger(x) ? clamp(x, 0, hi) : 0);
 const cleanGame = (x) => (x && GAMES.includes(x.g) && DAY_RE.test(x.d) ? { g: x.g, d: x.d, s: int(x.s, 100), t: int(x.t, 86400),
   ...(x.n ? { n: int(x.n, 8) } : {}), ...(x.h ? { h: int(x.h, 99) } : {}), ...(x.m ? { m: int(x.m, 999) } : {}),
   ...(typeof x.r === "string" && /^[0-4]{2}(,[0-4]{2}){0,7}$/.test(x.r) ? { r: x.r } : {}) } : null);
+// the title may be left out
 const cleanPost = (p) => {
-  const title = str(p?.t, LIMITS.postTitle);
-  if (!title) return null;
+  if (!isObj(p)) return null;
+  const title = str(p.t, LIMITS.postTitle);
   const pics = listOf(p.p).slice(0, LIMITS.postPhotos).map(cleanImg).filter(Boolean);
   return { t: title, s: str(p.s, LIMITS.postEx), n: clamp(Math.round(num(p.n)), 1, LIMITS.postBody), ...(pics.length ? { p: pics } : {}) };
 };
@@ -187,7 +188,7 @@ const game = {
 };
 
 // a long post (posts.js): its card here, its whole text apart in posts/{id}; pt marks it, sealed or not
-const postText = (m) => `📝 ${m.post.t}\n${m.post.b || m.post.s}`;
+const postText = (m) => `📝 ${postName(m.post)}\n${m.post.b || m.post.s}`;
 const post = {
   name: "post", stat: "posts", roomOnly: true,
   live: (v) => !!v.post, saved: (m) => !!m.post,
@@ -196,13 +197,13 @@ const post = {
   unsealed: (p, dm) => (p.ps && !dm ? { post: cleanPost(p.ps) } : null),
   // sealed as a post but not marked as one (the rules check the mark): not shown as one
   async opened(out, raw, id) { if (out.post && raw.pt !== true) { delete out.post; Object.assign(out, { text: t("cantDecrypt"), bad: true }); } else if (out.post) out.pid = id; },
-  snippet: (v) => "📝 " + v.post.t,
+  snippet: (v) => "📝 " + postName(v.post),
   bubble: (id, v) => postCard(id, v),
   preview: (v) => quoteText(snippet(v)),
-  pinned: (v) => "📝 " + v.post.t,
-  notice: (v) => "📝 " + v.post.t,
+  pinned: (v) => "📝 " + postName(v.post),
+  notice: (v) => "📝 " + postName(v.post),
   // what a report carries to the operator: the title and as much of the text as this device has read
-  reported: (v) => `${v.post.t}\n${knownBody(v.pid) ?? v.post.s}`,
+  reported: (v) => `${v.post.t ? v.post.t + "\n" : ""}${knownBody(v.pid) ?? v.post.s}`,
   actions: [
     ["read", "postRead", () => !document.querySelector(".reader"), (id) => openPost(id)],
     ["copypost", "postCopy", () => true, (id, v) => copyPost(id, v)],
@@ -212,9 +213,9 @@ const post = {
   removes: (v) => Object.fromEntries([["posts/" + v.pid, null], ...(v.post.p || []).map((p) => ["files/" + p.f, null])]),
   removed: (v) => (v.post.p || []).forEach((p) => dropPhoto(room.code, v.by, p.f)),
   toSaved: (v) => (v.post ? { post: { t: v.post.t, s: v.post.s, b: knownBody(v.pid) ?? undefined } } : {}),
-  readSaved: (m) => { const p = m?.post; return { post: isObj(p) && str(p.t, LIMITS.postTitle) ? { t: str(p.t, LIMITS.postTitle), s: str(p.s, LIMITS.postEx), b: str(p.b, LIMITS.postBody) || undefined } : undefined }; },
+  readSaved: (m) => { const p = m?.post; return { post: isObj(p) && (str(p.t, LIMITS.postTitle) || str(p.s, LIMITS.postEx) || str(p.b, LIMITS.postBody)) ? { t: str(p.t, LIMITS.postTitle), s: str(p.s, LIMITS.postEx), b: str(p.b, LIMITS.postBody) || undefined } : undefined }; },
   savedText: postText,
-  savedHtml: (m) => `<div class="b"><b>${esc("📝 " + m.post.t)}</b>\n\n${esc(m.post.b || m.post.s)}</div>`,
+  savedHtml: (m) => `<div class="b">${m.post.t ? `<b>${esc("📝 " + m.post.t)}</b>\n\n` : "📝 "}${esc(m.post.b || m.post.s)}</div>`,
   savedBubble: (m) => savedPostCard(m),
 };
 
