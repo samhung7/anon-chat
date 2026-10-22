@@ -11,6 +11,7 @@ import { linkify } from "./richtext.js?v=dev";
 import { reportsSheet } from "./actions.js?v=dev";
 import { people, capSheet, ownClaim, countAfterLeaving } from "./people.js?v=dev";
 import { setQa } from "./qa.js?v=dev";
+import { goneNote, withNote } from "./composer.js?v=dev";
 import { openShow } from "./show.js?v=dev";
 import { notifyOn, setNotify } from "./notify.js?v=dev";
 import { exportSheet } from "./records.js?v=dev";
@@ -119,7 +120,8 @@ async function leaveRoom() {
   if (!(await confirmSheet(t("leaveTitle"), t("leaveBody"), t("leave")))) return;
   const r = room;
   r.gone = true; stopRoom(r);
-  await r.api.leave({ claim: await ownClaim(backend.uid), count: countAfterLeaving() }).catch(() => {}); // same reason as in askMe; a place frees up
+  const opts = { claim: await ownClaim(backend.uid), count: countAfterLeaving() };
+  await withNote((note) => r.api.leave(opts, note), await goneNote(r, "l")).catch(() => {}); // same reason as in askMe; a place frees up
   closeRoom(r);
 }
 async function endRoom() {

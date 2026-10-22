@@ -111,6 +111,8 @@ I18N.add("en", {
   // inside a room
   joinedToast: "{who} joined",
   leftToast: "{who} left",
+  lineLeft: "{who} left the room",
+  lineKicked: "{who} was removed from the room",
   dmToast: "🔒 {who} sent you a private message",
   openToRead: "Open the room to read it",
   sentGif: "Sent a GIF",

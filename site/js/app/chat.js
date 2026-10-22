@@ -57,7 +57,7 @@ function watchChat(r) {
       // once I'm in: this room's push subscription, if this device wants to hear from it while the page is closed
       if (!r.pushSynced && r.members[backend.uid]) { r.pushSynced = true; if (notifyOn(r.code)) syncPush(r.code, true); }
     })
-    .on("msg", (id, v) => { if (inRoomView()) addMsg(id, v); if (pinIds().includes(id)) renderPins(); noteNew(v, null); })
+    .on("msg", (id, v) => { if (inRoomView()) addMsg(id, v); if (pinIds().includes(id)) renderPins(); if (!kindOf(v).line) noteNew(v, null); })
     .on("msg-changed", (id, v, old) => { if (inRoomView()) updateMsg(id, v, old); noteComments(id, v, old); })
     .on("msg-removed", (id) => { if (inRoomView()) document.getElementById("m-" + id)?.remove(); renderPins(); })
     .on("typing", renderTyping)
@@ -134,6 +134,7 @@ function refreshNames() {
 /* ---------- messages ---------- */
 // prev: the node it follows (the list's last one by default); show: unfold a blocked person's message
 function bubble(id, v, dm, { prev = LIST().lastElementChild, show = false } = {}) {
+  if (kindOf(v).line) return el("div", { class: "sysline", id: "m-" + id, "data-at": v.at, "data-id": id }, el("span", { text: snippet(v) }));
   const mine = v.by === backend.uid;
   const cont = prev && prev.dataset.by === v.by && v.at - Number(prev.dataset.at) < GROUP_MS;
   const attrs = { id: (dm ? "d-" : "m-") + id, "data-by": v.by, "data-at": v.at, "data-id": id };

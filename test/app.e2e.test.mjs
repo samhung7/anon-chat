@@ -201,6 +201,14 @@ test("private salon: only ciphertext on the server, the link is needed, private 
   await pickName(carol, "Carol");
   await bubble(carol, "top secret words").waitFor();
 
+  // Carol leaves: a line says so, under her sealed name
+  await menuPick(carol, "leave");
+  await press(carol, "yes");
+  await carol.locator("#home").waitFor();
+  await bob.locator("#list .sysline", { hasText: "Carol left the room" }).waitFor();
+  const line = Object.values(await dbGet(`rooms/${code}/msgs`)).find((m) => m.ev === "l");
+  assert.ok(line.x && !line.name, "the line's name is stored sealed");
+
   // a private message between Bob and Alice
   await bob.locator("#peopleBtn").click();
   await sheet(bob).locator(".st-mrow", { hasText: "Alice" }).locator("[data-dm]").click();
@@ -350,6 +358,9 @@ test("owner tools: co-host, remove someone, lock; a member leaves", async () => 
   await press(alice, "yes");
   await sheet(carol).locator("[data-a=home]").waitFor();
   assert.equal(Object.keys(await dbGet(`rooms/${code}/banned`)).length, 1);
+  // everyone still in the room sees a line saying so
+  await alice.locator("#list .sysline", { hasText: "Carol was removed from the room" }).waitFor();
+  await bob.locator("#list .sysline", { hasText: "Carol was removed from the room" }).waitFor();
 
   await menuPick(alice, "lock");
   await alice.locator("#codeBtn", { hasText: "·" }).waitFor();
@@ -358,6 +369,7 @@ test("owner tools: co-host, remove someone, lock; a member leaves", async () => 
   await press(bob, "yes");
   await bob.locator("#home").waitFor();
   await alice.locator("#peopleBtn .n", { hasText: "1" }).waitFor();
+  await alice.locator("#list .sysline", { hasText: "Bob left the room" }).waitFor();
   noErrors();
 });
 

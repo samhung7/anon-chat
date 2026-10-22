@@ -62,7 +62,13 @@ post_write = lambda field: j("auth != null", o(j(is_member(ROOM), o(
     # the author deletes a message; so do the owner and co-hosts (free accounts too: every room needs a way to take abuse down)
     j("!newData.exists()", o("data.child('by').val() === auth.uid", is_staff(ROOM))),
 )), j("!newData.exists()", is_admin)))   # StoaTalk's operator takes a message down, acting on a report
-msg_write, file_write = post_write("lm"), post_write("lf")
+file_write = post_write("lf")
+# "someone left": written by the person leaving, in the same update that takes them out (so it can't stamp ls/lm in a
+# member record that's going; it still waits out the rate limit). See ev under msgs/$id.
+leave_note = j("auth != null", "!data.exists()", is_member(ROOM), alive(ROOM), "newData.child('by').val() === auth.uid",
+               "newData.child('ev').val() === 'l'", f"!{NEWROOM}.child('members/' + auth.uid).exists()",
+               o(f"!{ROOM}.child('members/' + auth.uid + '/ls').exists()", f"{ROOM}.child('members/' + auth.uid + '/ls').val() < now - {GAP}"))
+msg_write = o(post_write("lm"), leave_note)
 DMROOM = "data.parent().parent().parent()"
 dm_write = j(
     "auth != null", "!data.exists()", not_banned, "newData.child('by').val() === auth.uid", sent_now("newData.parent().parent().parent()", "lm"),
@@ -101,6 +107,7 @@ GIF = {
     "$other": NO,
 }
 NOT_ENC = " && !" + ENC(MEMBER_ROOM)   # from rooms/$code/msgs/$id/<field>
+ROOM_OF_MSG = "root.child('rooms/' + $code)"   # the room as it was before the update
 NONEMPTY = lambda n: S(n) + " && newData.val().length > 0"
 # a list kept as an object with keys 0, 1, 2, ... (what the SDK writes for an array)
 LIST = lambda key_re, item: {"$i": {".validate": f"$i.matches({key_re}) && " + item}}
@@ -348,7 +355,7 @@ rules = {"rules": {
                     ".write": msg_write,
                     ".validate": j("newData.hasChildren(['by', 'at'])", o(
                         j(ENC("newData.parent().parent()"), "newData.hasChild('x')"),
-                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", o(*[f"newData.hasChild('{k}')" for k in ("text", "gif", "img", "poll", "draw", "game", "post")])))),
+                        j("!" + ENC("newData.parent().parent()"), "newData.hasChildren(['name', 'avatar'])", o(*[f"newData.hasChild('{k}')" for k in ("text", "gif", "img", "poll", "draw", "game", "post", "ev")])))),
                     "by": {".validate": "newData.isString()"},
                     "name": {".validate": S(24) + " && !" + ENC(MEMBER_ROOM)},
                     "avatar": {".validate": S(8) + " && !" + ENC(MEMBER_ROOM)},
@@ -359,6 +366,16 @@ rules = {"rules": {
                     "post": dict(POST_CARD, **{".write": edit_field}),
                     "x": {".write": edit_field, ".validate": SEALED(12000)},
                     "ed": {".write": j(edit_write, "data.parent().exists()"), ".validate": "newData.val() === now"},
+                    # a line in the chat saying someone went: left (l), written by them as they leave; or removed (k), written
+                    # by the host who removes them (tg) in the same update, naming them in tn and ta (sealed inside x when encrypted)
+                    "ev": {".validate": o(j("newData.val() === 'l'", "newData.parent().child('by').val() === auth.uid", "!newData.parent().hasChild('tg')",
+                                            f"!{MEMBER_ROOM}.child('members/' + auth.uid).exists()"),
+                                          j("newData.val() === 'k'", "newData.parent().hasChild('tg')"))},
+                    "tg": {".validate": j("newData.isString()", "newData.parent().child('ev').val() === 'k'", can_manage(ROOM_OF_MSG, "newData.val()"),
+                                          f"{ROOM_OF_MSG}.child('members/' + newData.val()).exists()", f"!{MEMBER_ROOM}.child('members/' + newData.val()).exists()",
+                                          f"{MEMBER_ROOM}.child('banned/' + newData.val()).val() === true")},
+                    "tn": {".validate": S(24) + " && newData.parent().child('ev').val() === 'k' && !" + ENC(MEMBER_ROOM)},
+                    "ta": {".validate": S(8) + " && newData.parent().child('ev').val() === 'k' && !" + ENC(MEMBER_ROOM)},
                     "rp": {".validate": PUSH_ID + " && !" + ENC(MEMBER_ROOM)},   # the message this one replies to (sealed inside x when encrypted)
                     "at": {".validate": "newData.val() === now || newData.val() === data.val()"},
                     "re": {"$k": {

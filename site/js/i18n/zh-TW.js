@@ -111,6 +111,8 @@ I18N.add("zh-TW", {
   // inside a room
   joinedToast: "{who} 加入了",
   leftToast: "{who} 離開了",
+  lineLeft: "{who} 離開了聊天室",
+  lineKicked: "{who} 已被移出聊天室",
   dmToast: "🔒 {who} 傳了私訊給你",
   openToRead: "打開聊天室來看",
   sentGif: "傳了一張 GIF",
