@@ -12,6 +12,7 @@ import { startReply, insertAtCursor, box } from "./composer.js?v=dev";
 import { openDm, pin, pinIds, react, jumpTo, setView } from "./chat.js?v=dev";
 import { postBody, openPost } from "./posts.js?v=dev";
 import { reportedComment, removeComment } from "./comments.js?v=dev";
+import { openBoard } from "./sticky.js?v=dev";
 
 // [action, label, when(c), run(c), class]; c = { id, v, dm, mine, name }. Three groups set apart by a gap: the
 // message itself, its author, and keeping the room in order (blocking, reports, taking it down)
@@ -95,11 +96,20 @@ async function reportMsg(id) {
   if (v.post) await postBody(id, v).catch(() => null); // the operator gets the post's text as the reporter could read it
   room.api.report(id, +a.slice(1), seenOf(v)).then(() => toast(t("reportedToast")), (e) => toast(t(isDenied(e) ? "reportedAlready" : "tryAgain")));
 }
-// (a comment under a long post is reported the same way: the list fetches it, and taking it down takes the comment)
+// a note on a sticky-notes board (n: as shown), the same way: its author stays unknown, to the operator too
+export async function reportNote(b, id, n) {
+  const a = await sheet(t("reportTitle"), el("p", { class: "muted", text: t("reportBody") }), REASONS.map((k) => ["r" + k, t("why" + k)]).concat([["no", t("cancel")]]));
+  if (!a?.startsWith("r") || !room || room.gone) return;
+  const seen = { b, t: n.t.slice(0, LIMITS.text), ...(n.nm ? { n: n.nm.slice(0, LIMITS.shownName) } : {}), ...(room.cipher ? { enc: true } : {}) };
+  room.api.report(id, +a.slice(1), seen).then(() => toast(t("reportedToast")), (e) => toast(t(isDenied(e) ? "reportedAlready" : "tryAgain")));
+}
+// (a comment under a long post is reported the same way: the list fetches it, and taking it down takes the comment;
+// a note on a board is listed with its words, and taken down from its board)
 export async function reportsSheet() {
   const items = await Promise.all(Object.entries(room.reports || {}).map(async ([id, by]) => {
-    const p = room.reportPost(id), v = p ? await reportedComment(p, id).catch(() => null) : room.msgs.get(id);
-    return { id, p, v, n: Object.keys(by || {}).length, why: [...new Set(Object.values(by || {}).map((x) => x?.r))] };
+    const p = room.reportPost(id), b = room.reportBoard(id);
+    const v = b ? room.boards.get(b)?.notes.get(id) : p ? await reportedComment(p, id).catch(() => null) : room.msgs.get(id);
+    return { id, p, b, v, n: Object.keys(by || {}).length, why: [...new Set(Object.values(by || {}).map((x) => x?.r))] };
   }));
   if (!room || room.gone) return;
   const stale = items.filter((it) => !it.v); // the message (or comment) is already gone
@@ -107,17 +117,18 @@ export async function reportsSheet() {
   const live = items.filter((it) => it.v);
   const body = live.length ? el("ul", { class: "replist" }, live.map((it) => el("li", {},
     el("button", { type: "button", class: "go", "data-go": it.id },
-      el("small", { text: `${room.author(it.v).avatar} ${room.author(it.v).name} · ${t("reportN", { n: it.n })} · ${it.why.filter((k) => REASONS.includes(k)).map((k) => t("why" + k)).join(t("listSep"))}` }),
-      it.p ? `💬 ${it.v.text}` : snippet(it.v)),
+      el("small", { text: `${it.b ? (it.v.nm ? `${it.v.av} ${it.v.nm}` : t("anonAsker")) : `${room.author(it.v).avatar} ${room.author(it.v).name}`} · ${t("reportN", { n: it.n })} · ${it.why.filter((k) => REASONS.includes(k)).map((k) => t("why" + k)).join(t("listSep"))}` }),
+      it.b ? `🗒️ ${it.v.t || "…"}` : it.p ? `💬 ${it.v.text}` : snippet(it.v)),
     el("div", { class: "row" },
-      el("button", { type: "button", class: "btn small danger", "data-rm": it.id, text: t(it.p ? "commentRemove" : "removeMsg") }),
+      el("button", { type: "button", class: "btn small danger", "data-rm": it.id, text: t(it.b ? "sbDrop" : it.p ? "commentRemove" : "removeMsg") }),
       el("button", { type: "button", class: "btn small", "data-ok": it.id, text: t("dismiss") })))))
     : el("p", { class: "muted", text: t("noReports") });
   const pick = await pickSheet(t("reportsTitle"), body, "button", (b) => ({ ...b.dataset }));
   if (!pick || !room || room.gone) return;
   const it = items.find((x) => x.id === (pick.go || pick.rm));
-  if (pick.go) it?.p ? openPost(it.p) : jumpTo(pick.go);
-  if (pick.rm && it?.p) removeComment(it.p, it.v);
+  if (pick.go) it?.b ? openBoard(it.b) : it?.p ? openPost(it.p) : jumpTo(pick.go);
+  if (pick.rm && it?.b) orToast(room.api.dropNote(it.b, it.id, true));
+  else if (pick.rm && it?.p) removeComment(it.p, it.v);
   else if (pick.rm && room.msgs.get(pick.rm)) removeMsg(pick.rm, room.msgs.get(pick.rm));
   if (pick.ok) orToast(room.api.dismissReport(pick.ok));
 }

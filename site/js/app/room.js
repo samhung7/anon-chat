@@ -414,15 +414,20 @@ export class Room extends Emitter {
      A board's card follows the whole board: where it's at (sb/{id}/live), its columns and its notes, and my own votes
      (under the key only I know, bk/{me}); everyone's votes once the result is out. Which notes are mine is asked note by
      note (nb/{note}, which only its author reads), and only while the board is open on this device (mineOn). The hosts'
-     columns are JSON in a plain room and sealed in a Private Salon; so are a note's words and name (x) and the votes. */
+     columns are JSON in a plain room and sealed in a Private Salon; so are a note's words and name (x) and the votes.
+     On a board opened hidden the words sit apart (w/{note}): my own notes' one by one while hidden, everyone's once shown. */
   followBoard(b) {
     let e = this.boards.get(b);
     if (e) return e;
-    e = { live: null, cols: [], notes: new Map(), mine: new Set(), asked: new Set(), watch: false, key: null, picks: [], votes: null, offs: [], all: null, pickOff: null };
+    e = { live: null, cols: [], notes: new Map(), mine: new Set(), asked: new Set(), watch: false, key: null, picks: [], votes: null, offs: [], all: null, pickOff: null,
+      raw: {}, words: {}, wAll: null, wOne: new Map() };
     this.boards.set(b, e);
     const { fb } = backend, ref = (p) => this.api.ref(`sb/${b}/${p}`), changed = () => this.emit("board", b);
     e.offs.push(fb.onValue(ref("live"), (s) => this.queue(() => {
+      const was = e.live?.hd;
       e.live = cleanBoardLive(s.val());
+      this.followWords(b);
+      if (was !== e.live?.hd) this.noteMap(b, e);
       if (e.live?.ph === "done" && !e.all) e.all = fb.onValue(ref("v"), (v) => this.queue(async () => {
         const out = {};
         for (const [k, x] of Object.entries(v.val() || {})) out[k] = await this.openPicks(b, k, x, e.live.v);
@@ -432,13 +437,8 @@ export class Room extends Emitter {
     }), () => {}));
     e.offs.push(fb.onValue(ref("cols"), (s) => this.queue(async () => { e.cols = cleanCols(await this.openBlob(s.val(), `bm:${b}`)); changed(); }), () => {}));
     e.offs.push(fb.onValue(ref("n"), (s) => this.queue(async () => {
-      const next = new Map();
-      for (const [id, v] of Object.entries(s.val() || {})) {
-        const p = v?.x && this.cipher ? await this.open(this.cipher.aes, v.x, `bn:${b}:${id}`) : null;
-        const n = cleanNote(v, p);
-        if (n) next.set(id, n);
-      }
-      e.notes = next; changed();
+      e.raw = s.val() || {};
+      await this.noteMap(b, e);
       this.askMine(b, e);
     }), () => {}));
     // my votes: the key I vote under, then what's under it
@@ -449,6 +449,38 @@ export class Room extends Emitter {
       e.pickOff = fb.onValue(ref("v/" + key), (v) => this.queue(async () => { e.picks = await this.openPicks(b, key, v.val(), e.live?.v || 5); changed(); }), () => {});
     }, () => {}));
     return e;
+  }
+  // the notes as shown, from what's stored (raw) and, on a hidden board, the words as far as I can read them
+  async noteMap(b, e) {
+    const split = e.live?.hd !== undefined, next = new Map();
+    for (const [id, x] of Object.entries(e.raw)) {
+      const v = split && x ? { ...x, ...(e.words[id] || {}) } : x;
+      const p = v?.x && this.cipher ? await this.open(this.cipher.aes, v.x, `bn:${b}:${id}`) : null;
+      const n = cleanNote(v, p, split);
+      if (n) next.set(id, n);
+    }
+    for (const [id, off] of e.wOne) if (!(id in e.raw)) { off(); e.wOne.delete(id); delete e.words[id]; }
+    if (this.boards.get(b) !== e) return;
+    e.notes = next; this.emit("board", b);
+  }
+  // a hidden board's words: everyone's once they're shown, my own notes' one by one until then
+  followWords(b) {
+    const e = this.boards.get(b), hd = e?.live?.hd;
+    if (hd === undefined) return;
+    const { fb } = backend, got = () => this.queue(() => this.noteMap(b, e));
+    if (hd === false) {
+      if (e.wAll) return;
+      e.wOne.forEach((off) => off()); e.wOne.clear();
+      e.wAll = fb.onValue(this.api.ref(`sb/${b}/w`), (s) => { e.words = s.val() || {}; got(); }, () => {});
+      return;
+    }
+    for (const id of e.mine) {
+      if (e.wOne.has(id) || !(id in e.raw)) continue;
+      e.wOne.set(id, fb.onValue(this.api.ref(`sb/${b}/w/${id}`), (s) => {
+        if (s.val()) e.words[id] = s.val(); else delete e.words[id];
+        got();
+      }, () => e.wOne.delete(id)));
+    }
   }
   async openPicks(b, key, x, most) {
     if (typeof x !== "string" || !x) return [];
@@ -467,7 +499,7 @@ export class Room extends Emitter {
       if (e.asked.has(id)) continue;
       e.asked.add(id);
       backend.val(this.api.ref(`sb/${b}/nb/${id}`)).then((who) => {
-        if (who === this.uid && !e.mine.has(id)) { e.mine.add(id); if (this.current) this.emit("board", b); }
+        if (who === this.uid && !e.mine.has(id)) { e.mine.add(id); this.followWords(b); if (this.current) this.emit("board", b); }
       }, () => {});
     }
   }
@@ -475,7 +507,7 @@ export class Room extends Emitter {
     const e = this.boards.get(b);
     if (!e) return;
     this.boards.delete(b);
-    [...e.offs, e.all, e.pickOff].forEach((f) => { try { f?.(); } catch (err) {} });
+    [...e.offs, e.all, e.pickOff, e.wAll, ...e.wOne.values()].forEach((f) => { try { f?.(); } catch (err) {} });
   }
   // the room went away under us: "ended", "kicked" or "left" (null if this room is no longer the one on screen)
   async whyGone() {
@@ -486,7 +518,10 @@ export class Room extends Emitter {
   }
   // the post a reported comment is under (reports/{comment}/{uid}.p), or null for a reported message
   reportPost(id) { return Object.values(this.reports?.[id] || {}).find((x) => typeof x?.p === "string")?.p || null; }
-  // a report on something still here: a message, or a comment whose post is (the comment itself is checked when listed)
-  reportLive(id) { return this.msgs.has(this.reportPost(id) || id); }
+  // the board a reported note is on (reports/{note}/{uid}.b), or null
+  reportBoard(id) { return Object.values(this.reports?.[id] || {}).find((x) => typeof x?.b === "string")?.b || null; }
+  // a report on something still here: a message, a note on a board, or a comment whose post is (the comment itself is
+  // checked when listed)
+  reportLive(id) { const b = this.reportBoard(id); return b ? !!this.boards.get(b)?.notes.has(id) : this.msgs.has(this.reportPost(id) || id); }
   reportCount() { return this.isStaff() ? Object.keys(this.reports || {}).filter((id) => this.reportLive(id)).length : 0; }
 }

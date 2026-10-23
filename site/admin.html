@@ -175,28 +175,34 @@ function showReports(all) {
 }
 function card(g) {
   const clear = Object.fromEntries(g.keys.map((k) => ["ops/reports/" + k, null]));
-  // a message (a long post with its text and comments), or a comment under the long post g.p
-  const takeDown = g.p
+  // a message (a long post with its text and comments; a sticky-notes board with its notes), a note on the board g.b,
+  // or a comment under the long post g.p
+  const takeDown = g.b
+    ? { ...clear, [`rooms/${g.code}/sb/${g.b}/n/${g.msg}`]: null, [`rooms/${g.code}/sb/${g.b}/nb/${g.msg}`]: null, [`rooms/${g.code}/sb/${g.b}/w/${g.msg}`]: null, [`rooms/${g.code}/reports/${g.msg}`]: null }
+    : g.p
     ? { ...clear, [`rooms/${g.code}/pc/${g.p}/${g.msg}`]: null, [`rooms/${g.code}/msgs/${g.p}/cc/${g.msg}`]: null, [`rooms/${g.code}/reports/${g.msg}`]: null }
-    : { ...clear, [`rooms/${g.code}/msgs/${g.msg}`]: null, [`rooms/${g.code}/reports/${g.msg}`]: null, [`rooms/${g.code}/posts/${g.msg}`]: null, [`rooms/${g.code}/pc/${g.msg}`]: null, [`rooms/${g.code}/pv/${g.msg}`]: null, [`rooms/${g.code}/ab/${g.msg}`]: null, [`rooms/${g.code}/av/${g.msg}`]: null, [`rooms/${g.code}/qz/${g.msg}`]: null, ...(g.f ? { [`rooms/${g.code}/files/${g.f}`]: null } : {}) };
-  const what = g.p ? "留言" : "訊息";
+    : { ...clear, [`rooms/${g.code}/msgs/${g.msg}`]: null, [`rooms/${g.code}/reports/${g.msg}`]: null, [`rooms/${g.code}/posts/${g.msg}`]: null, [`rooms/${g.code}/pc/${g.msg}`]: null, [`rooms/${g.code}/pv/${g.msg}`]: null, [`rooms/${g.code}/ab/${g.msg}`]: null, [`rooms/${g.code}/av/${g.msg}`]: null, [`rooms/${g.code}/qz/${g.msg}`]: null, [`rooms/${g.code}/sb/${g.msg}`]: null, ...(g.f ? { [`rooms/${g.code}/files/${g.f}`]: null } : {}) };
+  const what = g.b ? "便利貼" : g.p ? "留言" : "訊息";
   const counts = REASONS.map((name, k) => [name, g.reasons.filter((x) => x === k).length]).filter(([, n]) => n).map(([name, n]) => `${name} ×${n}`).join("、");
   const btn = (text, cls, fn) => { const b = el("button", { type: "button", class: cls, text }); b.onclick = () => fn(b); return b; };
   return el("div", { class: "card" },
     el("div", { class: "head" },
-      el("b", { text: `房間 ${g.code}` }), g.enc ? el("span", { class: "tag", text: "私人沙龍" }) : null, g.p ? el("span", { class: "tag", text: "長文底下的留言" }) : null,
+      el("b", { text: `房間 ${g.code}` }), g.enc ? el("span", { class: "tag", text: "私人沙龍" }) : null, g.p ? el("span", { class: "tag", text: "長文底下的留言" }) : null, g.b ? el("span", { class: "tag", text: "便利貼" }) : null,
       el("span", { text: `${g.keys.length} 人檢舉：${counts}` }), el("span", { class: "muted", text: when(g.last) })),
-    el("div", { class: "muted", text: `發言者：${g.n || "（沒有名字）"}　ID ${g.who}` }),
+    el("div", { class: "muted", text: g.b ? `${g.n ? `署名：${g.n}` : "匿名便利貼"}（作者在停權時查出）` : `發言者：${g.n || "（沒有名字）"}　ID ${g.who}` }),
     g.t ? el("div", { class: "text", text: g.t }) : null,
     g.f && HOST ? el("img", { src: `${HOST}/${g.code}/${g.who}/${g.f}.jpg`, alt: "被檢舉的照片", loading: "lazy" }) : null,
     el("div", { class: "row" },
       btn(`刪除${what}`, "", (b) => write(b, takeDown, `${what}已刪除。`)),
       btn("刪除並停權", "danger", async (b) => {
-        if (!confirm(`刪除這則${what}，並停權這個裝置（${g.n || g.who}）？`)) return;
+        // a note's author isn't in the report (the reporter can't know it): asked of the board, which the operator may read
+        const who = g.b ? (await fb.get(r(`rooms/${g.code}/sb/${g.b}/nb/${g.msg}`)).catch(() => null))?.val() : g.who;
+        if (!who) return alert(`找不到這則${what}的作者，可能已經刪除。`);
+        if (!confirm(`刪除這則${what}，並停權這個裝置（${g.n || who}）？`)) return;
         // out of the room too, while it's still there (a room that's gone can't take a write)
         const live = (await fb.get(r(`rooms/${g.code}/meta`)).catch(() => null))?.exists();
-        write(b, { ...takeDown, [`bans/${g.who}`]: { at: fb.serverTimestamp(), why: `${g.code} ${REASONS[g.reasons[0]] || ""}`.trim().slice(0, 200) },
-                   ...(live ? { [`rooms/${g.code}/banned/${g.who}`]: true, [`rooms/${g.code}/members/${g.who}`]: null } : {}) }, "已刪除並停權。");
+        write(b, { ...takeDown, [`bans/${who}`]: { at: fb.serverTimestamp(), why: `${g.code} ${REASONS[g.reasons[0]] || ""}`.trim().slice(0, 200) },
+                   ...(live ? { [`rooms/${g.code}/banned/${who}`]: true, [`rooms/${g.code}/members/${who}`]: null } : {}) }, "已刪除並停權。");
       }),
       btn("結束整個聊天室", "ghost", (b) => confirm(`結束房間 ${g.code}？所有訊息都會刪除。`) && write(b, { ...clear, [`rooms/${g.code}`]: null }, "聊天室已結束。")),
       btn("沒問題，略過", "ghost", (b) => write(b, clear, "已略過。"))));

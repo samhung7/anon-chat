@@ -1688,6 +1688,64 @@ test("sticky notes: the host opens a board, everyone puts notes up, the host mov
   noErrors();
 });
 
+test("sticky notes, hidden until the host reveals them; a note reported and taken down; the board on the projector", async () => {
+  const alice = await person("a"), bob = await person("b"), carol = await person("c");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  await joinByLink(carol, url, "Carol");
+  await openNewBoard(alice, "Ideas");
+  await sheet(alice).locator(".seg [data-v=yes]").click();
+  await press(alice, "yes");
+  await boardPage(alice).locator(".sbcol").waitFor();
+  const [b] = Object.keys(await dbGet(`rooms/${code}/sb`));
+  assert.equal((await dbGet(`rooms/${code}/sb/${b}/live`)).hd, true);
+  // the projector screen shows the board, face down
+  const [show] = await Promise.all([alice.context().waitForEvent("page"), boardMenu(alice, "show")]);
+  await show.locator("#show .ssb").waitFor();
+
+  // each sees only their own words; the others lie face down, for the host too
+  await bob.locator(".sbbub .btn", { hasText: "Open board" }).click();
+  await putNote(bob, "0", "Secret idea");
+  await carol.locator(".sbbub .btn", { hasText: "Open board" }).click();
+  await putNote(carol, "0", "Carol idea");
+  await boardPage(bob).locator(".sbnote.facedown").waitFor();
+  await until(async () => (await boardPage(alice).locator(".sbnote.facedown").count()) === 2);
+  assert.equal(await boardPage(bob).locator(".sbnote", { hasText: "Carol idea" }).count(), 0);
+  await until(async () => (await show.locator("#show .ssbnote.facedown").count()) === 2);
+  const notes = await dbGet(`rooms/${code}/sb/${b}/n`);
+  assert.ok(Object.values(notes).every((n) => !n.t), "the words aren't in the notes");
+  assert.equal(Object.keys(await dbGet(`rooms/${code}/sb/${b}/w`)).length, 2);
+  await shot(bob, "sticky-hidden");
+
+  // the host reveals them
+  await boardPage(alice).locator(".sbbar .btn.primary").click();
+  await press(alice, "yes");
+  await boardNote(bob, "Carol idea").waitFor();
+  await boardNote(alice, "Secret idea").waitFor();
+  await show.locator("#show .ssbnote", { hasText: "Secret idea" }).waitFor();
+  assert.equal(await boardPage(bob).locator(".sbnote.facedown").count(), 0);
+  await shot(show, "sticky-projector");
+
+  // Carol reports Bob's note; the owner takes it down from the list
+  await boardNote(carol, "Secret idea").click();
+  await press(carol, "report");
+  await press(carol, "r1");
+  await until(async () => await dbGet("ops/reports"));
+  const op = Object.values(await dbGet("ops/reports"))[0];
+  assert.equal(op.b, b); assert.equal(op.t, "Secret idea"); assert.equal(op.who, undefined, "the author goes unnamed");
+  await boardNote(bob, "Secret idea").click();
+  assert.equal(await sheet(bob).locator("[data-a=report]").count(), 0, "not one's own");
+  await bob.keyboard.press("Escape");
+  await alice.locator(".gmhead [aria-label='Close']").first().click();
+  await menuPick(alice, "reports");
+  await sheet(alice).locator(".replist li", { hasText: "Secret idea" }).waitFor();
+  await sheet(alice).locator(".replist [data-rm]").click();
+  await until(async () => (await boardPage(bob).locator(".sbnote", { hasText: "Secret idea" }).count()) === 0);
+  assert.equal(await dbGet(`rooms/${code}/reports`), null);
+  assert.equal(Object.keys(await dbGet(`rooms/${code}/sb/${b}/w`)).length, 1);
+  noErrors();
+});
+
 test("sticky notes in a Private Salon: columns, notes and votes are sealed; a named board shows who wrote each note", async () => {
   const alice = await person("a"), bob = await person("b");
   const { code, url } = await createRoom(alice, "Alice", { priv: true });

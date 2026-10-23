@@ -6,6 +6,9 @@
    (tools/rules.py BOARD), so not even the hosts know. Its author changes it or takes it back while notes go up; the
    hosts move any note (dragging it, or "move to") and take any down. Votes go in under a key only their voter knows,
    and nobody sees anyone's until the result is out.
+   A board can be opened hidden: until the host shows them, each person sees only their own notes' words (the others lie
+   face down), so nobody follows the first idea up; the vote waits for them to be shown. Anyone can report a note to the
+   hosts (and StoaTalk's operator), and the projector screen (show.js) shows the board while it's on.
    Room.followBoard keeps up with each board; this draws it and makes the moves. stickyset.js does the sums. */
 import { t } from "./text.js?v=dev";
 import { el, toast, icon, sheet, pickSheet, orToast, confirmSheet, saveFile } from "./dom.js?v=dev";
@@ -16,6 +19,8 @@ import { post, posts } from "./composer.js?v=dev";
 import { KIND } from "./kinds.js?v=dev";
 import { choice } from "./polls.js?v=dev";
 import { BOARD, TEMPLATES, byPlace, placeAt, tally, ranked, boardCsv, boardMd } from "./stickyset.js?v=dev";
+import { reportNote } from "./actions.js?v=dev";
+import { openShow } from "./show.js?v=dev";
 
 const boardOf = (b) => room?.boards.get(b) || null;
 // a host's write: JSON in a plain room, sealed in a Private Salon (Room.openBlob reads it back)
@@ -49,7 +54,7 @@ export async function newBoard() {
   };
   const fill = (tpl) => { names.replaceChildren(); TEMPLATES[tpl].forEach((k) => addCol(t(k))); };
   fill("one");
-  let an = true, v = 3;
+  let an = true, v = 3, hd = false;
   const lim = el("select", { class: "field", id: "sbLim", "aria-label": t("sbLim") }, BOARD.lims.map((n) => el("option", { value: String(n), text: t("sbLimN", { n }), selected: n === 10 })));
   const warn = el("p", { class: "note warn", hidden: true });
   const body = el("div", { class: "sbnew" }, warn,
@@ -59,6 +64,8 @@ export async function newBoard() {
     el("label", { class: "lbl", text: t("sbCols") }), names, addBtn,
     el("label", { class: "lbl", text: t("sbWho") }), choice([["an", t("sbAnon")], ["named", t("sbNamed")]], "an", (x) => (an = x === "an")),
     el("p", { class: "muted small", text: t("sbAnonHint") }),
+    el("label", { class: "lbl", text: t("sbHide") }), choice([["no", t("sbHideNo")], ["yes", t("sbHideYes")]], "no", (x) => (hd = x === "yes")),
+    el("p", { class: "muted small", text: t("sbHideHint") }),
     el("label", { class: "lbl", text: t("sbVotes") }), choice(BOARD.votes.map((n) => [String(n), fmt(n)]), "3", (x) => (v = +x)),
     el("label", { class: "lbl", for: "sbLim", text: t("sbLim") }), lim);
   for (;;) {
@@ -68,11 +75,11 @@ export async function newBoard() {
     const cols = [...names.querySelectorAll("input")].map((x) => x.value.trim().slice(0, BOARD.col)).filter(Boolean).map((n, i) => ({ k: String(i), n }));
     if (!name) { warn.textContent = t("sbNeedTitle"); warn.hidden = false; continue; }
     if (!cols.length) { warn.textContent = t("sbNeedCol"); warn.hidden = false; continue; }
-    return start(name, cols, { v, an, lim: +lim.value });
+    return start(name, cols, { v, an, hd, lim: +lim.value });
   }
 }
 // the card and the board go in one write: who opened it, its columns, and where it's at
-async function start(name, cols, { v, an, lim }) {
+async function start(name, cols, { v, an, hd, lim }) {
   const r = room, uid = backend.uid;
   let b = null;
   const ok = await post(KIND.board, { t: name }, async (id) => {
@@ -80,7 +87,7 @@ async function start(name, cols, { v, an, lim }) {
     return {
       [r.api.root(`sb/${id}/by`)]: uid,
       [r.api.root(`sb/${id}/cols`)]: await blob(r, cols, `bm:${id}`),
-      [r.api.root(`sb/${id}/live`)]: { ph: "add", v, lim, an, lock: false },
+      [r.api.root(`sb/${id}/live`)]: { ph: "add", v, lim, an, lock: false, ...(hd ? { hd: true } : {}) },
     };
   }, { wait: true });
   if (ok && b && r === room) openBoard(b);
@@ -92,21 +99,31 @@ async function hostMenu(b) {
   const e = boardOf(b), l = e?.live;
   if (!l) return;
   const rows = [
-    l.ph === "add" ? ["vote", t("sbToVote"), "primary"] : null,
+    l.hd ? ["reveal", t("sbReveal"), "primary"] : null,
+    l.ph === "add" ? ["vote", t("sbToVote"), l.hd ? "" : "primary"] : null,
     l.ph === "vote" ? ["add", t("sbToAdd")] : null,
     l.ph !== "done" ? ["done", t("sbToDone"), l.ph === "vote" ? "primary" : ""] : null,
     l.ph === "add" ? (l.lock ? ["unlock", t("sbUnlock")] : ["lock", t("sbLock")]) : null,
     l.ph !== "done" ? ["cols", t("sbEditCols")] : null,
+    ["show", t("sbProject")],
     ["export", t("sbExport")],
     ["close", t("close")],
   ].filter(Boolean);
   const a = await sheet(room.msgs.get(b)?.board.t || t("sticky"), null, rows);
-  if (a === "vote") step(b, { "live/ph": "vote" });
+  // (the vote and the result show a hidden board's notes with them)
+  const shown = l.hd ? { "live/hd": false } : {};
+  if (a === "reveal") reveal(b);
+  else if (a === "vote") step(b, { "live/ph": "vote", ...shown });
   else if (a === "add") step(b, { "live/ph": "add" });
-  else if (a === "done" && (await confirmSheet(t("sbToDone"), t("sbDoneBody"), t("sbToDone"), "primary"))) step(b, { "live/ph": "done" });
+  else if (a === "done" && (await confirmSheet(t("sbToDone"), t("sbDoneBody"), t("sbToDone"), "primary"))) step(b, { "live/ph": "done", ...shown });
+  else if (a === "show") openShow();
   else if (a === "lock" || a === "unlock") step(b, { "live/lock": a === "lock" });
   else if (a === "cols") editCols(b);
   else if (a === "export") exportBoard(b);
+}
+// everyone sees every note's words, for good
+async function reveal(b) {
+  if (boardOf(b)?.live?.hd && (await confirmSheet(t("sbReveal"), t("sbRevealBody"), t("sbReveal"), "primary"))) step(b, { "live/hd": false });
 }
 // rename, add, or take away an empty column
 async function editCols(b) {
@@ -139,11 +156,14 @@ async function editCols(b) {
 }
 
 /* ---------- notes ---------- */
-// write a note (new, or mine changed): sealed in a Private Salon with my name, if the board names people
+// write a note (new, or mine changed): its words sealed in a Private Salon with my name, if the board names people;
+// { note, w }, the words in w apart from the note on a hidden board (w null on any other)
 async function noteBody(b, id, e, { t: text, c, k, o }) {
   const m = room.members[backend.uid] || me(), named = !e.live.an;
-  if (room.cipher) return { x: await room.cipher.seal({ t: text, ...(named ? { n: m.name, a: m.avatar } : {}) }, `bn:${b}:${id}`), c: String(c), k, o };
-  return { t: text, c: String(c), k, o, ...(named ? { nm: m.name, av: m.avatar } : {}) };
+  const words = room.cipher ? { x: await room.cipher.seal({ t: text, ...(named ? { n: m.name, a: m.avatar } : {}) }, `bn:${b}:${id}`) }
+    : { t: text, ...(named ? { nm: m.name, av: m.avatar } : {}) };
+  const at = { c: String(c), k, o };
+  return e.live.hd === undefined ? { note: { ...words, ...at }, w: null } : { note: at, w: words };
 }
 // the box a note is written in: its words, its colour and its column
 async function noteSheet(e, { title, text = "", c = 0, k }) {
@@ -186,9 +206,10 @@ async function addNote(b, k) {
   if (e.live.ph !== "add" || e.live.lock) return toast(t("sbNotAdding"));
   const id = backend.pushKey(room.api.ref(`sb/${b}/n`));
   const last = [...e.notes.entries()].map(([nid, x]) => ({ id: nid, ...x })).filter((x) => colOf(e, x) === n.k).sort(byPlace).pop();
-  const body = await noteBody(b, id, e, { ...n, o: placeAt(last ? [last] : [], last ? 1 : 0) });
+  const { note, w } = await noteBody(b, id, e, { ...n, o: placeAt(last ? [last] : [], last ? 1 : 0) });
   e.mine.add(id); e.asked.add(id);
-  if (!(await posts.write(room.api.newNote(b, id, body), "notes"))) e.mine.delete(id);
+  if (!(await posts.write(room.api.newNote(b, id, note, w), "notes"))) e.mine.delete(id);
+  else room?.followWords(b);
 }
 async function editNote(b, id) {
   const e = boardOf(b), n = e?.notes.get(id);
@@ -199,12 +220,13 @@ async function editNote(b, id) {
   if (!cur) return toast(t("sbNoteGone"));
   // moved to another column: at the end of it
   const o = out.k === colOf(e, cur) ? cur.o : placeAt(colNotes(e, out.k).filter((x) => x.id !== id), colNotes(e, out.k).filter((x) => x.id !== id).length);
-  orToast(room.api.editNote(b, id, { ...(await noteBody(b, id, e, { ...out, o })), at: cur.at }));
+  const { note, w } = await noteBody(b, id, e, { ...out, o });
+  orToast(room.api.editNote(b, id, { ...note, at: cur.at }, w));
 }
 async function dropNote(b, id) {
   const e = boardOf(b);
   if (!e || !(await confirmSheet(t("sbDrop"), t("sbDropBody"), t("sbDrop")))) return;
-  orToast(room.api.dropNote(b, id, e.mine.has(id)));
+  orToast(room.api.dropNote(b, id, room.isStaff()));
 }
 const colNotes = (e, k) => [...e.notes.entries()].map(([id, n]) => ({ id, ...n })).filter((n) => colOf(e, n) === k).sort(byPlace);
 function moveNote(b, id, k, i) {
@@ -231,18 +253,20 @@ async function noteMenu(b, id) {
   const e = boardOf(b), n = e?.notes.get(id), l = e?.live;
   if (!n) return;
   const mine = e.mine.has(id), staff = room.isStaff();
-  const card = el("div", { class: `sbbig sn${n.c}` }, el("p", { text: n.t }),
+  const card = el("div", { class: `sbbig sn${n.c}` + (n.hidden ? " facedown" : "") }, el("p", { text: n.hidden ? t("sbFaceDown") : n.t }),
     el("small", { class: "muted" }, [n.nm ? `${n.av} ${n.nm}` : null, mine ? t("sbYours") : null, l.ph === "done" ? t("sbVotesGot", { n: counts(e)[id] || 0 }) : null].filter(Boolean).join(" · ")));
   const rows = [
     mine && l.ph === "add" ? ["edit", t("sbEdit1")] : null,
     canMove(e, id) && colsOf(e).length > 1 ? ["move", t("sbMoveTo")] : null,
     (mine && l.ph === "add") || staff ? ["del", t("sbDrop"), "danger"] : null,
+    !mine && !staff && !n.hidden ? ["report", t("report")] : null,
     ["close", t("close")],
   ].filter(Boolean);
   const a = await sheet(null, card, rows);
   if (a === "edit") editNote(b, id);
   else if (a === "move") moveTo(b, id);
   else if (a === "del") dropNote(b, id);
+  else if (a === "report") reportNote(b, id, n);
 }
 // one more vote on a note (or one fewer), under my own key; nobody sees whose until the result is out
 async function vote(b, id, more) {
@@ -339,6 +363,7 @@ function draw() {
   if (view.drag?.on) { view.drag.later = true; return; } // drawn again once the note is dropped
   const l = e.live, b = view.b, staff = room.isStaff();
   view.ov.querySelector(".sbstep").textContent = l ? status(e) : "";
+  const hid = l?.hd === true;
   view.more.hidden = !l || (!staff && l.ph !== "done");
   if (!l) return view.body.replaceChildren(el("p", { class: "muted", text: t("loading") }));
   // where it was scrolled to stays
@@ -347,7 +372,8 @@ function draw() {
   const votes = counts(e), mineV = myVotes(e), cols = colsOf(e);
   const bar = el("div", { class: "sbbar " + l.ph },
     el("b", { text: t(l.ph === "add" ? (l.lock ? "sbPaused" : "sbAdding") : l.ph === "vote" ? "sbVoting" : "sbOver") }),
-    el("span", { text: l.ph === "add" ? t(l.lock ? "sbLockedHint" : l.an ? "sbAddHintAnon" : "sbAddHintNamed") : l.ph === "vote" ? t("sbVotesLeft", { n: l.v - e.picks.length, total: l.v }) : t("sbOverHint") }),
+    el("span", { text: l.ph === "add" ? t(l.lock ? "sbLockedHint" : hid ? "sbHiddenHint" : l.an ? "sbAddHintAnon" : "sbAddHintNamed") : l.ph === "vote" ? t("sbVotesLeft", { n: l.v - e.picks.length, total: l.v }) : t("sbOverHint") }),
+    hid && staff ? el("button", { type: "button", class: "btn small primary", onclick: () => reveal(b) }, icon("eye", "sm"), el("span", { text: t("sbReveal") })) : null,
     l.ph === "done" ? el("button", { type: "button", class: "btn small", onclick: () => exportBoard(b) }, icon("download", "sm"), el("span", { text: t("sbExport") })) : null);
   const tabs = cols.length > 1 ? el("div", { class: "sbtabs", role: "tablist" }, cols.map((c) => el("button", { type: "button", class: "chip", "data-k": c.k,
     onclick: () => view.body.querySelector(`.sbcol[data-k="${c.k}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }) },
@@ -375,10 +401,10 @@ function noteEl(b, e, n, { votes, mine }) {
       mine ? el("button", { type: "button", class: "sbvbtn", "aria-label": t("sbUnvote"), onclick: (ev) => { ev.stopPropagation(); vote(b, n.id, false); } }, "−") : null,
       mine ? el("b", { class: "sbmine", "aria-label": t("sbMyVotes", { n: mine }), text: "●".repeat(Math.min(mine, 5)) }) : null,
       el("button", { type: "button", class: "sbvbtn plus", "aria-label": t("sbVote"), disabled: e.picks.length >= l.v || null, onclick: (ev) => { ev.stopPropagation(); vote(b, n.id, true); } }, "+")) : null);
-  const node = el("div", { class: `sbnote sn${n.c}` + (own ? " own" : "") + (canMove(e, n.id) ? " movable" : ""), "data-id": n.id, role: "button", tabindex: "0",
-    "aria-label": n.t, onclick: () => { if (!view?.drag?.moved) noteMenu(b, n.id); },
+  const node = el("div", { class: `sbnote sn${n.c}` + (own ? " own" : "") + (n.hidden ? " facedown" : "") + (canMove(e, n.id) ? " movable" : ""), "data-id": n.id, role: "button", tabindex: "0",
+    "aria-label": n.hidden ? t("sbFaceDown") : n.t, onclick: () => { if (!view?.drag?.moved) noteMenu(b, n.id); },
     onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); noteMenu(b, n.id); } } },
-    el("p", { text: n.t }), foot);
+    n.hidden ? el("p", { class: "sbhid", "aria-hidden": "true" }, icon("eye-off")) : el("p", { text: n.t }), foot);
   if (canMove(e, n.id)) node.addEventListener("pointerdown", (ev) => pressNote(ev, b, n.id, node));
   return node;
 }
@@ -495,4 +521,33 @@ async function exportBoard(b) {
   saveFile(url, `notes-${room.code}-${v.board.t.replace(/[\\/:*?"<>|\s]+/g, "-").slice(0, 40)}.${a}`);
   setTimeout(() => URL.revokeObjectURL(url), 10000);
   backend.stat("exports");
+}
+
+/* ---------- on the projector (show.js) ---------- */
+// the board the projector screen shows: one that's on, or one it saw end a few minutes ago (its result)
+const SHOW_AFTER = 5 * 60e3, seenOn = new Map(); // board -> when this screen last saw it on
+export function shownBoard() {
+  const now = backend.now(), on = [...(room?.boards || [])].reverse().find(([b, e]) => open(e) && room.msgs.get(b)?.board);
+  if (on) { seenOn.set(on[0], now); return on[0]; }
+  for (const [b, at] of seenOn) if (at > now - SHOW_AFTER && boardOf(b)?.live && room.msgs.get(b)?.board) return b;
+  return null;
+}
+// the screen: the columns side by side, every note as large as fits, nothing to tap; face down while hidden
+export function boardScreen(b) {
+  const e = boardOf(b), l = e?.live, v = room.msgs.get(b);
+  if (!l || !v) return null;
+  const votes = counts(e), cols = colsOf(e);
+  const head = el("div", { class: "sqzh" }, el("span", { class: "qlive" }, icon("sticky"), el("span", { text: t("sticky") })), el("b", { text: v.board.t }),
+    el("span", { class: "sqzstep", text: status(e) }));
+  const hint = l.hd ? t("sbShowHidden") : l.ph === "add" ? t(l.lock ? "sbLockedHint" : "sbShowAdd") : l.ph === "vote" ? t("sbShowVote") : t("sbOverHint");
+  return el("div", { class: "ssb " + l.ph }, head, el("p", { class: "sqzjoin", text: hint }),
+    el("div", { class: "ssbcols", style: `--n:${cols.length}` }, cols.map((c) => {
+      let list = colNotes(e, c.k);
+      if (l.ph === "done") list = list.map((n) => ({ ...n, v: votes[n.id] || 0 })).sort((x, y) => y.v - x.v || byPlace(x, y));
+      return el("section", { class: "ssbcol" }, el("h2", {}, el("span", { text: c.n }), el("small", { text: fmt(list.length) })),
+        el("div", { class: "ssbnotes" }, list.map((n) => el("div", { class: `ssbnote sn${n.c}` + (n.hidden ? " facedown" : "") },
+          n.hidden ? icon("eye-off") : el("p", { text: n.t }),
+          n.nm && !n.hidden ? el("small", { text: `${n.av} ${n.nm}` }) : null,
+          l.ph === "done" ? el("b", { class: "sbv" + (n.v ? "" : " none") }, icon("upvote"), el("span", { text: fmt(n.v) })) : null))));
+    })));
 }

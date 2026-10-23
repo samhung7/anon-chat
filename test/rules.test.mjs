@@ -1205,3 +1205,86 @@ test("sticky notes in a Private Salon: the columns, the notes and the votes are 
   await assertFails(vote("bob", "b2", "kb", `${NOTE(2)},${NOTE(2)}`, true));   // picks in the clear
   await assertSucceeds(vote("bob", "b2", "kb", "c2VhbGVk", true));
 });
+
+// a board opened hidden: the words go apart (w/{note}), each author reads their own until the host shows them all
+const putHidden = async (uid, b, id, words = { t: "先藏起來的點子" }, body = {}) => {
+  await admin((d) => remove(ref(d, `rooms/${C}/members/${uid}/ls`)));
+  return update(ref(db(uid), `rooms/${C}`), { [`sb/${b}/n/${id}`]: { c: "0", k: "0", o: "i", at: T, ...body }, [`sb/${b}/nb/${id}`]: uid,
+    [`sb/${b}/w/${id}`]: words, [`members/${uid}/ls`]: T, [`members/${uid}/ln`]: id });
+};
+
+test("sticky notes, hidden: each author reads only their own words until the host shows them all, before any vote", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertSucceeds(newBoard("alice", "b1", { live: sbLive({ hd: true }) }));
+  await assertFails(newBoard("alice", "b2", { live: sbLive({ hd: "yes" }) }));
+  await assertSucceeds(putHidden("bob", "b1", NOTE(1)));
+  await assertFails(putNote("carol", "b1", NOTE(2)));   // the words in the note itself
+  await assertFails(putHidden("carol", "b1", NOTE(3), { t: "" }));
+  await assertFails(putHidden("carol", "b1", NOTE(4), { t: "x", nm: "carol", av: "🦊" }));   // the board is anonymous
+  await assertFails(putHidden("carol", "b1", NOTE(5), { t: "x" }, { t: "藏不住" }));
+  await assertFails(update(ref(db("carol"), `rooms/${C}`), { [`sb/b1/n/${NOTE(6)}`]: { c: "0", k: "0", o: "i", at: T }, [`sb/b1/nb/${NOTE(6)}`]: "carol", [`members/carol/ls`]: T, [`members/carol/ln`]: NOTE(6) }));   // no words
+  await assertFails(set(ref(db("carol"), `${SB("b1")}/w/${NOTE(1)}`), { t: "搶寫" }));
+  // nobody else reads them, not the owner either
+  await assertSucceeds(get(ref(db("bob"), `${SB("b1")}/w/${NOTE(1)}`)));
+  await assertFails(get(ref(db("alice"), `${SB("b1")}/w/${NOTE(1)}`)));
+  await assertFails(get(ref(db("carol"), `${SB("b1")}/w`)));
+  await assertSucceeds(get(ref(db("carol"), `${SB("b1")}/n`)));   // that they're there, and where, everyone sees
+  // the author changes the words
+  await assertSucceeds(update(ref(db("bob"), SB("b1")), { [`n/${NOTE(1)}`]: { c: "2", k: "0", o: "i", at: T }, [`w/${NOTE(1)}`]: { t: "改過的點子" } }));
+  await assertFails(set(ref(db("alice"), `${SB("b1")}/w/${NOTE(1)}/t`), "改掉"));
+  // no vote, no result, while hidden; shown only once and for good
+  await assertFails(phase("alice", "b1", "vote"));
+  await assertFails(phase("alice", "b1", "done"));
+  await assertFails(set(ref(db("bob"), `${SB("b1")}/live/hd`), false));
+  await assertFails(set(ref(db("alice"), `${SB("b1")}/live/hd`), null));
+  await assertSucceeds(update(ref(db("alice"), `${SB("b1")}/live`), { ph: "vote", hd: false }));
+  await assertSucceeds(get(ref(db("carol"), `${SB("b1")}/w`)));
+  await assertFails(set(ref(db("alice"), `${SB("b1")}/live/hd`), true));
+  await assertSucceeds(phase("alice", "b1", "add"));
+  // a board not opened hidden can't turn hidden
+  await assertSucceeds(newBoard("alice", "b3"));
+  await assertFails(set(ref(db("alice"), `${SB("b3")}/live/hd`), true));
+  await assertFails(get(ref(db("carol"), `${SB("b3")}/w`)));
+  // taken down with its words
+  await assertFails(update(ref(db("alice"), SB("b1")), { [`w/${NOTE(1)}`]: null }));
+  await assertSucceeds(update(ref(db("alice"), SB("b1")), { [`n/${NOTE(1)}`]: null, [`nb/${NOTE(1)}`]: null, [`w/${NOTE(1)}`]: null }));
+});
+
+test("sticky notes, hidden, on a named board: the words carry the author's room name", async () => {
+  await createRoom("alice"); await join("bob");
+  await assertSucceeds(newBoard("alice", "b1", { live: sbLive({ an: false, hd: true }) }));
+  await assertFails(putHidden("bob", "b1", NOTE(1)));   // no name
+  await assertFails(putHidden("bob", "b1", NOTE(2), { t: "x", nm: "假名", av: "🦊" }));
+  await assertSucceeds(putHidden("bob", "b1", NOTE(3), { t: "x", nm: "bob", av: "🦊" }));
+});
+
+test("sticky notes, hidden, in a Private Salon: the words are sealed", async () => {
+  await createEnc("alice"); await joinEnc("bob", H("b"));
+  await assertSucceeds(newBoard("alice", "b2", { sealed: true, live: sbLive({ hd: true }) }));
+  await assertFails(putHidden("bob", "b2", NOTE(4)));   // words in the clear
+  await assertSucceeds(putHidden("bob", "b2", NOTE(5), { x: "c2VhbGVk" }));
+});
+
+test("sticky notes: a note is reported to the hosts and the operator, never by its author, who goes unnamed", async () => {
+  await createRoom("alice"); await join("bob"); await join("carol");
+  await assertSucceeds(newBoard("alice", "b1"));
+  await assertSucceeds(putNote("bob", "b1", NOTE(1)));
+  const key = (uid) => `${C}_${NOTE(1)}_${uid}`;
+  const rep = (uid, b = "b1", extra = {}) => update(ref(db(uid)), { [`rooms/${C}/reports/${NOTE(1)}/${uid}`]: { r: 2, at: T, b },
+    [`ops/reports/${key(uid)}`]: { code: C, msg: NOTE(1), by: uid, r: 2, at: T, b, t: "辦一場讀書會", ...extra } });
+  await assertFails(rep("bob"));   // its own author
+  await assertFails(rep("carol", "b9"));   // not on that board
+  await assertFails(rep("carol", "b1", { who: "bob" }));   // naming someone
+  await assertFails(set(ref(db("carol"), `rooms/${C}/reports/${NOTE(1)}/carol`), { r: 2, at: T }));   // no such message
+  await assertSucceeds(rep("carol"));
+  await assertSucceeds(get(ref(db("alice"), `rooms/${C}/reports/${NOTE(1)}`)));
+  // the operator looks up who wrote it, and takes it down
+  await makeAdmin("op");
+  await assertSucceeds(get(ref(opDb(), `rooms/${C}/sb/b1/nb/${NOTE(1)}`)));
+  await assertSucceeds(update(ref(opDb()), { [`ops/reports/${key("carol")}`]: null, [`rooms/${C}/sb/b1/n/${NOTE(1)}`]: null, [`rooms/${C}/sb/b1/nb/${NOTE(1)}`]: null,
+    [`rooms/${C}/sb/b1/w/${NOTE(1)}`]: null, [`rooms/${C}/reports/${NOTE(1)}`]: null }));
+  // a host takes a reported note down with its reports
+  await assertSucceeds(putNote("bob", "b1", NOTE(2)));
+  await assertSucceeds(set(ref(db("carol"), `rooms/${C}/reports/${NOTE(2)}/carol`), { r: 1, at: T, b: "b1" }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { [`sb/b1/n/${NOTE(2)}`]: null, [`sb/b1/nb/${NOTE(2)}`]: null, [`sb/b1/w/${NOTE(2)}`]: null, [`reports/${NOTE(2)}`]: null }));
+});

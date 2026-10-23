@@ -44,11 +44,11 @@ export class RoomApi {
   ballotKey(id) { return backend.pushKey(this.ref("ab/" + id)); }
   closePoll(id) { return this.set(`msgs/${id}/closed`, true); }
   pin(slot, id) { return this.set("meta/pins/" + slot, id); }
-  // a report goes to the room's owner and co-hosts, and to StoaTalk's operator with what the reporter saw (seen: t, n, f, enc;
-  // p: the long post a reported comment is under)
+  // a report goes to the room's owner and co-hosts, and to StoaTalk's operator with what the reporter saw (seen: who, t, n,
+  // f, enc; p: the long post a reported comment is under; b: the board a reported note is on, whose author goes unnamed)
   report(id, reason, seen) {
     const at = backend.stamp();
-    return backend.update({ [this.root(`reports/${id}/${this.uid}`)]: { r: reason, at, ...(seen.p ? { p: seen.p } : {}) },
+    return backend.update({ [this.root(`reports/${id}/${this.uid}`)]: { r: reason, at, ...(seen.p ? { p: seen.p } : {}), ...(seen.b ? { b: seen.b } : {}) },
       [`ops/reports/${this.code}_${id}_${this.uid}`]: { code: this.code, msg: id, by: this.uid, r: reason, at, ...seen } });
   }
   dismissReport(id) { return this.set("reports/" + id, null); }
@@ -119,18 +119,21 @@ export class RoomApi {
   // a host moves the board on, or changes its columns (fields under sb/{b})
   boardStep(b, fields) { return this.update(Object.fromEntries(Object.entries(fields).map(([k, v]) => [`sb/${b}/${k}`, v]))); }
   // a new note, with who wrote it apart, stamped like a message (posting is rate-limited: composer.js posts.write takes it);
-  // as paths from the root
-  newNote(b, id, note) {
+  // as paths from the root. On a hidden board its words (w) go apart from it
+  newNote(b, id, note, w) {
     const T = backend.stamp();
-    return { [this.root(`sb/${b}/n/${id}`)]: { ...note, at: T }, [this.root(`sb/${b}/nb/${id}`)]: this.uid,
+    return { [this.root(`sb/${b}/n/${id}`)]: { ...note, at: T }, [this.root(`sb/${b}/nb/${id}`)]: this.uid, ...(w ? { [this.root(`sb/${b}/w/${id}`)]: w } : {}),
       [this.root(`members/${this.uid}/ls`)]: T, [this.root(`members/${this.uid}/ln`)]: id, [this.root("meta/last")]: T };
   }
   // its author changes it (at stays as it was)
-  editNote(b, id, note) { return this.set(`sb/${b}/n/${id}`, note); }
+  editNote(b, id, note, w) { return w ? this.update({ [`n/${id}`]: note, [`w/${id}`]: w }, `sb/${b}`) : this.set(`sb/${b}/n/${id}`, note); }
   // where it sits: its column and its place there
   moveNote(b, id, k, o) { return this.update({ [`n/${id}/k`]: k, [`n/${id}/o`]: o }, `sb/${b}`); }
-  // its author takes it back, along with who wrote it; a host takes any note down
-  dropNote(b, id, mine) { return this.update({ [`n/${id}`]: null, ...(mine ? { [`nb/${id}`]: null } : {}) }, `sb/${b}`); }
+  // its author takes it back, or a host takes any note down: with who wrote it, its words (on a hidden board) and any
+  // reports on it
+  dropNote(b, id, staff) {
+    return this.update({ [`sb/${b}/n/${id}`]: null, [`sb/${b}/nb/${id}`]: null, [`sb/${b}/w/${id}`]: null, ...(staff ? { [`reports/${id}`]: null } : {}) });
+  }
   // my votes under my own key; the first names the key
   boardVote(b, key, picks, first) { return this.update({ ...(first ? { [`bk/${this.uid}`]: key } : {}), [`v/${key}`]: picks }, `sb/${b}`); }
   voteKey(b) { return backend.pushKey(this.ref(`sb/${b}/v`)); }
