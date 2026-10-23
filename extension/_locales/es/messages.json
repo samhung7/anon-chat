@@ -1,0 +1,11 @@
+{
+  "name": {
+    "message": "StoaTalk"
+  },
+  "description": {
+    "message": "StoaTalk en el panel lateral: salas de chat con un código de 4 caracteres, con la misma identidad que en tu pestaña."
+  },
+  "open": {
+    "message": "Abrir StoaTalk en el panel lateral"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": {
+    "message": "StoaTalk"
+  },
+  "description": {
+    "message": "StoaTalk in the side panel: chat rooms you join with a 4-character code, as the same you as your StoaTalk tab."
+  },
+  "open": {
+    "message": "Open StoaTalk in the side panel"
+  }
+}

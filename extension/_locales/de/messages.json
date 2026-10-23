@@ -1,0 +1,11 @@
+{
+  "name": {
+    "message": "StoaTalk"
+  },
+  "description": {
+    "message": "StoaTalk in der Seitenleiste: Chaträume mit einem 4-stelligen Code, als dieselbe Person wie in deinem Tab."
+  },
+  "open": {
+    "message": "StoaTalk in der Seitenleiste öffnen"
+  }
+}

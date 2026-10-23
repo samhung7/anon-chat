@@ -1,0 +1,11 @@
+{
+  "name": {
+    "message": "StoaTalk"
+  },
+  "description": {
+    "message": "在侧边栏打开 StoaTalk：输入 4 位代码就能聊，身份与标签页中的 StoaTalk 相同。"
+  },
+  "open": {
+    "message": "在侧边栏打开 StoaTalk"
+  }
+}

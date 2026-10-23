@@ -1,8 +1,15 @@
 # Response headers on Cloudflare Pages.
+# No site may frame StoaTalk, except a browser extension's own page (the StoaTalk side panel, extension/).
 /*
   X-Content-Type-Options: nosniff
-  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'self' chrome-extension:
   Referrer-Policy: strict-origin-when-cross-origin
+
+# the operator console is never framed, not even by an extension (Pages joins this to the rule above, and both apply)
+/admin
+  Content-Security-Policy: frame-ancestors 'none'
+/admin.html
+  Content-Security-Policy: frame-ancestors 'none'
 
 # the same site at the Pages addresses (stoatalk.pages.dev and its preview deployments) stays out of search results,
 # so Google lists stoatalk.app only
