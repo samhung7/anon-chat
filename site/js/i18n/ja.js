@@ -671,6 +671,7 @@ I18N.add("ja", {
   qzTitlePh: "問題集の名前",
   qzQPh: "問題",
   qzOptPh: "選択肢 {n}",
+  qzOptPhOpt: "選択肢 {n}（任意）",
   qzMarkRight: "正解",
   qzAddQ: "問題を追加",
   qzQn: "第 {n} 問",

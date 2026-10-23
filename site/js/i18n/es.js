@@ -671,6 +671,7 @@ I18N.add("es", {
   qzTitlePh: "Nombre del set",
   qzQPh: "Pregunta",
   qzOptPh: "Opción {n}",
+  qzOptPhOpt: "Opción {n} (opcional)",
   qzMarkRight: "Respuesta correcta",
   qzAddQ: "Añadir pregunta",
   qzQn: "Pregunta {n}",

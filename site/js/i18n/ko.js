@@ -671,6 +671,7 @@ I18N.add("ko", {
   qzTitlePh: "문제집 이름",
   qzQPh: "문제",
   qzOptPh: "보기 {n}",
+  qzOptPhOpt: "보기 {n} (선택)",
   qzMarkRight: "정답",
   qzAddQ: "문제 추가",
   qzQn: "{n}번 문제",

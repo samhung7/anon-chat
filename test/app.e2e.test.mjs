@@ -1343,6 +1343,8 @@ test("quiz: the host writes a set and runs it; players join from the card, answe
 
   const ed = await writeQuiz(alice, "Maths", [{ t: "2 + 2 = ?", o: ["3", "4", "5"], right: 1 }, { t: "Which is even?", o: ["7", "8"], right: 1 }]);
   await ed.locator(".pfoot", { hasText: "Saved on this device" }).waitFor();
+  assert.deepEqual(await ed.locator(".qzeq").first().locator(".qzeo input").evaluateAll((l) => l.map((i) => i.placeholder)),
+    ["Option 1", "Option 2", "Option 3 (optional)", "Option 4 (optional)"], "two options are enough");
   await shot(alice, "quiz-editor");
   await ed.locator(".bar .btn.primary").click();   // Start quiz
   await quizPage(alice).locator(".qzplayers, .muted", { hasText: "Nobody has joined yet" }).first().waitFor();

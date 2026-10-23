@@ -671,6 +671,7 @@ I18N.add("zh-CN", {
   qzTitlePh: "题目集名称",
   qzQPh: "题目",
   qzOptPh: "选项 {n}",
+  qzOptPhOpt: "选项 {n}（选填）",
   qzMarkRight: "正确答案",
   qzAddQ: "添加题目",
   qzQn: "第 {n} 题",
