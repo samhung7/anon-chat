@@ -4,8 +4,9 @@
    Private messages: each device has an ECDH P-256 key pair (chat-dh); its public key sits on the member record,
    and two people derive the same AES-GCM key. Someone signed in with Google on several devices is one person with
    one key pair: the first device's (its public half in users/{uid}/dh, account.js). Another device of theirs is
-   "unpaired" until that pair is brought over to it, and meanwhile neither reads nor sends private messages. Every sealed value is bound to who it belongs to (AES-GCM
-   additional data), so the server can't move a message or a nickname onto someone else. */
+   "unpaired" until that pair is brought over to it (pairing.js), and meanwhile neither reads nor sends private
+   messages. Every sealed value is bound to who it belongs to (AES-GCM additional data), so the server can't move a
+   message or a nickname onto someone else. */
 import { store, KEYS } from "./storage.js?v=dev";
 
 const SUB = crypto.subtle, TE = new TextEncoder(), TD = new TextDecoder();
@@ -84,6 +85,22 @@ export const setAccountPub = (pub) => (accountPub = pub || null);
 export const publicKey = async () => accountPub || (await deviceKeys()).pub;
 // this device holds the private half of that key
 export const paired = async () => !accountPub || accountPub === (await deviceKeys()).pub;
+// the key pair as this device keeps it (JWK and public key), to hand to another device of the same person, and
+// taking one handed over (pairing.js)
+export async function deviceKeysKept() { await deviceKeys(); return JSON.parse(store.get(KEYS.dh)); }
+export async function adoptDeviceKeys(kept) {
+  if (typeof kept?.pub !== "string" || !kept.priv) throw new Error("no key pair");
+  await SUB.importKey("jwk", kept.priv, EC, false, ["deriveBits"]); // it opens
+  store.set(KEYS.dh, JSON.stringify({ priv: kept.priv, pub: kept.pub }));
+  device = null;
+}
+// a one-off key pair, for one pairing: its public key, and the AES-GCM key it shares with the other side's
+export async function oneOff() {
+  const kp = await SUB.generateKey(EC, false, ["deriveBits"]);
+  return { pub: b64u(await SUB.exportKey("raw", kp.publicKey)),
+    shared: async (theirPub, info) => hkdf(await SUB.deriveBits({ name: "ECDH", public: await SUB.importKey("raw", unb64u(theirPub), EC, false, []) }, kp.privateKey, 256),
+      info, AES, ["encrypt", "decrypt"]) };
+}
 // the AES-GCM key shared with whoever has this public key; info names the conversation
 export async function sharedKey(theirPub, info) {
   const theirs = await SUB.importKey("raw", unb64u(theirPub), EC, false, []);

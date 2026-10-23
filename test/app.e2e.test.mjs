@@ -1792,8 +1792,10 @@ async function signInGoogle(page, email, { switching = false } = {}) {
   await page.locator("#createBtn").waitFor();
 }
 
-test("Google account: the same person on two devices, rooms follow, private messages stay with the first device; signing out and deleting", async () => {
+test("Google account: the same person on two devices, rooms follow, private messages stay with the first device until the second is paired; signing out and deleting", async () => {
   const alice = await person("a"), bob = await person("b");
+  const { code: salon } = await createRoom(alice, "Alice", { priv: true, title: "Secret" });
+  await alice.goto(`${base}/?emu&as=a`); await alice.locator("#createBtn").waitFor();
   const { code, url } = await createRoom(alice, "Alice", { title: "Workshop" });
   await joinByLink(bob, url, "Bob");
   const aId = await emuUid(alice, "a");
@@ -1834,10 +1836,37 @@ test("Google account: the same person on two devices, rooms follow, private mess
   await bubble(alice, "only for alice").waitFor();
   await tablet.locator("#peopleBtn").click();
   await sheet(tablet).locator(".st-mrow", { hasText: "Bob" }).locator("[data-dm]").click();
-  await tablet.locator("#list .msg .bub", { hasText: "first device you signed in on" }).waitFor();
+  await tablet.locator("#list .msg .bub", { hasText: "isn't paired yet" }).waitFor();
   await tablet.locator("#text").fill("can't send this");
   await tablet.locator("#composer .send").click();
-  await tablet.locator(".toast", { hasText: "first device you signed in on" }).waitFor();
+  await tablet.locator(".toast", { hasText: "isn't paired yet" }).waitFor();
+
+  // pairing the tablet: it shows a code; her first device opens it (as its camera would) and sends the keys over
+  await tablet.goto(`${base}/?emu&as=t`); await tablet.locator("#createBtn").waitFor();
+  await accountSheet(tablet);
+  await sheet(tablet).locator(".note", { hasText: "isn't paired yet" }).waitFor();
+  await press(tablet, "pair");
+  const link = await sheet(tablet).locator(".pairqr").getAttribute("data-pair");
+  const pairing = new URL(link).searchParams.get("pair");
+  const [pid] = pairing.split(".");
+  assert.equal((await dbGet(`users/${aId}/pair/${pid}`)).pk, pairing.split(".")[1]);
+  await alice.goto(`${base}/?emu&as=a&pair=${pairing}`);
+  await alice.locator(".overlay", { hasText: "1 Private Salons" }).waitFor();
+  await press(alice, "yes");
+  await alice.locator(".toast", { hasText: "The other device is paired" }).waitFor();
+  const paired = tablet.waitForEvent("load");
+  await tablet.locator(".toast", { hasText: "Paired" }).waitFor();
+  await paired; await tablet.locator("#createBtn").waitFor();
+  assert.equal(await dbGet(`users/${aId}/pair/${pid}`), null);   // nothing left on the server
+  assert.equal(await tablet.evaluate(() => JSON.parse(localStorage.getItem("chat-dh")).pub), pk);
+  assert.equal(await tablet.evaluate((c) => localStorage.getItem("chat-key:" + c), salon), await alice.evaluate((c) => localStorage.getItem("chat-key:" + c), salon));
+  // now the tablet reads her private messages, and opens the Salon she joined on her phone
+  await tablet.locator(`#resume .roomrow[data-code="${code}"]`).click();
+  await tablet.locator("#peopleBtn").click();
+  await sheet(tablet).locator(".st-mrow", { hasText: "Bob" }).locator("[data-dm]").click();
+  await bubble(tablet, "only for alice").waitFor();
+  await tablet.goto(`${base}/?emu&as=t&room=${salon}`);
+  await titleIs(tablet, "Secret");
 
   // signing out on the tablet: a new anonymous id there, and nothing of the account's left on it
   await tablet.goto(`${base}/?emu&as=t`); await tablet.locator("#createBtn").waitFor();

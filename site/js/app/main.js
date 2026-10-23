@@ -19,10 +19,11 @@
      lobby.js     opening and joining          home.js     screens and the home page
      records.js   export, import, saved records (archive.js: the record format)
      identity.js  nickname and animal          notify.js   notifications    pickers.js emoji, GIF, ＋
-     account.js   signing in with Google (optional): the same id on every device
+     account.js   signing in with Google (optional): the same id on every device (pairing.js brings the keys over)
      quick.js     quick replies and the double-tap 👍       scan.js     joining by the room's QR Code */
 import { KLIPY_KEY, IDLE_MS, params } from "./constants.js?v=dev";
-import { $ } from "./dom.js?v=dev";
+import { $, toast } from "./dom.js?v=dev";
+import { t } from "./text.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend, asParam } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
@@ -39,6 +40,7 @@ import { setNotify, watchVisibility } from "./notify.js?v=dev";
 import { openPicker, closePicker, pickerOpen } from "./pickers.js?v=dev";
 import { importFile, recordMenu, showRecordTab } from "./records.js?v=dev";
 import { scanRoom } from "./scan.js?v=dev";
+import { readPair, sendKeys } from "./pairing.js?v=dev";
 import { home, homeMenu, backdrop, adoptOldRoom, turnResumePage, showResume } from "./home.js?v=dev";
 
 I18N.apply();
@@ -204,3 +206,7 @@ if (start && backend.configured) { // an encrypted room's key rides after the #
   $("#home").hidden = true; // straight into the room, without the home page showing first: the loading screen until then
   join(start + location.hash).finally(() => { if (!room || room.gone) home(); else if ($("#chat").hidden) backdrop(); });
 } else home();
+// a pairing code read with the phone's own camera opens here: this device sends its keys to the one showing it
+// (home() has taken it off the address already)
+const pairing = params.get("pair") && readPair(location.origin + "/?pair=" + encodeURIComponent(params.get("pair")));
+if (pairing && backend.configured) backend.connect().then(() => sendKeys(pairing), () => toast(t("tryAgain")));

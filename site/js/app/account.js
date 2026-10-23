@@ -15,7 +15,8 @@ import { $, el, toast, sheet, confirmSheet, icon } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend, EMU } from "./backend.js?v=dev";
 import { params } from "./constants.js?v=dev";
-import { deviceKeys, setAccountPub } from "./crypto.js?v=dev";
+import { deviceKeys, setAccountPub, paired } from "./crypto.js?v=dev";
+import { showPairCode, scanPairCode } from "./pairing.js?v=dev";
 import { deviceId } from "./push.js?v=dev";
 import { forgetLibrary } from "./quizlib.js?v=dev";
 
@@ -168,13 +169,19 @@ export async function accountSheet() {
   const g = backend.google;
   const legal = el("a", { href: "legal.html#account", target: "_blank", rel: "noopener", text: t("acctTerms") });
   if (g) {
+    // a device without the account's keys pairs with one that has them; one that has them scans the others' codes
+    const ok = await paired();
     const body = el("div", { class: "acct" },
       el("p", {}, el("b", { text: t("acctSignedAs", { e: g.email }) })),
+      ok ? null : el("p", { class: "note warn", text: t("acctPairNeed") }),
       el("p", { class: "muted", text: t("acctSyncs") }),
       el("p", { class: "muted small", text: t("acctKeys") }),
       el("p", { class: "small" }, legal));
-    const a = await sheet(t("acctTitleIn"), body, [["close", t("close")], ["out", t("acctSignOut")], ["del", t("acctDelete"), "danger"]]);
-    if (a === "out") signOut();
+    const a = await sheet(t("acctTitleIn"), body, [["close", t("close")], ok ? ["scan", t("acctScanPair")] : ["pair", t("acctPair"), "primary"],
+      ["out", t("acctSignOut")], ["del", t("acctDelete"), "danger"]]);
+    if (a === "pair") showPairCode();
+    else if (a === "scan") scanPairCode();
+    else if (a === "out") signOut();
     else if (a === "del") deleteAccount();
     return;
   }

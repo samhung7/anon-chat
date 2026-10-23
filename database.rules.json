@@ -1093,6 +1093,32 @@
             }
           }
         },
+        "pair": {
+          "$id": {
+            ".validate": "($id.matches(/^[A-Za-z0-9_-]{12}$/)) && (newData.hasChildren(['pk', 'at']))",
+            "pk": {
+              ".validate": "newData.isString() && newData.val().length <= 120 && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
+            },
+            "at": {
+              ".validate": "newData.isNumber() && newData.val() <= now"
+            },
+            "box": {
+              ".validate": "newData.hasChildren(['pk', 'x'])",
+              "pk": {
+                ".validate": "newData.isString() && newData.val().length <= 120 && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
+              },
+              "x": {
+                ".validate": "newData.isString() && newData.val().length <= 60000 && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
         "qzs": {
           "$id": {
             ".validate": "($id.matches(/^[a-z0-9]{8,20}$/)) && (newData.isString() && newData.val().length <= 250000) && (newData.parent().parent().child('qz/' + $id + '/t').exists())"

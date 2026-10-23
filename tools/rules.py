@@ -884,6 +884,15 @@ rules = {"rules": {
             "gone": {".validate": "newData.val() === true"},
             "$other": NO,
         }},
+        # pairing a device (site/js/app/pairing.js): the new device's one-off public key, then the box the paired
+        # device seals its keys into for it. Only ciphertext and public keys, and only the account's own devices see it
+        "pair": {"$id": {
+            ".validate": j(r"$id.matches(/^[A-Za-z0-9_-]{12}$/)", "newData.hasChildren(['pk', 'at'])"),
+            "pk": {".validate": SEALED(120)},
+            "at": {".validate": "newData.isNumber() && newData.val() <= now"},
+            "box": {".validate": "newData.hasChildren(['pk', 'x'])", "pk": {".validate": SEALED(120)}, "x": {".validate": SEALED(60000)}, "$other": NO},
+            "$other": NO,
+        }},
         "qzs": {"$id": {".validate": j(r"$id.matches(/^[a-z0-9]{8,20}$/)", S(250000), "newData.parent().parent().child('qz/' + $id + '/t').exists()")}},
         "$other": NO,
     }},
