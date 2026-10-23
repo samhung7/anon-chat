@@ -19,7 +19,7 @@
      lobby.js     opening and joining          home.js     screens and the home page
      records.js   export, import, saved records (archive.js: the record format)
      identity.js  nickname and animal          notify.js   notifications    pickers.js emoji, GIF, ＋
-     quick.js     quick replies and the double-tap 👍 */
+     quick.js     quick replies and the double-tap 👍       scan.js     joining by the room's QR Code */
 import { KLIPY_KEY, IDLE_MS, params } from "./constants.js?v=dev";
 import { $ } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
@@ -37,6 +37,7 @@ import { people } from "./people.js?v=dev";
 import { setNotify, watchVisibility } from "./notify.js?v=dev";
 import { openPicker, closePicker, pickerOpen } from "./pickers.js?v=dev";
 import { importFile, recordMenu, showRecordTab } from "./records.js?v=dev";
+import { scanRoom } from "./scan.js?v=dev";
 import { home, homeMenu, backdrop, adoptOldRoom, turnResumePage, showResume } from "./home.js?v=dev";
 
 I18N.apply();
@@ -57,6 +58,8 @@ $("#joinForm").addEventListener("submit", (e) => {
   const code = $("#joinCode").value;
   join(pastedLink && cleanCode(pastedLink) === code ? pastedLink : code);
 });
+// the camera reads the room's QR Code: its link joins, key and all
+$("#scanBtn").addEventListener("click", () => scanRoom().then((link) => link && join(link)));
 $("#joinCode").addEventListener("input", (e) => { if (!e.isComposing) e.target.value = cleanCode(e.target.value).slice(0, 4); });
 // what's pasted is cleaned whole, before the 4-character limit would cut it (a link, or "ab cd")
 $("#joinCode").addEventListener("paste", (e) => {
