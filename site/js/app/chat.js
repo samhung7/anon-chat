@@ -16,6 +16,7 @@ import { closePicker } from "./pickers.js?v=dev";
 import { renderQa, refreshWait, watchQa } from "./qa.js?v=dev";
 import { watchShow, SHOW } from "./show.js?v=dev";
 import { watchQuiz } from "./quiz.js?v=dev";
+import { watchBoards } from "./sticky.js?v=dev";
 import { noteNew, offerNotify, hiddenUnread, notifyOn } from "./notify.js?v=dev";
 import { noteComments } from "./comments.js?v=dev";
 import { syncPush } from "./push.js?v=dev";
@@ -39,7 +40,7 @@ export function enter(code, cipher) {
   roomPath(code);
   LIST().replaceChildren(); $("#ageBar").hidden = true; $("#roBox").hidden = true; $("#composer").hidden = false;
   showChat(); offerNotify();
-  watchChat(r); watchQa(r); watchShow(r); watchQuiz(r);
+  watchChat(r); watchQa(r); watchShow(r); watchQuiz(r); watchBoards(r);
   r.start();
 }
 function watchChat(r) {

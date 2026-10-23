@@ -1579,3 +1579,139 @@ test("joining by the room's QR Code: the camera reads it (only a StoaTalk link c
   await bubble(carol, "scanned in").waitFor();
   noErrors();
 });
+
+// sticky-note boards
+const boardPage = (page) => page.locator(".sbov");
+const boardNote = (page, text) => boardPage(page).locator(".sbnote", { hasText: text });
+async function openNewBoard(page, title, tpl) {
+  await page.locator("#composer [data-a=more]").click();
+  await page.locator("#picker .morebtn", { hasText: "Sticky notes" }).click();
+  await page.locator("#sbTitle").fill(title);
+  if (tpl) await sheet(page).locator(".sbtpls .chip", { hasText: tpl }).click();
+}
+async function putNote(page, col, text, colour = 0) {
+  await boardPage(page).locator(`.sbcol[data-k="${col}"] .sbadd`).click();
+  await sheet(page).locator(".sbta").fill(text);
+  await sheet(page).locator(`.sbsw.sn${colour}`).click();
+  await press(page, "yes");
+  await boardNote(page, text).waitFor();
+}
+async function boardMenu(page, a) {
+  await boardPage(page).locator(".gmhead [aria-label='Board menu']").click();
+  await press(page, a);
+}
+
+test("sticky notes: the host opens a board, everyone puts notes up, the host moves them and calls the vote, the result comes out", async () => {
+  const alice = await person("a"), bob = await person("b"), carol = await person("c");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  await joinByLink(carol, url, "Carol");
+  // only the hosts open one
+  await bob.locator("#composer [data-a=more]").click();
+  await bob.locator("#picker .morebtn").first().waitFor();
+  assert.equal(await bob.locator("#picker .morebtn", { hasText: "Sticky notes" }).count(), 0);
+  await bob.locator("#composer [data-a=more]").click();
+
+  await openNewBoard(alice, "Next term", "Pros / Cons");
+  await shot(alice, "sticky-new");
+  await press(alice, "yes");
+  await boardPage(alice).locator(".sbcol").nth(1).waitFor();
+  const [b] = Object.keys(await dbGet(`rooms/${code}/sb`));
+  const board = await dbGet(`rooms/${code}/sb/${b}`);
+  assert.deepEqual(board.live, { ph: "add", v: 3, lim: 10, an: true, lock: false });
+  assert.deepEqual(JSON.parse(board.cols), [{ k: "0", n: "Pros" }, { k: "1", n: "Cons" }]);
+
+  // people come in from the card and put notes up, anonymously
+  await bob.locator(".sbbub .btn", { hasText: "Open board" }).click();
+  await putNote(bob, "0", "Book swap", 2);
+  await carol.locator(".sbbub .btn", { hasText: "Open board" }).click();
+  await putNote(carol, "1", "Too early in the morning", 1);
+  await putNote(carol, "0", "Guest speakers", 3);
+  await boardNote(bob, "Too early").waitFor();
+  await boardNote(alice, "Guest speakers").waitFor();
+  assert.match(await boardNote(bob, "Book swap").textContent(), /Yours/);
+  assert.doesNotMatch(await boardNote(bob, "Too early").textContent(), /Yours/);
+  const notes = await dbGet(`rooms/${code}/sb/${b}/n`);
+  assert.equal(Object.keys(notes).length, 3);
+  assert.ok(Object.values(notes).every((n) => !n.nm && n.t), "anonymous notes carry no name");
+  await shot(carol, "sticky-board");
+  // a member can't move someone else's note; the host moves any (with "move to", or by dragging)
+  await boardNote(bob, "Too early").click();
+  assert.equal(await sheet(bob).locator("[data-a=move]").count(), 0);
+  await bob.keyboard.press("Escape");
+  await boardNote(alice, "Too early").click();
+  await press(alice, "move");
+  await sheet(alice).locator("button[data-k='0']").click();
+  await until(async () => Object.values(await dbGet(`rooms/${code}/sb/${b}/n`)).find((n) => n.t.startsWith("Too early")).k === "0");
+  const from = await boardNote(alice, "Book swap").boundingBox(), to = await boardPage(alice).locator(".sbcol[data-k='1']").boundingBox();
+  await alice.mouse.move(from.x + 20, from.y + 20);
+  await alice.mouse.down();
+  await alice.mouse.move(from.x + 60, from.y + 40, { steps: 4 });
+  await alice.mouse.move(to.x + to.width / 2, to.y + to.height - 20, { steps: 8 });
+  await alice.mouse.up();
+  await until(async () => Object.values(await dbGet(`rooms/${code}/sb/${b}/n`)).find((n) => n.t === "Book swap").k === "1");
+  await boardPage(bob).locator(".sbcol[data-k='1'] .sbnote", { hasText: "Book swap" }).waitFor();
+
+  // the vote: three each, more than one on a note if you like, nobody else's seen
+  await boardMenu(alice, "vote");
+  await boardPage(bob).locator(".sbbar", { hasText: "Votes left: 3 of 3" }).waitFor();
+  assert.equal(await boardPage(bob).locator(".sbadd").count(), 0, "no new notes while votes go in");
+  await boardNote(bob, "Too early").locator(".sbvbtn.plus").click();
+  await boardNote(bob, "Too early").locator(".sbvbtn.plus").click();
+  await boardNote(bob, "Book swap").locator(".sbvbtn.plus").click();
+  await boardPage(bob).locator(".sbbar", { hasText: "Votes left: 0 of 3" }).waitFor();
+  assert.ok(await boardNote(bob, "Guest speakers").locator(".sbvbtn.plus").isDisabled());
+  await boardNote(bob, "Book swap").locator(".sbvbtn:not(.plus)").click();   // one back
+  await boardPage(bob).locator(".sbbar", { hasText: "Votes left: 1 of 3" }).waitFor();
+  await boardNote(carol, "Too early").locator(".sbvbtn.plus").click();
+  await boardNote(carol, "Guest speakers").locator(".sbvbtn.plus").click();
+  await until(async () => Object.keys((await dbGet(`rooms/${code}/sb/${b}/v`)) || {}).length === 2);
+  await shot(bob, "sticky-vote");
+  // closing it: each column in order of votes, the top three on the card
+  await boardMenu(alice, "done");
+  await press(alice, "yes");
+  await boardNote(bob, "Too early").locator(".sbv", { hasText: "3" }).waitFor();
+  await shot(bob, "sticky-results");
+  await boardPage(bob).locator(".gmhead [aria-label=Close]").click();
+  const card = bob.locator(".sbbub");
+  await card.locator(".sbtop li").nth(1).waitFor();
+  assert.match(await card.locator(".sbtop li").first().textContent(), /Too early.*3/);
+  await shot(bob, "sticky-card");
+  // anyone saves it as a file
+  await card.locator(".btn", { hasText: "See results" }).click();
+  await boardPage(bob).locator(".sbbar .btn", { hasText: "Save as a file" }).click();
+  const [csv] = await Promise.all([bob.waitForEvent("download"), press(bob, "csv")]);
+  assert.match(csv.suggestedFilename(), /^notes-.*\.csv$/);
+  const text = readFileSync(await csv.path(), "utf8");
+  assert.match(text, /Pros,Too early in the morning,3/);
+  assert.match(text, /Cons,Book swap,0/);
+  noErrors();
+});
+
+test("sticky notes in a Private Salon: columns, notes and votes are sealed; a named board shows who wrote each note", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  await openNewBoard(alice, "Retro");
+  await sheet(alice).locator(".seg [data-v=named]").click();
+  await press(alice, "yes");
+  await boardPage(alice).locator(".sbcol").waitFor();
+  await bob.locator(".sbbub .btn", { hasText: "Open board" }).click();
+  await putNote(bob, "0", "Shorter meetings");
+  await boardNote(alice, "Shorter meetings").locator(".who", { hasText: "Bob" }).waitFor();
+  const [b] = Object.keys(await dbGet(`rooms/${code}/sb`));
+  const board = await dbGet(`rooms/${code}/sb/${b}`);
+  assert.throws(() => JSON.parse(board.cols), "the columns are sealed");
+  const [note] = Object.values(board.n);
+  assert.ok(note.x && !note.t && !note.nm, "the words and the name are sealed");
+  assert.equal((await dbGet(`rooms/${code}/msgs/${b}`)).board, undefined, "so is the card");
+  await boardMenu(alice, "vote");
+  await boardNote(bob, "Shorter meetings").locator(".sbvbtn.plus").click();
+  await until(async () => Object.keys((await dbGet(`rooms/${code}/sb/${b}/v`)) || {}).length === 1);
+  const [ballot] = Object.values(await dbGet(`rooms/${code}/sb/${b}/v`));
+  assert.ok(!ballot.includes(Object.keys(board.n)[0]), "the vote is sealed");
+  await boardMenu(alice, "done");
+  await press(alice, "yes");
+  await boardNote(bob, "Shorter meetings").locator(".sbv", { hasText: "1" }).waitFor();
+  noErrors();
+});

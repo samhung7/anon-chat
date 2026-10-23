@@ -57,6 +57,7 @@ const ACT_ICONS = {
   reply: "reply", copy: "copy", edit: "edit", pin: "pin", unpin: "pin", dm: "mail", at: "chat", report: "report",
   block: "block", unblock: "block", del: "delete", remove: "delete", save: "download", voters: "people",
   now: "projector", done: "answered", gameson: "game", gamesoff: "game",
+  vote: "upvote", add: "plus", cols: "settings", move: "route", csv: "download", md: "download",
   quick: "reply", roomquick: "reply", postsopen: "post", postsclose: "post", read: "post", copypost: "copy", editpost: "edit",
 };
 const actBtn = ([a, label, cls]) => el("button", { class: "btn " + (cls || ""), type: "button", "data-a": a },

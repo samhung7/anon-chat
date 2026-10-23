@@ -114,4 +114,24 @@ export class RoomApi {
   quizStep(z, fields) {
     return this.update({ ...Object.fromEntries(Object.entries(fields).map(([k, v]) => [`qz/${z}/${k}`, v])), "meta/last": backend.stamp() });
   }
+
+  /* ---------- sticky-note boards (sticky.js; the layout is in tools/rules.py BOARD) ---------- */
+  // a host moves the board on, or changes its columns (fields under sb/{b})
+  boardStep(b, fields) { return this.update(Object.fromEntries(Object.entries(fields).map(([k, v]) => [`sb/${b}/${k}`, v]))); }
+  // a new note, with who wrote it apart, stamped like a message (posting is rate-limited: composer.js posts.write takes it);
+  // as paths from the root
+  newNote(b, id, note) {
+    const T = backend.stamp();
+    return { [this.root(`sb/${b}/n/${id}`)]: { ...note, at: T }, [this.root(`sb/${b}/nb/${id}`)]: this.uid,
+      [this.root(`members/${this.uid}/ls`)]: T, [this.root(`members/${this.uid}/ln`)]: id, [this.root("meta/last")]: T };
+  }
+  // its author changes it (at stays as it was)
+  editNote(b, id, note) { return this.set(`sb/${b}/n/${id}`, note); }
+  // where it sits: its column and its place there
+  moveNote(b, id, k, o) { return this.update({ [`n/${id}/k`]: k, [`n/${id}/o`]: o }, `sb/${b}`); }
+  // its author takes it back, along with who wrote it; a host takes any note down
+  dropNote(b, id, mine) { return this.update({ [`n/${id}`]: null, ...(mine ? { [`nb/${id}`]: null } : {}) }, `sb/${b}`); }
+  // my votes under my own key; the first names the key
+  boardVote(b, key, picks, first) { return this.update({ ...(first ? { [`bk/${this.uid}`]: key } : {}), [`v/${key}`]: picks }, `sb/${b}`); }
+  voteKey(b) { return backend.pushKey(this.ref(`sb/${b}/v`)); }
 }
