@@ -69,6 +69,28 @@ test("each module is imported with ?v=dev, preloaded by the page and kept by the
   assert.match(page, /<script type="module" src="js\/app\/main\.js\?v=dev"><\/script>/);
 });
 
+test("the side panel extension frames stoatalk.app, may reach its storage, and only extension pages may frame the site", () => {
+  const EXT = new URL("../extension/", import.meta.url);
+  const manifest = JSON.parse(readFileSync(new URL("manifest.json", EXT), "utf8"));
+  const panel = readFileSync(new URL(manifest.side_panel.default_path, EXT), "utf8");
+  const [, src] = panel.match(/<iframe src="([^"]+)"/);
+  assert.equal(src, "https://stoatalk.app/");
+  // without host permission Chrome may give the frame a storage of its own, and the panel would be someone else
+  assert.deepEqual(manifest.host_permissions, ["https://stoatalk.app/*"]);
+  for (const f of [manifest.background.service_worker, ...Object.values(manifest.icons)]) readFileSync(new URL(f, EXT));
+  const locales = readdirSync(new URL("_locales/", EXT));
+  for (const l of locales) {
+    const m = JSON.parse(readFileSync(new URL(`_locales/${l}/messages.json`, EXT), "utf8"));
+    for (const k of ["name", "description", "open"]) assert.ok(m[k]?.message, `${l} has ${k}`);
+    assert.ok(m.description.message.length <= 132, `${l} description fits the store's 132 characters`);
+  }
+  assert.ok(locales.includes(manifest.default_locale));
+  const headers = readFileSync(new URL("_headers", SITE), "utf8");
+  assert.match(headers, /^\/\*\n(?:  .+\n)*  Content-Security-Policy: frame-ancestors 'self' chrome-extension:\n/m);
+  assert.doesNotMatch(headers, /X-Frame-Options/); // it would refuse the panel too, whatever frame-ancestors says
+  assert.match(headers, /^\/admin\n  Content-Security-Policy: frame-ancestors 'none'$/m);
+});
+
 test("a record read back from a file keeps only what it knows, within the limits", () => {
   const { readArchive, countOf } = archive;
   assert.throws(() => readArchive({ format: "something else", version: 1, messages: [] }));

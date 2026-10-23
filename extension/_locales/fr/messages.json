@@ -1,0 +1,11 @@
+{
+  "name": {
+    "message": "StoaTalk"
+  },
+  "description": {
+    "message": "StoaTalk dans le panneau latéral : des salons avec un code de 4 caractères, avec la même identité que dans votre onglet."
+  },
+  "open": {
+    "message": "Ouvrir StoaTalk dans le panneau latéral"
+  }
+}

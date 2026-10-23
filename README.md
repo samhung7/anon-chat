@@ -35,6 +35,7 @@ site/                       the whole app, served as-is by Cloudflare Pages
   js/vendor/                Firebase SDK bundle, qrcode-generator and jsQR (npm run vendor rebuilds them)
   sw.js, manifest.webmanifest, icons/
 database.rules.json         who may read and write what; generated from tools/rules.py
+extension/                  the Chrome side panel: stoatalk.app in a frame (see Chrome extension below)
 tools/rules.py              the rules, written readably (npm run rules)
 tools/cleanup/              hourly job that deletes rooms idle for 48 hours (read-only after 24) and warns before, and photos no room points at;
                             stats.mjs prints the usage counts
@@ -115,6 +116,16 @@ After editing `tools/rules.py`, run `npm run rules` and commit the new `database
 Live at https://stoatalk.app. Pushing to `main` deploys `site/` to Cloudflare Pages (`.github/workflows/cloudflare-pages.yml`, project `stoatalk`, also at `stoatalk.pages.dev`), after `tools/stamp.sh` ties the page to the commit; `site/_headers` sets the response headers there.
 
 The domain is connected under Workers & Pages > `stoatalk` > Custom domains (it replaced the apex records that pointed at GitHub Pages, which served the site until 2026-10-18). `www.stoatalk.app` is a proxied `CNAME` to the apex with a Redirect Rule: Hostname equals `www.stoatalk.app` → `concat("https://stoatalk.app", http.request.uri.path)`, 301, query string kept. Match on the hostname only: a rule on all requests redirects the whole zone, the photo service included, in a loop. The deploy token needs Account > Cloudflare Pages > Edit besides the Workers permissions.
+
+## Chrome extension
+
+`extension/` puts StoaTalk in Chrome's side panel (Chrome 116+, also Edge): the toolbar button opens `panel.html`, which is just `https://stoatalk.app/` in a frame, so the panel always runs the live site and needs no new version when the site changes.
+
+- **Same person as the tab.** The extension has host permission for `https://stoatalk.app/*`, and Chrome then gives a frame inside an extension page the site's own storage instead of a partition of its own. The Firebase sign-in (IndexedDB), nickname, `chat-dh`, `chat-key:*` and the room list are the ones a stoatalk.app tab has. Take the host permission away and the panel may become a stranger with none of that.
+- **Framing.** `site/_headers` lets only extension pages (and the site itself) frame StoaTalk: `frame-ancestors 'self' chrome-extension:`; `/admin` stays unframeable.
+- **Permissions** are the site's: notifications allowed in a stoatalk.app tab hold in the panel too (Chrome may not ask from inside a frame, so turn them on in a tab). The QR scanner gets the camera through the frame's `allow`.
+- **Try it**: `chrome://extensions` > Developer mode > Load unpacked > `extension/`, then the StoaTalk button in the toolbar (pin it from the puzzle menu).
+- **Publish**: every change to `extension/` builds `stoatalk-extension.zip` as an artifact of the "Pack the Chrome extension" run; upload it in the Chrome Web Store developer dashboard (US$5 once). Raise `version` in `manifest.json` for each upload. Store text is in `_locales/` (9 languages).
 
 ## Setting up Firebase
 
