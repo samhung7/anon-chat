@@ -350,10 +350,10 @@ function draw() {
     el("span", { text: l.ph === "add" ? t(l.lock ? "sbLockedHint" : l.an ? "sbAddHintAnon" : "sbAddHintNamed") : l.ph === "vote" ? t("sbVotesLeft", { n: l.v - e.picks.length, total: l.v }) : t("sbOverHint") }),
     l.ph === "done" ? el("button", { type: "button", class: "btn small", onclick: () => exportBoard(b) }, icon("download", "sm"), el("span", { text: t("sbExport") })) : null);
   const tabs = cols.length > 1 ? el("div", { class: "sbtabs", role: "tablist" }, cols.map((c) => el("button", { type: "button", class: "chip", "data-k": c.k,
-    onclick: () => view.body.querySelector(`.sbcol[data-k="${c.k}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" }) },
+    onclick: () => view.body.querySelector(`.sbcol[data-k="${c.k}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }) },
     el("span", { text: c.n }), el("small", { text: colNotes(e, c.k).length })))) : null;
   const canAdd = l.ph === "add" && !l.lock;
-  const colsBox = el("div", { class: "sbcols" + (cols.length === 1 ? " one" : "") }, cols.map((c) => {
+  const colsBox = el("div", { class: "sbcols" }, cols.map((c) => {
     let list = colNotes(e, c.k);
     if (l.ph === "done") list = list.map((n) => ({ ...n, v: votes[n.id] || 0 })).sort((x, y) => y.v - x.v || byPlace(x, y));
     return el("section", { class: "sbcol", "data-k": c.k, "aria-label": c.n },
