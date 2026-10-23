@@ -6,6 +6,8 @@ export const store = {
   // the same, but a full storage throws, for callers that tell the person
   setOrThrow: (k, v) => localStorage.setItem(k, v),
   json: (k) => { try { return JSON.parse(store.get(k)); } catch (e) { return null; } },
+  // the keys that start with this, without it, and their values
+  under: (prefix) => { try { return Object.fromEntries(Object.keys(localStorage).filter((k) => k.startsWith(prefix)).map((k) => [k.slice(prefix.length), localStorage.getItem(k)])); } catch (e) { return {}; } },
   // every key that starts with one of these
   drop: (prefixes) => { try { Object.keys(localStorage).filter((k) => prefixes.some((p) => k.startsWith(p))).forEach((k) => localStorage.removeItem(k)); } catch (e) {} },
 };

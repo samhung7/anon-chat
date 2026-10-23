@@ -1336,6 +1336,22 @@ test("accounts: the quiz library, each set listed and kept as JSON, and a mark w
   await assertSucceeds(remove(ref(db("ann"), "users/ann")));
 });
 
+test("accounts: pairing a device, a one-off public key and then a sealed box, only within the account", async () => {
+  const PK = "B" + "x".repeat(86), P = "users/ann/pair/abcDEF123_-z";
+  await assertSucceeds(set(ref(gDb("ann"), P), { pk: PK, at: T }));
+  await assertFails(get(ref(gDb("bob"), P)));
+  await assertFails(set(ref(gDb("bob"), "users/ann/pair/abcDEF123_-y"), { pk: PK, at: T }));
+  await assertFails(set(ref(db("ann"), "users/ann/pair/abcDEF123_-y"), { pk: PK, at: T }));   // not signed in with Google
+  await assertFails(set(ref(gDb("ann"), "users/ann/pair/short"), { pk: PK, at: T }));
+  await assertFails(set(ref(gDb("ann"), "users/ann/pair/abcDEF123_-y"), { pk: "not sealed!", at: T }));
+  await assertFails(set(ref(gDb("ann"), "users/ann/pair/abcDEF123_-y"), { pk: PK, at: Date.now() + 864e5 }));
+  await assertSucceeds(set(ref(gDb("ann"), P + "/box"), { pk: PK, x: "c2VhbGVk" }));
+  await assertFails(set(ref(gDb("ann"), P + "/box"), { pk: PK, x: "x".repeat(60001) }));
+  await assertFails(set(ref(gDb("ann"), P + "/box/y"), 1));
+  await assertSucceeds(remove(ref(gDb("ann"), P)));
+  await assertFails(set(ref(gDb("ann"), P + "/box"), { pk: PK, x: "c2VhbGVk" }));   // nobody's waiting any more
+});
+
 test("accounts: the hourly job's Google-ban hashes are nobody's to read or write", async () => {
   await makeAdmin("op");
   await assertFails(get(ref(opDb(), "ops/gbans")));

@@ -1,7 +1,8 @@
 /* Joining by the room's QR Code, read with the device's camera (or from a photo of it) on the home page. The picture
    never leaves the device: it's decoded here, by the browser's own BarcodeDetector where it reads QR Codes (Chrome
    on Android and macOS) and otherwise by jsQR (js/vendor/jsqr.js, loaded only when needed; Safari has no detector).
-   Only a StoaTalk invite link counts, and what joins is its code and, for a Private Salon, the key after #k=. */
+   Only a StoaTalk invite link counts, and what joins is its code and, for a Private Salon, the key after #k=.
+   The same scanner reads the code a new device shows to be paired with this one (pairing.js). */
 import { el, sheet, toast } from "./dom.js?v=dev";
 import { t } from "./text.js?v=dev";
 
@@ -41,23 +42,25 @@ function qrReader() {
 }
 
 // the scanner sheet: resolves with the invite link it read, or null when closed
-export function scanRoom() {
+export const scanRoom = () => scanFor(roomLink, { title: "scanH", hint: "scanHint", wrong: "scanNotRoom" });
+// ...or with what read(text) makes of a QR Code (null: not the kind wanted); title, hint and wrong name the words
+export function scanFor(read, words) {
   let stream = null, timer = 0, closed = false, ov = null, wrong = "";
   const video = el("video", { playsinline: true, muted: true, autoplay: true, "aria-hidden": "true" });
   video.muted = true; // iOS plays inline only when muted is set as a property too
-  const note = el("p", { class: "muted scannote", text: t("scanHint") });
+  const note = el("p", { class: "muted scannote", text: t(words.hint) });
   const file = el("input", { type: "file", accept: "image/*", hidden: true });
   const photo = el("button", { type: "button", class: "link", text: t("scanPhoto"), onclick: () => file.click() });
   const view = el("div", { class: "scanview" }, video, el("div", { class: "scanframe", "aria-hidden": "true" }));
   const body = el("div", { class: "scan" }, view, note, el("div", { class: "scanalt" }, photo), file);
   let found = null;
 
-  // a QR Code was read: a room's link closes the sheet; anything else says so once and the camera keeps looking
+  // a QR Code was read: the kind wanted closes the sheet; anything else says so once and the camera keeps looking
   const take = (texts) => {
     for (const text of texts) {
-      const link = roomLink(text);
-      if (link) { found = link; ov?.close("found"); return true; }
-      if (text !== wrong) { wrong = text; toast(t("scanNotRoom")); }
+      const got = read(text);
+      if (got) { found = got; ov?.close("found"); return true; }
+      if (text !== wrong) { wrong = text; toast(t(words.wrong)); }
     }
     return false;
   };
@@ -80,7 +83,7 @@ export function scanRoom() {
     } catch { toast(t("scanNone")); }
   });
 
-  return sheet(t("scanH"), body, [["close", t("close")]], {
+  return sheet(t(words.title), body, [["close", t("close")]], {
     onOpen: async (o) => {
       ov = o;
       qrReader().catch(() => {}); // jsQR starts loading while the camera asks
