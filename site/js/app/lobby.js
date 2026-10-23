@@ -5,7 +5,7 @@ import { t } from "./text.js?v=dev";
 import { $, el, toast, sheet, busy, enterPressesOk, icon, bare } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend, isDenied, isBusy, within } from "./backend.js?v=dev";
-import { RoomCipher, deviceKeys, b64u, KEY_RE, RAW_KEY_RE } from "./crypto.js?v=dev";
+import { RoomCipher, publicKey, b64u, KEY_RE, RAW_KEY_RE } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { me, ensureMe, askMe, memberRecord, meFields, saveMe, rollMe } from "./identity.js?v=dev";
 import { nameClaim } from "./room.js?v=dev";
@@ -21,7 +21,7 @@ export function failed(e) {
 }
 const newCode = () => Array.from({ length: 4 }, () => CODE_CHARS[(Math.random() * CODE_CHARS.length) | 0]).join("");
 // my member record as I join or open a room
-const joining = async (cipher, m) => memberRecord(cipher, backend.uid, m, { joined: backend.stamp(), online: true, pk: (await deviceKeys()).pub });
+const joining = async (cipher, m) => memberRecord(cipher, backend.uid, m, { joined: backend.stamp(), online: true, pk: await publicKey() });
 
 /* ---------- opening a room ---------- */
 export async function create() {

@@ -2,7 +2,9 @@
    Encrypted room: a random 256-bit key K, shared only through the link (#k=...), and kept on each device under
    chat-key:{code}. From K come an AES-GCM key for content and an HMAC key for nickname claims and the key check.
    Private messages: each device has an ECDH P-256 key pair (chat-dh); its public key sits on the member record,
-   and two people derive the same AES-GCM key. Every sealed value is bound to who it belongs to (AES-GCM
+   and two people derive the same AES-GCM key. Someone signed in with Google on several devices is one person with
+   one key pair: the first device's (its public half in users/{uid}/dh, account.js). Another device of theirs is
+   "unpaired" until that pair is brought over to it, and meanwhile neither reads nor sends private messages. Every sealed value is bound to who it belongs to (AES-GCM
    additional data), so the server can't move a message or a nickname onto someone else. */
 import { store, KEYS } from "./storage.js?v=dev";
 
@@ -75,6 +77,13 @@ export async function deviceKeys() {
   store.set(KEYS.dh, JSON.stringify({ priv: await SUB.exportKey("jwk", kp.privateKey), pub }));
   return (device = { priv: kp.privateKey, pub });
 }
+// the public key of the person signed in with Google on this device (account.js), when they have one
+let accountPub = null;
+export const setAccountPub = (pub) => (accountPub = pub || null);
+// the public key others should seal my private messages to: the account's, else this device's
+export const publicKey = async () => accountPub || (await deviceKeys()).pub;
+// this device holds the private half of that key
+export const paired = async () => !accountPub || accountPub === (await deviceKeys()).pub;
 // the AES-GCM key shared with whoever has this public key; info names the conversation
 export async function sharedKey(theirPub, info) {
   const theirs = await SUB.importKey("raw", unb64u(theirPub), EC, false, []);

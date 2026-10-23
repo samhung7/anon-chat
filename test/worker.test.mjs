@@ -184,7 +184,7 @@ test("push: a sealed subscription opens only as its owner's", async () => {
   assert.equal(await vapid({}), null);
 });
 
-test("push service: announces a message to members with a subscription who aren't online", async () => {
+test("push service: announces a message to members with a subscription who aren't online, on each of their devices", async () => {
   const E = { ...env(new MemoryBucket()), VAPID_KEY: await vapidKey() };
   const pushed = [];
   const fetcher = async (url, init) => { pushed.push({ url, init }); return new Response(null, { status: 201 }); };
@@ -193,7 +193,7 @@ test("push service: announces a message to members with a subscription who aren'
     headers: uid ? { Authorization: "Bearer " + unsigned(uid) } : {} }), E);
   const key = await (await go("GET", "/push/key")).json();
   assert.match(key.key, /^B[A-Za-z0-9_-]{86}$/); // an uncompressed P-256 point
-  const alice = await browser(), carol = await browser(), dave = await browser();
+  const alice = await browser(), alice2 = await browser(), carol = await browser(), dave = await browser();
   assert.equal((await go("POST", "/push/seal", "alice", { endpoint: "https://evil.example/x", keys: alice.sub.keys })).status, 400);
   assert.equal((await go("POST", "/push/seal", null, alice.sub)).status, 401);
   const seal = async (uid, b) => (await (await go("POST", "/push/seal", uid, b.sub)).json()).sealed;
@@ -202,7 +202,9 @@ test("push service: announces a message to members with a subscription who aren'
     meta: { owner: "alice", created: 1, last: t, title: "讀書會", pa: t },
     members: { alice: { joined: 1, name: "a", avatar: "🦊", online: false }, bob: { joined: 1, name: "b", avatar: "🐻", online: true },
                carol: { joined: 1, name: "c", avatar: "🐼", online: true }, dave: { joined: 1, name: "d", avatar: "🐯" } },
-    push: { alice: await seal("alice", alice), carol: await seal("carol", carol), dave: await seal("alice", dave) }, // dave's place holds alice's
+    // alice on her phone and her laptop; dave's place, in the one-string way from before devices, holds alice's
+    push: { alice: { devPhone0001: await seal("alice", alice), devLaptop001: await seal("alice", alice2) }, carol: { devCarol0001: await seal("carol", carol) },
+            dave: await seal("alice", dave) },
     msgs: { m1: { by: "bob", name: "b", avatar: "🐻", text: "大家好\n今天讀第三章", at: t }, m0: { by: "bob", name: "b", avatar: "🐻", text: "old", at: t - 600000 },
             m2: { by: "alice", name: "a", avatar: "🦊", text: "hi", at: t } },
   });
@@ -210,9 +212,10 @@ test("push service: announces a message to members with a subscription who aren'
   assert.equal((await go("POST", "/push/notify/ABCD", "bob", { id: "m0" })).status, 409); // not new
   assert.equal((await go("POST", "/push/notify/ABCD", "eve", { id: "m1" })).status, 403); // not in the room
   const res = await go("POST", "/push/notify/ABCD", "bob", { id: "m1" });
-  assert.deepEqual(await res.json(), { sent: 1, next: null });
-  assert.equal(pushed.length, 1); // carol is online; dave's place holds someone else's subscription
-  assert.equal(pushed[0].url, alice.sub.endpoint);
+  assert.deepEqual(await res.json(), { sent: 2, next: null });
+  assert.equal(pushed.length, 2); // carol is online; dave's place holds someone else's subscription
+  assert.deepEqual(pushed.map((p) => p.url).sort(), [alice.sub.endpoint, alice2.sub.endpoint].sort());
+  if (pushed[0].url !== alice.sub.endpoint) pushed.reverse();
   assert.equal(pushed[0].init.headers.Topic, "ABCD");
   assert.match(pushed[0].init.headers.Authorization, /^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=B/);
   assert.deepEqual(JSON.parse(await alice.open(pushed[0].init.body)), { c: "ABCD", k: "m", n: "b", a: "🐻", r: "讀書會", s: "大家好 今天讀第三章" });
@@ -220,12 +223,13 @@ test("push service: announces a message to members with a subscription who aren'
   const soon = await (await go("POST", "/push/notify/ABCD", "bob", { id: "m1" })).json();
   assert.equal(soon.sent, 0);
   assert.ok(soon.wait > 0 && soon.wait <= 20000);
-  assert.equal(pushed.length, 1);
+  assert.equal(pushed.length, 2);
   // a private message: only to the one it's for, and it says nothing of what's in it
   await db("rooms/ABCD/dm/alice_bob/d1", { by: "bob", to: "alice", x: "sealed", at: Date.now() });
   assert.equal((await go("POST", "/push/notify/ABCD", "bob", { id: "d1", to: "carol" })).status, 409);
-  assert.deepEqual(await (await go("POST", "/push/notify/ABCD", "bob", { id: "d1", to: "alice" })).json(), { sent: 1, next: null });
-  assert.deepEqual(JSON.parse(await alice.open(pushed[1].init.body)), { c: "ABCD", k: "d" });
+  assert.deepEqual(await (await go("POST", "/push/notify/ABCD", "bob", { id: "d1", to: "alice" })).json(), { sent: 2, next: null });
+  const dm = pushed.slice(2).find((p) => p.url === alice.sub.endpoint);
+  assert.deepEqual(JSON.parse(await alice.open(dm.init.body)), { c: "ABCD", k: "d" });
 });
 
 test("service: only the listed pages may call it (staging lets every preview under *.stoatalk.pages.dev in)", () => {

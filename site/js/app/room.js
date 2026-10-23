@@ -5,7 +5,7 @@ import { MAX_LOAD } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
 import { PUSH_ID } from "./clean.js?v=dev";
 import { backend } from "./backend.js?v=dev";
-import { deviceKeys, sharedKey, unseal } from "./crypto.js?v=dev";
+import { publicKey, paired, sharedKey, unseal } from "./crypto.js?v=dev";
 import { room as current } from "./session.js?v=dev";
 import { plainFields, unsealedFields, finishOpen, openPicks } from "./kinds.js?v=dev";
 import { RoomApi } from "./api.js?v=dev";
@@ -126,7 +126,7 @@ export class Room extends Emitter {
     }
     const p = await this.open(() => (dmWith ? this.dmKey(dmWith) : this.cipher?.aes), v.x, (dmWith ? "d:" : "m:") + v.by);
     const out = { ...v }; delete out.x;
-    if (!p) return { ...out, text: t(dmWith ? "cantDecryptDm" : "cantDecrypt"), bad: true };
+    if (!p) return { ...out, text: t(!dmWith ? "cantDecrypt" : (await paired()) ? "cantDecryptDm" : "dmUnpaired"), bad: true };
     Object.assign(out, unsealedFields(p, !!dmWith));
     await finishOpen(out, v, id);
     if (!dmWith) { out.name = String(p.n || "？").slice(0, 24); out.avatar = String(p.a || "👤").slice(0, 8); }
@@ -219,8 +219,9 @@ export class Room extends Emitter {
     const uid = this.uid, next = {};
     for (const [id, m] of Object.entries(raw)) next[id] = await this.openMember(id, m);
     this.raw = raw; Object.assign(this.rawSeen, JSON.parse(JSON.stringify(raw)));
-    const dh = await deviceKeys();
-    if (raw[uid] && raw[uid].pk !== dh.pub) this.api.setPublicKey(dh.pub).catch(() => {}); // members from before encrypted private messages
+    // members from before encrypted private messages, or from before signing in with Google on several devices
+    const pk = await publicKey();
+    if (raw[uid] && raw[uid].pk !== pk) this.api.setPublicKey(pk).catch(() => {});
     if (this.ready) this.emit("arrivals", {
       joined: Object.entries(next).filter(([id]) => !this.members[id] && id !== uid).map(([, m]) => m),
       left: Object.entries(this.members).filter(([id]) => !next[id] && id !== uid).map(([, m]) => m),

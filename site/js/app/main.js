@@ -19,6 +19,7 @@
      lobby.js     opening and joining          home.js     screens and the home page
      records.js   export, import, saved records (archive.js: the record format)
      identity.js  nickname and animal          notify.js   notifications    pickers.js emoji, GIF, ＋
+     account.js   signing in with Google (optional): the same id on every device
      quick.js     quick replies and the double-tap 👍       scan.js     joining by the room's QR Code */
 import { KLIPY_KEY, IDLE_MS, params } from "./constants.js?v=dev";
 import { $ } from "./dom.js?v=dev";

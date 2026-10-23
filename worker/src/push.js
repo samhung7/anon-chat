@@ -79,3 +79,7 @@ export async function send(keys, sub, payload, { topic, ttl = 3600, fetcher = fe
     TTL: String(ttl), Urgency: "normal", ...(topic ? { Topic: topic } : {}) } });
   return res.status;
 }
+
+// someone's sealed subscriptions in a room: one for each of their devices (push/{uid}/{device}), or, from before
+// that, the one string
+export const devices = (v) => (typeof v === "string" ? [v] : v && typeof v === "object" ? Object.values(v).filter((s) => typeof s === "string") : []);

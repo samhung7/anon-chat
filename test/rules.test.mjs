@@ -738,18 +738,23 @@ test("bans: a banned person can't open, join or write anywhere, can still leave,
   await assertSucceeds(say("bob"));
 });
 
-test("push subscriptions: each member leaves their own (sealed), members read them, gone with the member", async () => {
+test("push subscriptions: each member leaves their own (sealed, one per device), members read them, gone with the member", async () => {
   await createRoom("alice"); await join("bob");
-  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/push/bob`), "abc_DEF-123"));
-  await assertFails(set(ref(db("bob"), `rooms/${C}/push/alice`), "abc"));
-  await assertFails(set(ref(db("bob"), `rooms/${C}/push/bob`), "not sealed!"));
-  await assertFails(set(ref(db("bob"), `rooms/${C}/push/bob`), "a".repeat(2001)));
-  await assertFails(set(ref(db("carol"), `rooms/${C}/push/carol`), "abc"));   // not in the room
+  const DEV = "devAAAAAAAA1", DEV2 = "devBBBBBBBB2";
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/push/bob/${DEV}`), "abc_DEF-123"));
+  await assertSucceeds(set(ref(db("bob"), `rooms/${C}/push/bob/${DEV2}`), "abc_DEF-456"));   // the same person on another device
+  await assertSucceeds(remove(ref(db("bob"), `rooms/${C}/push/bob/${DEV2}`)));   // muted there
+  await assertFails(set(ref(db("bob"), `rooms/${C}/push/alice/${DEV}`), "abc"));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/push/bob/${DEV}`), "not sealed!"));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/push/bob/${DEV}`), "a".repeat(2001)));
+  await assertFails(set(ref(db("bob"), `rooms/${C}/push/bob/short`), "abc"));   // not a device id
+  await assertFails(set(ref(db("bob"), `rooms/${C}/push/bob`), "abc"));   // the old way, one for the person, is no more
+  await assertFails(set(ref(db("carol"), `rooms/${C}/push/carol/${DEV}`), "abc"));   // not in the room
   await assertSucceeds(get(ref(db("alice"), `rooms/${C}/push`)));
   await assertFails(get(ref(db("carol"), `rooms/${C}/push`)));
   // leaving takes it away in the same write
   await assertSucceeds(update(ref(db("bob"), `rooms/${C}`), { "members/bob": null, "names/bob": null, "push/bob": null }));
-  await assertFails(update(ref(db("bob")), { [`rooms/${C}`]: { meta: { owner: "bob", created: T, last: T }, members: { bob: member("b") }, push: { bob: "x" } } }));
+  await assertFails(update(ref(db("bob")), { [`rooms/${C}`]: { meta: { owner: "bob", created: T, last: T }, members: { bob: member("b") }, push: { bob: { [DEV]: "x" } } } }));
 });
 
 test("push announcements: a member stamps meta/pa, at most every 20 seconds", async () => {
@@ -1287,4 +1292,32 @@ test("sticky notes: a note is reported to the hosts and the operator, never by i
   await assertSucceeds(putNote("bob", "b1", NOTE(2)));
   await assertSucceeds(set(ref(db("carol"), `rooms/${C}/reports/${NOTE(2)}/carol`), { r: 1, at: T, b: "b1" }));
   await assertSucceeds(update(ref(db("alice"), `rooms/${C}`), { [`sb/b1/n/${NOTE(2)}`]: null, [`sb/b1/nb/${NOTE(2)}`]: null, [`sb/b1/w/${NOTE(2)}`]: null, [`reports/${NOTE(2)}`]: null }));
+});
+
+/* ---------- what a Google account keeps (site/js/app/account.js) ---------- */
+// someone signed in with Google: the token carries their email
+const gDb = (uid) => env.authenticatedContext(uid, { email: uid + "@example.com", firebase: { sign_in_provider: "google.com", identities: {} } }).database();
+
+test("accounts: only the person signed in with Google keeps their rooms and public key, and can always delete them", async () => {
+  await assertSucceeds(set(ref(gDb("ann"), "users/ann/rooms/K7QM"), T));
+  await assertSucceeds(set(ref(gDb("ann"), "users/ann/dh"), "BPub_key-123"));
+  await assertSucceeds(get(ref(gDb("ann"), "users/ann")));
+  await assertFails(get(ref(gDb("bob"), "users/ann")));
+  await assertFails(get(ref(db("ann2"), "users/ann")));
+  await assertFails(set(ref(gDb("bob"), "users/ann/rooms/K7QN"), T));   // someone else's
+  await assertFails(set(ref(db("carl"), "users/carl/rooms/K7QM"), T));   // not signed in with Google
+  await assertFails(set(ref(gDb("ann"), "users/ann/rooms/k7qm"), T));    // not a room code
+  await assertFails(set(ref(gDb("ann"), "users/ann/rooms/K7QM"), "x"));
+  await assertFails(set(ref(gDb("ann"), "users/ann/rooms/K7QM"), Date.now() + 864e5));   // from the future
+  await assertFails(set(ref(gDb("ann"), "users/ann/dh"), "not sealed!"));
+  await assertFails(set(ref(gDb("ann"), "users/ann/email"), "ann@example.com"));   // nothing else
+  await assertSucceeds(remove(ref(gDb("ann"), "users/ann/rooms/K7QM")));
+  await assertSucceeds(remove(ref(db("ann"), "users/ann")));   // deleting the account, whatever the token says
+});
+
+test("accounts: the hourly job's Google-ban hashes are nobody's to read or write", async () => {
+  await makeAdmin("op");
+  await assertFails(get(ref(opDb(), "ops/gbans")));
+  await assertFails(set(ref(gDb("ann"), "ops/gbans/abc"), { at: T, until: 1 }));
+  await assertFails(get(ref(gDb("ann"), "ops/gbans/abc")));
 });

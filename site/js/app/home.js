@@ -1,5 +1,6 @@
 /* The screens (home, chat, projector, record), the address bar, and the home page: the rooms this device is in
-   and the ☰ menu (identity, language, theme, saved records). */
+   (and, signed in with Google, the rooms the account is in on any device) and the ☰ menu (identity, Google account,
+   language, theme, saved records). */
 import { CODE_RE } from "./constants.js?v=dev";
 import { phase, hoursLeft } from "./expiry.js?v=dev";
 import { t } from "./text.js?v=dev";
@@ -14,6 +15,7 @@ import { renderView, renderHeader, renderAge } from "./chat.js?v=dev";
 import { closePicker } from "./pickers.js?v=dev";
 import { SHOW, endShow, renderShow } from "./show.js?v=dev";
 import { records, openRecord, closeRecord } from "./records.js?v=dev";
+import { account, accountRooms, accountSheet, keepRoom, dropRoom } from "./account.js?v=dev";
 
 /* ---------- the address ---------- */
 // a room's invite link: an encrypted room's key rides after the #, which browsers never send to a server
@@ -50,8 +52,16 @@ export function home() {
 /* ---------- the rooms this device is in, most recently entered first ---------- */
 const MAX_ROOMS = 30, PAGE = 5, UNREAD_MAX = 100; // a room with 100 or more new messages shows 99+
 const myRooms = new StoredList(KEYS.rooms, (c) => typeof c === "string" && CODE_RE.test(c));
-export const rememberRoom = (code) => myRooms.save([code, ...myRooms.all().filter((c) => c !== code)].slice(0, MAX_ROOMS));
-export const forgetRoom = (code) => myRooms.save(myRooms.all().filter((c) => c !== code));
+export function rememberRoom(code) { myRooms.save([code, ...myRooms.all().filter((c) => c !== code)].slice(0, MAX_ROOMS)); keepRoom(code); }
+export function forgetRoom(code) { myRooms.save(myRooms.all().filter((c) => c !== code)); dropRoom(code); }
+// signed in: the account's rooms from other devices join this device's list (newest first, after this device's own),
+// and this device's own go into the account
+function mergeAccountRooms() {
+  const cloud = accountRooms(), mine = myRooms.all();
+  const theirs = Object.keys(cloud).filter((c) => CODE_RE.test(c) && !mine.includes(c)).sort((a, b) => cloud[b] - cloud[a]);
+  mine.filter((c) => !(c in cloud)).forEach(keepRoom);
+  if (theirs.length) myRooms.save([...mine, ...theirs].slice(0, MAX_ROOMS));
+}
 // before the list there was one room under chat-room
 export function adoptOldRoom() {
   const old = store.get(KEYS.oldRoom);
@@ -63,11 +73,13 @@ export function adoptOldRoom() {
 const seenRows = new StoredList(KEYS.roomsSeen, () => true);
 let resumePage = 0, resumeRows = [], resumeSeq = 0;
 export async function showResume() {
-  const seq = ++resumeSeq, codes = myRooms.all();
-  if (!codes.length || !backend.configured) { $("#resume").hidden = true; return; }
+  const seq = ++resumeSeq;
+  let codes = myRooms.all();
+  if ((!codes.length && !account()) || !backend.configured) { $("#resume").hidden = true; return; }
   const seen = seenRows.all().filter((r) => r && codes.includes(r.code));
   if (seen.length) { resumeRows = codes.map((c) => seen.find((r) => r.code === c)).filter(Boolean); renderResume(); }
   try { await backend.connect(); } catch (e) { return; }
+  if (backend.google) { mergeAccountRooms(); codes = myRooms.all(); }
   const rows = (await Promise.all(codes.map((code) => resumeRow(code, seen)))).filter(Boolean);
   if (seq !== resumeSeq) return;
   resumeRows = rows;
@@ -127,9 +139,10 @@ const menuRow = (a, lead, title, sub) => el("button", { type: "button", class: "
   el("span", { class: "av" }, lead), el("span", { class: "txt" }, el("b", { text: title }), el("small", { text: sub })), icon("forward", "chev"));
 const languageWord = () => t("language") + (I18N.lang === "en" ? "" : " · Language");
 export function homeMenu() {
-  const m = me(), list = records();
+  const m = me(), list = records(), g = account();
   const body = el("div", { class: "hmenu" },
     menuRow("me", m ? avatar(m.avatar) : icon("user"), m ? m.name : t("noIdentity"), t("editMeShort")),
+    menuRow("account", icon(g ? "secure" : "user"), g ? g.email || t("acctRowIn") : t("acctRow"), t(g ? "acctRowInSub" : "acctRowSub")),
     menuRow("lang", icon("language"), languageWord(), I18N.LANGS.find(([c]) => c === I18N.lang)[1]),
     menuRow("theme", icon("theme"), t("theme"), t({ light: "themeLight", dark: "themeDark" }[THEME.get()] || "themeSystem")),
     el("h3", { text: t("myRecords") }),
@@ -146,6 +159,7 @@ export function homeMenu() {
     }),
   }).then((a) => {
     if (a === "me") askMe(false);
+    else if (a === "account") accountSheet();
     else if (a === "lang") pickLang();
     else if (a === "theme") pickTheme();
     else if (a?.startsWith("open:")) openRecord(null, a.slice(5));

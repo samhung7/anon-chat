@@ -583,7 +583,10 @@
           ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
           "$uid": {
             ".write": "(auth != null) && (auth.uid === $uid) && ((!newData.exists()) || (data.parent().parent().child('members/' + auth.uid).exists()))",
-            ".validate": "newData.isString() && newData.val().length <= 2000 && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
+            ".validate": "newData.hasChildren()",
+            "$dev": {
+              ".validate": "($dev.matches(/^[A-Za-z0-9_-]{12}$/)) && (newData.isString() && newData.val().length <= 2000 && newData.val().matches(/^[A-Za-z0-9_-]+$/))"
+            }
           }
         },
         "typing": {
@@ -1034,6 +1037,11 @@
         "$code": {
           ".validate": "newData.hasChildren(['l', 's'])"
         }
+      },
+      "gbans": {
+        "$h": {
+          ".validate": "newData.hasChildren(['at', 'until'])"
+        }
       }
     },
     "bans": {
@@ -1047,6 +1055,23 @@
         },
         "why": {
           ".validate": "newData.isString() && newData.val().length <= 200"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "(auth != null) && (auth.uid === $uid) && ((!newData.exists()) || (auth.token.email != null))",
+        "rooms": {
+          "$code": {
+            ".validate": "($code.matches(/^[2-9A-HJKMNP-Z]{4}$/)) && (newData.isNumber()) && (newData.val() <= now)"
+          }
+        },
+        "dh": {
+          ".validate": "newData.isString() && newData.val().length <= 120 && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
         },
         "$other": {
           ".validate": false

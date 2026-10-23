@@ -16,12 +16,13 @@
      POST   /push/seal                           a browser's subscription, sealed for the signed-in person to store in a room
      POST   /push/notify/{code}  {id, to?, from?}  the author of a message that just went out asks for it to be announced
    The notify call reads the room with the author's own sign-in (so the rules decide what it may see), checks the
-   message is theirs and new, and pushes to the members with a subscription there who aren't online. A room's
+   message is theirs and new, and pushes to the members with a subscription there who aren't online (to each device
+   they have one from). A room's
    messages are announced at most every QUIET ms (a call too soon is told how long to wait); a private message only
    to the person it's for. In an encrypted room the push says only that there's something new. Each call sends at most PAGE pushes (a Worker's outgoing
    requests are limited) and says where to go on from. */
 import { verifier } from "./token.js";
-import { vapid, sealSub, openSub, send, validSubscription } from "./push.js";
+import { vapid, sealSub, openSub, send, validSubscription, devices } from "./push.js";
 
 const CODE = /^[2-9A-HJKMNP-Z]{4}$/, UID = /^[A-Za-z0-9]{1,128}$/, ID = /^[A-Za-z0-9_-]{1,32}$/;
 export const QUIZ_IMG = /^([A-Za-z0-9_-]{20})[A-Za-z0-9]{10}$/; // a quiz's id (a 20-character push id), then 10 random letters and digits
@@ -131,15 +132,16 @@ export function makeHandler({ verify, read, fetcher = (...a) => fetch(...a) }) {
             payload = meta.enc ? { c: code, k: "x" } : announce(code, msg, meta);
             targets = Object.keys(subs || {}).sort();
           }
-          // only members with a subscription here who aren't on line now (an open page notifies by itself)
-          targets = targets.filter((u) => u !== uid && subs?.[u] && members[u] && members[u].online !== true);
-          const page = targets.slice(from, from + PAGE), text = JSON.stringify(payload);
-          const sent = await Promise.all(page.map(async (u) => {
-            const sub = await openSub(keys, u, subs[u]);
+          // only members with a subscription here who aren't on line now (an open page notifies by itself), each of
+          // their devices
+          const all = targets.filter((u) => u !== uid && members[u] && members[u].online !== true).flatMap((u) => devices(subs?.[u]).map((s) => [u, s]));
+          const page = all.slice(from, from + PAGE), text = JSON.stringify(payload);
+          const sent = await Promise.all(page.map(async ([u, sealed]) => {
+            const sub = await openSub(keys, u, sealed);
             if (!sub || !validSubscription(sub)) return false;
             try { return (await send(keys, sub, text, { topic: code, fetcher })) < 300; } catch (e) { return false; }
           }));
-          return json(200, { sent: sent.filter(Boolean).length, next: from + PAGE < targets.length ? from + PAGE : null });
+          return json(200, { sent: sent.filter(Boolean).length, next: from + PAGE < all.length ? from + PAGE : null });
         }
         return out(404);
       }

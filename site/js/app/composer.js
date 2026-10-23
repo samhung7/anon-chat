@@ -3,7 +3,7 @@ import { LIMITS, POST_GAP_MS } from "./constants.js?v=dev";
 import { t, tEl } from "./text.js?v=dev";
 import { $, el, toast, pause } from "./dom.js?v=dev";
 import { backend, isDenied } from "./backend.js?v=dev";
-import { seal } from "./crypto.js?v=dev";
+import { seal, paired } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { me } from "./identity.js?v=dev";
 import { pairKey } from "./room.js?v=dev";
@@ -57,6 +57,7 @@ export async function post(kind, value, more = {}, { wait } = {}) {
       : { by: uid, name: m.name, avatar: m.avatar, ...body, at: T };
   } else {
     if (!room.members[ui.view]) { toast(t("peerLeft")); return false; }
+    if (!(await paired())) { toast(t("dmUnpaired")); return false; } // what I'd seal, the other side couldn't open
     const key = await room.dmKey(ui.view);
     if (!key) { toast(t("peerOld")); return false; }
     const path = `dm/${pairKey(uid, ui.view)}`;
