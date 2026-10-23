@@ -1,15 +1,18 @@
 // Deletes rooms nobody has written in for 48 hours (read-only for the last 24 of them), so "聊完即刪" holds even when
 // the owner never ends the room, and warns their members by Web Push an hour before each step (expiry.mjs). Runs hourly from .github/workflows/cleanup.yml with a Firebase service account; the database rules can't delete on a timer by themselves.
-// Then it tells the operator about new reports (a GitHub issue) and deletes the photos in R2 that no room points at any more (photos.mjs).
+// Then it tells the operator about new reports (a GitHub issue), keeps bans on Google accounts past their deletion
+// (accounts.mjs), and deletes the photos in R2 that no room points at any more (photos.mjs).
 // Env: FIREBASE_SERVICE_ACCOUNT (the service account JSON), FIREBASE_DATABASE_URL; for photos also CLOUDFLARE_ACCOUNT_ID,
 // R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (without them photos are skipped); for the warnings VAPID_KEY, the push
 // service's own secret (worker/; without it no warning is sent). DRY_RUN=1 only lists what would go.
 import { initializeApp, cert } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
+import { getAuth } from "firebase-admin/auth";
 import { AwsClient } from "aws4fetch";
 import { strayPhotos, s3Bucket } from "./photos.mjs";
 import { GONE_AFTER, windows, warnings } from "./expiry.mjs";
-import { vapid, openSub, send, validSubscription } from "../../worker/src/push.js";
+import { sweep } from "./accounts.mjs";
+import { vapid, openSub, send, validSubscription, devices } from "../../worker/src/push.js";
 
 const DAY = 864e5;
 const sa = process.env.FIREBASE_SERVICE_ACCOUNT; // not needed against the emulator (FIREBASE_DATABASE_EMULATOR_HOST)
@@ -46,7 +49,7 @@ const keys = process.env.VAPID_KEY ? await vapid({ VAPID_KEY: process.env.VAPID_
 let pushed = 0;
 for (const { code, s, payload } of due) {
   const { members, push } = near[code], text = JSON.stringify(payload);
-  if (keys && !process.env.DRY_RUN) for (const [uid, sealed] of Object.entries(push)) {
+  if (keys && !process.env.DRY_RUN) for (const [uid, sealed] of Object.entries(push).flatMap(([u, v]) => devices(v).map((s) => [u, s]))) {
     if (!members[uid]) continue;
     const sub = await openSub(keys, uid, sealed);
     if (!sub || !validSubscription(sub)) continue;
@@ -77,6 +80,26 @@ if (fresh.length && !process.env.DRY_RUN) {
     console.log(`issue: ${res.status}`);
     if (res.ok) await db.ref("ops/told").set(Math.max(...fresh.map((r) => r.at)));
   } else console.log("GITHUB_TOKEN not set; not telling anyone");
+}
+
+// bans that outlast deleting the account (accounts.mjs): reads every Google sign-in, which needs the service account
+// to reach Firebase Authentication too (the key the Firebase console makes can)
+if (key || process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+  try {
+    const users = [];
+    let page;
+    do {
+      page = await getAuth(app).listUsers(1000, page?.pageToken);
+      for (const u of page.users) { const g = u.providerData.find((p) => p.providerId === "google.com"); if (g) users.push({ uid: u.uid, sub: g.uid }); }
+    } while (page.pageToken);
+    const [bans, gbans] = (await Promise.all([db.ref("bans").get(), db.ref("ops/gbans").get()])).map((s) => s.val() || {});
+    const { record, ban, drop } = sweep({ bans, gbans, users, now: Date.now() });
+    const upd = { ...Object.fromEntries(Object.entries(record).map(([h, g]) => [`ops/gbans/${h}`, g])),
+      ...Object.fromEntries(Object.entries(ban).map(([uid, b]) => [`bans/${uid}`, { ...b, why: b.why.slice(0, 200) }])),
+      ...Object.fromEntries(drop.map((h) => [`ops/gbans/${h}`, null])) };
+    console.log(`Google bans: ${Object.keys(record).length} kept, ${Object.keys(ban).length} banned again, ${drop.length} dropped (${users.length} Google sign-ins)`);
+    if (Object.keys(upd).length && !process.env.DRY_RUN) await db.ref().update(upd);
+  } catch (e) { console.warn(`Google bans skipped: ${e.code || e.message}`); }
 }
 
 const { CLOUDFLARE_ACCOUNT_ID: account, R2_ACCESS_KEY_ID: keyId, R2_SECRET_ACCESS_KEY: secret } = process.env;

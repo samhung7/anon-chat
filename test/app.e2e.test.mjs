@@ -820,7 +820,7 @@ test("Web Push: a message is announced to a member whose page is closed, a quick
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url"), t = Math.floor(Date.now() / 1000);
   const token = b64({ alg: "none" }) + "." + b64({ sub: bobId, aud: NS, iss: "https://securetoken.google.com/" + NS, iat: t, exp: t + 3600, auth_time: t }) + ".";
   const { sealed } = await (await fetch("http://127.0.0.1:8787/push/seal", { method: "POST", body: JSON.stringify(sub), headers: { Authorization: "Bearer " + token } })).json();
-  await fetch(dbUrl(`rooms/${code}/push/${bobId}`), { method: "PUT", headers: asOwner, body: JSON.stringify(sealed) });
+  await fetch(dbUrl(`rooms/${code}/push/${bobId}/devBobPhone1`), { method: "PUT", headers: asOwner, body: JSON.stringify(sealed) });
   await bob.context().close();
   await until(async () => (await dbGet(`rooms/${code}/members/${bobId}/online`)) === false);
   photos.pushed.length = 0;
@@ -1771,5 +1771,92 @@ test("sticky notes in a Private Salon: columns, notes and votes are sealed; a na
   await boardMenu(alice, "done");
   await press(alice, "yes");
   await boardNote(bob, "Shorter meetings").locator(".sbv", { hasText: "1" }).waitFor();
+  noErrors();
+});
+
+/* ---------- signing in with Google (account.js; the emulator stands in for Google) ---------- */
+const emuUid = (page, as) => page.evaluate((as) => localStorage.getItem("chat-emu-uid" + as), as);
+async function accountSheet(page) {
+  await page.locator("#meBtn").click();
+  await sheet(page).locator(".merow[data-a=account]").click();
+  await sheet(page).locator(".acct").waitFor();
+}
+// signs in with the made-up Google account email; a page already used under that account asks to switch first
+async function signInGoogle(page, email, { switching = false } = {}) {
+  await page.evaluate((e) => localStorage.setItem("chat-emu-pick", e), email);
+  await accountSheet(page);
+  const load = page.waitForEvent("load");
+  await sheet(page).locator("[data-signin]").click();
+  if (switching) await press(page, "yes");
+  await load;
+  await page.locator("#createBtn").waitFor();
+}
+
+test("Google account: the same person on two devices, rooms follow, private messages stay with the first device; signing out and deleting", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { title: "Workshop" });
+  await joinByLink(bob, url, "Bob");
+  const aId = await emuUid(alice, "a");
+  // signing in keeps this device's id: the room carries on, and the account keeps it and the key pair's public half
+  await alice.goto(`${base}/?emu&as=a`); await alice.locator("#createBtn").waitFor();
+  await signInGoogle(alice, "alice@example.com");
+  assert.equal(await emuUid(alice, "a"), aId);
+  await alice.locator(`#resume .roomrow[data-code="${code}"]`).waitFor();
+  await until(async () => (await dbGet(`users/${aId}/rooms`))?.[code] > 0);
+  const pk = (await dbGet(`rooms/${code}/members/${aId}`)).pk;
+  assert.equal(await dbGet(`users/${aId}/dh`), pk);
+  await alice.locator("#meBtn").click();
+  await sheet(alice).locator(".merow[data-a=account]", { hasText: "alice@example.com" }).waitFor();
+  await alice.keyboard.press("Escape");
+
+  // her tablet had an anonymous id of its own; signing in there takes the account's, and the room shows up
+  const tablet = await person("t");
+  await signInGoogle(tablet, "alice@example.com", { switching: true });
+  assert.equal(await emuUid(tablet, "t"), aId);
+  await tablet.locator(`#resume .roomrow[data-code="${code}"]`).click();
+  await tablet.locator("#chat").waitFor();
+  await titleIs(tablet, "Workshop");
+  await tablet.locator("#chat .bar [data-a=menu]").click();
+  await sheet(tablet).locator("[data-a=end]").waitFor();   // still the owner
+  await tablet.keyboard.press("Escape");
+  await say(tablet, "from the tablet");
+  await bubble(bob, "from the tablet").waitFor();
+  // the tablet doesn't put its own key on her member record: private messages are still sealed to the first device's
+  await new Promise((ok) => setTimeout(ok, 1000));
+  assert.equal((await dbGet(`rooms/${code}/members/${aId}`)).pk, pk);
+  await bob.locator("#peopleBtn").click();
+  await sheet(bob).locator(".st-mrow", { hasText: "Alice" }).locator("[data-dm]").click();
+  await bob.locator("#dmBar").waitFor();
+  await say(bob, "only for alice");
+  await alice.locator(`#resume .roomrow[data-code="${code}"]`).click();
+  await alice.locator("#peopleBtn").click();
+  await sheet(alice).locator(".st-mrow", { hasText: "Bob" }).locator("[data-dm]").click();
+  await bubble(alice, "only for alice").waitFor();
+  await tablet.locator("#peopleBtn").click();
+  await sheet(tablet).locator(".st-mrow", { hasText: "Bob" }).locator("[data-dm]").click();
+  await tablet.locator("#list .msg .bub", { hasText: "first device you signed in on" }).waitFor();
+  await tablet.locator("#text").fill("can't send this");
+  await tablet.locator("#composer .send").click();
+  await tablet.locator(".toast", { hasText: "first device you signed in on" }).waitFor();
+
+  // signing out on the tablet: a new anonymous id there, and nothing of the account's left on it
+  await tablet.goto(`${base}/?emu&as=t`); await tablet.locator("#createBtn").waitFor();
+  await accountSheet(tablet);
+  const out = tablet.waitForEvent("load");
+  await press(tablet, "out"); await press(tablet, "yes");
+  await out; await tablet.locator("#createBtn").waitFor();
+  assert.notEqual(await emuUid(tablet, "t"), aId);
+  assert.equal(await tablet.locator("#resume").isHidden(), true);
+  assert.equal(await tablet.evaluate(() => localStorage.getItem("chat-rooms") || localStorage.getItem("chat-dh") || localStorage.getItem("chat-account")), null);
+
+  // deleting the account on her phone: what it kept goes at once, and the phone starts over too
+  await alice.goto(`${base}/?emu&as=a`); await alice.locator("#createBtn").waitFor();
+  await accountSheet(alice);
+  const del = alice.waitForEvent("load");
+  await press(alice, "del"); await press(alice, "yes");
+  await del; await alice.locator("#createBtn").waitFor();
+  assert.equal(await dbGet(`users/${aId}`), null);
+  assert.equal(await dbGet("emu-accounts/alice@example_com"), null);
+  assert.notEqual(await emuUid(alice, "a"), aId);
   noErrors();
 });

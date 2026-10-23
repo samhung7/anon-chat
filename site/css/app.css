@@ -476,6 +476,10 @@ code { font-size: .9em; }
 .merow .av { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-2); color: var(--accent-ink); font-size: 26px; }
 .merow .av img { width: 40px; height: 40px; border-radius: 50%; display: block; }
 .merow .chev { color: var(--muted); }
+.merow .txt { min-width: 0; overflow-wrap: anywhere; }
+/* the Google account sheet (account.js) */
+.acct p { margin: 0 0 var(--sp-3); }
+.acct .btn.wide { margin-top: var(--sp-2); }
 .ttl small { font-size: 12px; }
 .tabs { display: flex; gap: 6px; overflow-x: auto; padding: var(--sp-2) var(--sp-3); background: var(--surface); border-bottom: 1px solid var(--line); }
 .tab { flex: none; display: inline-flex; align-items: center; gap: 6px; position: relative; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); border-radius: var(--radius-pill); padding: var(--sp-1) 14px; font-size: var(--fs-md); min-height: 36px; }

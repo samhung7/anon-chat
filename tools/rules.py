@@ -729,12 +729,14 @@ rules = {"rules": {
                 "$msg": {".write": "auth != null && !newData.exists() && (" + o(is_staff("data.parent().parent()"), is_admin) + ")", "$uid": REPORT}},
             # Web Push: each member who wants notifications while the page is closed leaves their browser's push
             # subscription here, sealed by the push service (worker/) so other members can't use it; the service reads
-            # them with the sender's own sign-in when a message goes out. Gone when they mute the room or leave.
+            # them with the sender's own sign-in when a message goes out. One for each of their devices (someone
+            # signed in with Google may have several); gone when they mute the room there, or leave.
             "push": {
                 ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
                 "$uid": {
                     ".write": j("auth != null", "auth.uid === $uid", o("!newData.exists()", is_member("data.parent().parent()"))),
-                    ".validate": SEALED(2000)}},
+                    ".validate": "newData.hasChildren()",
+                    "$dev": {".validate": j(r"$dev.matches(/^[A-Za-z0-9_-]{12}$/)", SEALED(2000))}}},
             "typing": {
                 ".read": "auth != null && data.parent().child('members/' + auth.uid).exists()",
                 "$uid": TYPING("data.parent().parent()")},
@@ -845,6 +847,10 @@ rules = {"rules": {
         # the rooms the hourly job warned about, by Web Push, before they turn read-only and before they go: the
         # meta/last it warned at (l) and how far along (s: 1 read-only soon, 2 gone soon), so it warns once each
         "warned": {"$code": {".validate": "newData.hasChildren(['l', 's'])"}},
+        # Google accounts the operator banned, kept a year (tools/cleanup/accounts.mjs) so that deleting the account and
+        # signing in again doesn't get round the ban: by a hash of the Google account's id, never its email; only the
+        # hourly job reads or writes them
+        "gbans": {"$h": {".validate": "newData.hasChildren(['at', 'until'])"}},
     },
     # someone the operator banned: they can't open, join or write in any room (and can see that they're banned)
     "bans": {
@@ -858,6 +864,17 @@ rules = {"rules": {
             "$other": NO,
         },
     },
+    # someone signed in with Google (site/js/app/account.js): what their account keeps, so every device they sign in on
+    # has it: the rooms they're in (when they last went in) and the public key their private messages are sealed to
+    # (crypto.js). Only they read or write it, and only signed in with Google (an email in the token); they can
+    # always delete it, which deleting the account does
+    "users": {"$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": j("auth != null", "auth.uid === $uid", o("!newData.exists()", "auth.token.email != null")),
+        "rooms": {"$code": {".validate": j(r"$code.matches(/^[2-9A-HJKMNP-Z]{4}$/)", "newData.isNumber()", "newData.val() <= now")}},
+        "dh": {".validate": SEALED(120)},
+        "$other": NO,
+    }},
     # old password rooms' passwords: never readable, and can only be cleared (the daily cleanup removes them)
     "secrets": {"$code": {
         ".write": j("auth != null", "!newData.exists()", o(

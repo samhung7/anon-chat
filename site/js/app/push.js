@@ -1,8 +1,9 @@
 /* Web Push: notifications while the page is closed (notify.js covers a page that's open, even hidden).
    With notifications allowed, this browser subscribes with the push service (worker/), which seals the subscription
-   for this device's id; it's kept in each room this device wants to hear from (rooms/{code}/push/{uid}) and taken out
-   when the room is muted or left. After posting, the author's page stamps meta/pa (the rules allow that at most every
-   20 seconds) and asks the service to announce the message. When someone announced the room moments ago, the page
+   for this person's id; it's kept in each room this device wants to hear from (rooms/{code}/push/{uid}/{device}: one
+   for each device of someone signed in with Google on several) and taken out when the room is muted here or left.
+   After posting, the author's page stamps meta/pa (the rules allow that at most every 20 seconds) and asks the
+   service to announce the message. When someone announced the room moments ago, the page
    waits out those 20 seconds and announces its newest message then, so a quick second message isn't lost (it takes
    the first one's place on the lock screen). A private message is announced only to the person it's for. Until the
    service has its key (VAPID_KEY), none of this does anything. iPhones get pushes only in the app added to the home
@@ -43,9 +44,15 @@ async function sealedSub() {
   return sealed;
 }
 
+// this device's own id, made once (the person's id may be shared with their other devices)
+export function deviceId() {
+  let id = store.get(KEYS.device);
+  if (!/^[A-Za-z0-9_-]{12}$/.test(id || "")) store.set(KEYS.device, (id = backend.pushKey(backend.ref("x")).slice(-12)));
+  return id;
+}
 // on: this device wants pushes from the room (notifications allowed and not muted); off takes its subscription out
 export async function syncPush(code, on) {
-  const ref = backend.roomRef(code, "push/" + backend.uid);
+  const ref = backend.roomRef(code, `push/${backend.uid}/${deviceId()}`);
   try {
     if (!on) return await backend.fb.set(ref, null);
     if (!pushOn()) return;

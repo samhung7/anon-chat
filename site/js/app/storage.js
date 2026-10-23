@@ -6,6 +6,8 @@ export const store = {
   // the same, but a full storage throws, for callers that tell the person
   setOrThrow: (k, v) => localStorage.setItem(k, v),
   json: (k) => { try { return JSON.parse(store.get(k)); } catch (e) { return null; } },
+  // every key that starts with one of these
+  drop: (prefixes) => { try { Object.keys(localStorage).filter((k) => prefixes.some((p) => k.startsWith(p))).forEach((k) => localStorage.removeItem(k)); } catch (e) {} },
 };
 
 export const KEYS = {
@@ -22,8 +24,12 @@ export const KEYS = {
   quick: "chat-quick",                 // my own quick replies, once edited (until then, the presets in my language)
   quickOff: "chat-quick-off",          // the row of quick replies is turned off
   records: "chat-records",
+  account: "chat-account",             // the Google account this device is signed in with, { e: email } (account.js)
+  device: "chat-device",               // this device's own id, apart from the person's (one push subscription each)
   emu: "chat-emu",
   emuUid: (as) => "chat-emu-uid" + (as || ""),
+  emuGoogle: (as) => "chat-emu-google" + (as || ""), // the made-up Google account signed in with, with the emulator
+  emuPick: "chat-emu-pick",            // the made-up Google account the emulator's "pop-up" picks (tests set it)
   record: (id) => "chat-record:" + id,
   roomKey: (code) => "chat-key:" + code,   // an encrypted room's key
   mute: (code) => "chat-mute:" + code,

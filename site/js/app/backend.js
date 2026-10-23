@@ -1,5 +1,6 @@
 /* The connection to Firebase: anonymous sign-in, server time, and reading and writing by path.
-   Nothing else in the app loads the SDK; the rest asks this for references and values.
+   Nothing else in the app loads the SDK; the rest asks this for references and values. Someone may have tied
+   their id to a Google account (account.js), which keeps it on every device they sign in on.
    ?emu runs against the local Firebase emulator (testing only). */
 import { CFG, params } from "./constants.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
@@ -16,9 +17,12 @@ export const asParam = (sep) => (EMU && params.get("as") ? sep + "as=" + params.
 class Backend {
   fb = null;     // the SDK's functions
   db = null;
-  uid = null;    // this device's anonymous id
+  auth = null;
+  uid = null;    // this device's anonymous id, or the Google account's (the same on each device signed in with it)
   user = null;   // the signed-in user, for an ID token (not with the emulator)
+  google = null; // the Google account this id is tied to, { email, name }, or null
   offset = 0;    // server time minus this device's clock
+  signedIn = []; // what runs once signed in, before connect() resolves (account.js: what the account keeps)
   #connecting = null;
   #paused = false;
 
@@ -33,12 +37,20 @@ class Backend {
       if (EMU) { // local emulator: a made-up id per device (or per tab with ?as=) stands in for anonymous sign-in
         const k = KEYS.emuUid(params.get("as"));
         this.uid = store.get(k) || "emu" + Math.random().toString(36).slice(2, 12); store.set(k, this.uid);
-        fb.connectDatabaseEmulator(this.db, location.hostname, 9000, { mockUserToken: { sub: this.uid, user_id: this.uid } });
+        const email = store.get(KEYS.emuGoogle(params.get("as"))); // a made-up Google account (account.js)
+        this.google = email ? { email, name: email.split("@")[0] } : null;
+        fb.connectDatabaseEmulator(this.db, location.hostname, 9000, { mockUserToken: { sub: this.uid, user_id: this.uid,
+          ...(email ? { email, firebase: { sign_in_provider: "google.com" } } : {}) } });
       } else { // the same places getAuth keeps the sign-in, so every device keeps its id (and with it its rooms)
-        const auth = fb.initializeAuth(app, { persistence: [fb.indexedDBLocalPersistence, fb.browserLocalPersistence, fb.browserSessionPersistence] });
-        this.user = (await fb.signInAnonymously(auth)).user; this.uid = this.user.uid;
+        const auth = (this.auth = fb.initializeAuth(app, { persistence: [fb.indexedDBLocalPersistence, fb.browserLocalPersistence, fb.browserSessionPersistence] }));
+        // someone signed in with Google stays so: signing in anonymously over them would give them a new id
+        await auth.authStateReady();
+        this.user = auth.currentUser || (await fb.signInAnonymously(auth)).user; this.uid = this.user.uid;
+        const g = this.user.providerData.find((p) => p.providerId === "google.com");
+        this.google = g ? { email: g.email || this.user.email || "", name: g.displayName || "" } : null;
       }
       fb.onValue(fb.ref(this.db, ".info/serverTimeOffset"), (s) => (this.offset = s.val() || 0));
+      for (const f of this.signedIn) await f();
     })().catch((e) => { this.#connecting = null; throw e; });
     return this.#connecting;
   }
@@ -54,6 +66,11 @@ class Backend {
     const iat = Math.floor(Date.now() / 1000);
     return Promise.resolve(enc({ alg: "none", type: "JWT" }) + "." + enc({ iss: `https://securetoken.google.com/${FB.projectId}`, aud: FB.projectId,
       iat, exp: iat + 3600, auth_time: iat, sub: this.uid, user_id: this.uid, firebase: { sign_in_provider: "anonymous", identities: {} } }) + ".");
+  }
+  // the emulator's database as its owner, past the rules: what stands in for Google's own records there (account.js)
+  emuOwner(path, method = "GET", body) {
+    return fetch(`http://${location.hostname}:9000/${path}.json?ns=${FB.projectId}`, { method, headers: { Authorization: "Bearer owner" },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }).then((r) => r.json());
   }
   // "the server's time" in a write
   stamp() { return this.fb.serverTimestamp(); }
