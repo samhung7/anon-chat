@@ -118,7 +118,7 @@ test("open room: create, join with the code, talk, react, reply, edit, delete", 
   assert.equal(await bob.locator("#joinCode").inputValue(), code);
   // the code alone is enough for an open room
   await bob.locator("#joinCode").fill(code.toLowerCase());
-  await bob.locator("#joinForm button").click();
+  await bob.locator("#joinForm [type=submit]").click();
   await pickName(bob, "Bob");
   await bob.locator("#chat").waitFor();
   await alice.locator("#peopleBtn .n", { hasText: "2" }).waitFor();
@@ -308,7 +308,7 @@ test("private salon: only ciphertext on the server, the link is needed, private 
 
   // the code alone asks for the full link
   await carol.locator("#joinCode").fill(code);
-  await carol.locator("#joinForm button").click();
+  await carol.locator("#joinForm [type=submit]").click();
   await carol.locator("#joinLink").waitFor();
   await carol.locator("#joinLink").fill(url);
   await press(carol, "yes");
@@ -724,7 +724,7 @@ test("theme, and a code that doesn't exist", async () => {
   await alice.waitForFunction(() => document.documentElement.dataset.theme === "dark");
   await alice.keyboard.press("Escape");
   await alice.locator("#joinCode").fill("ZZZZ");
-  await alice.locator("#joinForm button").click();
+  await alice.locator("#joinForm [type=submit]").click();
   await alice.locator(".toast").first().waitFor();
   assert.equal(await alice.locator("#home").isVisible(), true);
   noErrors();
@@ -882,7 +882,7 @@ test("a quiet room: a warning in its 24th hour, then read-only with the hours le
   assert.ok(await bob.locator("#composer").isHidden(), "coming back from the home list, the message box stays away");
   assert.ok(await bob.locator("#roBox", { hasText: "Read-only" }).isVisible());
   await carol.locator("#joinCode").fill(code);
-  await carol.locator("#joinForm button").click();
+  await carol.locator("#joinForm [type=submit]").click();
   await carol.locator(".toast", { hasText: "read-only" }).waitFor();
   assert.ok(await dbGet(`rooms/${code}/meta`), "still there until its 24 read-only hours are up");
   noErrors();
@@ -1511,5 +1511,70 @@ for (const priv of [false, true]) test(`quiz pictures go to R2 with the quiz (${
   await press(alice, "del");
   await press(alice, "yes");
   await waitUntil(() => photos.bucket.objects.size === 0);
+  noErrors();
+});
+
+// the camera plays a canvas showing a QR Code of window.qrText (none until it's set); deny: the camera is refused
+async function withCamera(as, { deny = false } = {}) {
+  const ctx = await browser.newContext({ locale: "en-US" });
+  await ctx.addInitScript((deny) => {
+    navigator.mediaDevices.getUserMedia = async () => {
+      if (deny) throw new DOMException("no", "NotAllowedError");
+      const c = Object.assign(document.createElement("canvas"), { width: 480, height: 480 }), g = c.getContext("2d");
+      let drawn = null;
+      setInterval(() => {
+        if (window.qrText === drawn) return;
+        drawn = window.qrText;
+        g.fillStyle = "#fff"; g.fillRect(0, 0, 480, 480);
+        if (drawn) { const q = qrcode(0, "M"); q.addData(drawn); q.make(); const n = q.getModuleCount(), s = Math.floor(360 / n);
+          g.fillStyle = "#000"; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) g.fillRect(60 + k * s, 60 + r * s, s, s); }
+      }, 50);
+      return c.captureStream(10);
+    };
+  }, deny);
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => errors.push(`${as}: ${e.message}`));
+  await page.goto(`${base}/?emu&as=${as}`);
+  await page.locator("#createBtn").waitFor();
+  return page;
+}
+
+test("joining by the room's QR Code: the camera reads it (only a StoaTalk link counts), or a photo of it when the camera is refused", async () => {
+  const alice = await person("a");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  assert.match(url, /#k=/);
+
+  const bob = await withCamera("b");
+  await bob.locator("#scanBtn").click();
+  await sheet(bob).locator(".scanview video").waitFor();
+  await bob.evaluate(() => (window.qrText = "https://example.com/?room=ABCD"));
+  await bob.locator(".toast", { hasText: "isn't a StoaTalk room" }).waitFor();
+  assert.ok(await sheet(bob).locator(".scan").isVisible(), "the camera keeps looking");
+  await bob.evaluate((u) => (window.qrText = u), url);
+  await pickName(bob, "Bob");
+  await bob.locator("#chat").waitFor();
+  assert.match(new URL(bob.url()).search, new RegExp(`room=${code}`));
+  assert.equal(await bob.locator(".scan").count(), 0, "the scanner is gone, and its camera with it");
+  await say(bob, "scanned in");
+  await bubble(alice, "scanned in").waitFor();
+
+  const carol = await withCamera("c", { deny: true });
+  await carol.locator("#scanBtn").click();
+  await sheet(carol).locator(".scannote", { hasText: "isn't allowed" }).waitFor();
+  assert.ok(await sheet(carol).locator(".scanview").isHidden());
+  // a photo of the QR Code, chosen from the device
+  await carol.evaluate(async (u) => {
+    const q = qrcode(0, "M"); q.addData(u); q.make();
+    const img = new Image(); img.src = q.createDataURL(8, 16); await img.decode();
+    const c = Object.assign(document.createElement("canvas"), { width: img.width, height: img.height });
+    c.getContext("2d").drawImage(img, 0, 0);
+    const blob = await new Promise((ok) => c.toBlob(ok, "image/png")), dt = new DataTransfer();
+    dt.items.add(new File([blob], "qr.png", { type: "image/png" }));
+    const input = document.querySelector(".scan input[type=file]"); input.files = dt.files;
+    input.dispatchEvent(new Event("change"));
+  }, url);
+  await pickName(carol, "Carol");
+  await carol.locator("#chat").waitFor();
+  await bubble(carol, "scanned in").waitFor();
   noErrors();
 });

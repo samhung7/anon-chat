@@ -237,3 +237,13 @@ test("quiz: a set is cleaned, asked without its answers, scored by speed, ranked
   const back = Q.fromFile(Q.toFile({ t: "p", q: [withPic] })).q[0];
   assert.deepEqual([back.img, back.im], [img, undefined]);
 });
+
+test("a scanned QR Code joins only when it's a StoaTalk invite link, and keeps a Private Salon's key", async () => {
+  const { roomLink } = await import(new URL("scan.js?v=dev", APP));
+  const key = "A".repeat(43);
+  assert.equal(roomLink("https://stoatalk.app/?room=K7QM"), "?room=K7QM");
+  assert.equal(roomLink(` https://www.stoatalk.app/?room=k7qm#k=${key}\n`), `?room=k7qm#k=${key}`);
+  assert.equal(roomLink("https://stoatalk.app/index.html?lang=ja&room=K7QM&show=1"), "?room=K7QM");
+  for (const no of ["https://evil.example/?room=K7QM", "http://stoatalk.app/?room=K7QM", "https://stoatalk.app.evil.example/?room=K7QM",
+    "https://stoatalk.app/?room=K7Q", "https://stoatalk.app/", "K7QM", "javascript:alert(1)", "", null]) assert.equal(roomLink(no), null, String(no));
+});

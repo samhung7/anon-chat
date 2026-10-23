@@ -3,7 +3,7 @@
 Open a room, get a 4-character code, and share the code or link. Anyone with it joins straight from the browser: no sign-up, no LINE, FB or IG. When the talk is over the room is deleted, and anyone who wants a copy exports it first.
 Made for lecture Q&A, anonymous reading groups, workshops and team projects. Interface: 繁體中文, 简体中文, English, 日本語, 한국어, Español, Français, Deutsch, Português. It follows the device's language (English when the site doesn't have it), and the ☰ menu on the home page can change it. Text lives in `site/js/i18n/<lang>.js`; add a key to every file when you add text.
 
-- **Rooms**: Open Stoa / 公開議廊 (the code is enough) or Private Salon / 私人沙龍, which is always end-to-end encrypted (only the full link or QR code gets in).
+- **Rooms**: Open Stoa / 公開議廊 (the code is enough) or Private Salon / 私人沙龍, which is always end-to-end encrypted (only the full link or QR code gets in). The home page's QR button opens the camera (or a photo) and joins by a room's QR Code, read on the device: the browser's BarcodeDetector where it has one, else jsQR (`js/vendor/jsqr.js`, loaded on first use); only a StoaTalk invite link joins.
 - **End-to-end encryption**: private messages are always end-to-end encrypted. A room can also be opened as encrypted: its key travels only in the invite link and QR code (after the `#`, which browsers never send to a server), so the database holds the title, nicknames and messages only as ciphertext. People need the full link to join; the 4-character code alone isn't enough. See below.
 - **Identity**: a nickname and an animal, kept on the device. Nicknames are unique within a room (ignoring case). Behind the scenes each device gets an anonymous Firebase id.
 - **Chat**: live messages, replies that quote and jump to the original, links, @mentions (typing @ offers names; a mention notifies even a muted room), editing your own messages (marked 已編輯), "someone is typing", a line above the messages that came since you last read and a ↓ button back to the newest, an emoji picker, GIF search (KLIPY), six reactions, who's here and who's online, private messages between two people (the owner can't read those either).
@@ -32,7 +32,7 @@ site/                       the whole app, served as-is by Cloudflare Pages
                             the screens (chat.js, qa.js, show.js, home.js, ...) draw what a Room tells them
   js/i18n.js, js/theme.js   the language and light/dark, loaded in <head> before anything paints
   js/config.js              Firebase web config (public by design)
-  js/vendor/                Firebase SDK bundle and qrcode-generator (npm run vendor rebuilds them)
+  js/vendor/                Firebase SDK bundle, qrcode-generator and jsQR (npm run vendor rebuilds them)
   sw.js, manifest.webmanifest, icons/
 database.rules.json         who may read and write what; generated from tools/rules.py
 tools/rules.py              the rules, written readably (npm run rules)
