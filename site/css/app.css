@@ -190,7 +190,15 @@ code { font-size: .9em; }
 }
 .codein::placeholder { font: var(--fs-body) var(--font-sans); letter-spacing: 0; color: var(--muted); text-transform: none; }
 .joinrow .btn { flex: none; min-width: 96px; min-height: var(--code-h); }
-.joinrow .scanbtn { min-width: var(--code-h); padding: 0; }
+/* the code box, with the QR scanner's button inside it on the right, clear of what is typed */
+.codebox { flex: 1; min-width: 0; position: relative; display: flex; }
+.codebox .codein { padding-inline-end: 48px; }
+.scanin {
+  position: absolute; inset-inline-end: 4px; top: 50%; transform: translateY(-50%); width: var(--hit); height: var(--hit);
+  display: grid; place-items: center; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted);
+}
+.scanin:hover { color: var(--text); }
+.scanin:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 /* the QR Code scanner: the camera's picture in a square, a frame to aim with */
 .scan { text-align: center; }
 .scanview { position: relative; width: min(100%, 320px); aspect-ratio: 1; margin: 0 auto var(--sp-3); border-radius: var(--radius-md); overflow: hidden; background: #000; }
