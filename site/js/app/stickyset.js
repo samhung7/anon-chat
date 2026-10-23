@@ -14,9 +14,11 @@ export const TEMPLATES = {
 export const PHASES = ["add", "vote", "done"];
 const NOTE_ID = /^[\w-]{20}$/;   // a note's id is a push key
 
-// where a board is at: ph, the votes each person has (v), the notes each may put up (lim), anonymous (an), paused (lock)
+// where a board is at: ph, the votes each person has (v), the notes each may put up (lim), anonymous (an), paused (lock),
+// and on a board opened hidden, hd: true while the words stay hidden, false once shown (undefined on any other board)
 export const cleanLive = (x) => (isObj(x) && PHASES.includes(x.ph) ? {
   ph: x.ph, v: BOARD.votes.includes(x.v) ? x.v : 3, lim: BOARD.lims.includes(x.lim) ? x.lim : 10, an: x.an !== false, lock: x.lock === true,
+  ...(typeof x.hd === "boolean" ? { hd: x.hd } : {}),
 } : null);
 // the columns, [{ k, n }] in order, each key once
 export function cleanCols(x) {
@@ -27,19 +29,18 @@ export function cleanCols(x) {
   }
   return out.slice(0, BOARD.cols);
 }
-// a note as stored (v), its words and name from v itself in a plain room or from what its x opened to (p) in a Private Salon
-export function cleanNote(v, p) {
+// a note as stored (v), its words and name from v itself in a plain room or from what its x opened to (p) in a Private
+// Salon. On a hidden board the words come apart (w/{note}, put into v by Room); one whose words I can't read yet is
+// still a note, face down: no words, hidden
+export function cleanNote(v, p, hidden = false) {
   if (!isObj(v)) return null;
+  const at = { c: /^[0-5]$/.test(v.c) ? +v.c : 0, k: /^[0-5]$/.test(v.k) ? v.k : "0",
+    o: typeof v.o === "string" && /^[0-9a-z]{1,40}$/.test(v.o) ? v.o : "i", at: +v.at || 0 };
   const w = v.x ? p : v;
-  if (!isObj(w)) return null;
-  const text = str(w.t, BOARD.text);
-  if (!text) return null;
+  const text = isObj(w) ? str(w.t, BOARD.text) : "";
+  if (!text) return hidden ? { t: "", hidden: true, ...at } : null;
   const name = str(v.x ? w.n : v.nm, 24), av = str(v.x ? w.a : v.av, 8);
-  return {
-    t: text, c: /^[0-5]$/.test(v.c) ? +v.c : 0, k: /^[0-5]$/.test(v.k) ? v.k : "0",
-    o: typeof v.o === "string" && /^[0-9a-z]{1,40}$/.test(v.o) ? v.o : "i", at: +v.at || 0,
-    ...(name ? { nm: name, av: av || "👤" } : {}),
-  };
+  return { t: text, ...at, ...(name ? { nm: name, av: av || "👤" } : {}) };
 }
 // someone's votes, as stored ("a,a,b") or opened: the notes picked, one entry per vote, at most `most` of them
 export const cleanPicks = (s, most) => (typeof s === "string" && s ? s.split(",").filter((id) => NOTE_ID.test(id)).slice(0, most) : []);
@@ -74,7 +75,7 @@ export function tally(ballots, notes, most) {
 // every note with its column, best first (votes, then place); cols decides which column a stray note counts in
 export function ranked(cols, notes, counts) {
   const keys = new Set(cols.map((c) => c.k));
-  return [...notes].map(([id, n]) => ({ id, ...n, k: keys.has(n.k) ? n.k : cols[0]?.k || "0", v: counts[id] || 0 }))
+  return [...notes].filter(([, n]) => !n.hidden).map(([id, n]) => ({ id, ...n, k: keys.has(n.k) ? n.k : cols[0]?.k || "0", v: counts[id] || 0 }))
     .sort((a, b) => b.v - a.v || byPlace(a, b));
 }
 const csvCell = (x) => (/[",\n\r]/.test(String(x)) ? `"${String(x).replace(/"/g, '""')}"` : String(x));

@@ -1,6 +1,7 @@
 /* The projector screen (?show). For a lecture hall: how to join (QR Code, address and code) beside the question
    being answered and the most upvoted ones, or the latest poll. While a quiz is on (quiz.js) it shows the quiz instead,
-   across the whole screen once the questions start. It opens in its own tab, as the same person, and follows the room live. */
+   across the whole screen once the questions start; while a sticky-notes board is on (sticky.js), the board beside how
+   to join. It opens in its own tab, as the same person, and follows the room live. */
 import { APP, params } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
 import { $, el, qrSvg, icon, avatar, bare } from "./dom.js?v=dev";
@@ -11,6 +12,7 @@ import { pollView, livePoll } from "./polls.js?v=dev";
 import { byVotes } from "./qa.js?v=dev";
 import { roomUrl } from "./home.js?v=dev";
 import { shownQuiz, quizScreen, quizStage, quizClock } from "./quiz.js?v=dev";
+import { shownBoard, boardScreen } from "./sticky.js?v=dev";
 
 let showing = params.has("show");
 export const SHOW = () => showing;
@@ -19,7 +21,7 @@ export const endShow = () => { showing = false; };
 export function watchShow(r) {
   const ifPoll = (id, v) => { if (v.poll) renderShow(); };
   r.on("meta", renderShow).on("members", renderShow).on("qs", renderShow)
-    .on("msg", ifPoll).on("msg-changed", ifPoll).on("msg-removed", renderShow).on("quiz", renderShow);
+    .on("msg", ifPoll).on("msg-changed", ifPoll).on("msg-removed", renderShow).on("quiz", renderShow).on("board", renderShow);
   // a quiz moves on with the clock too: drawn again when it does, its countdown kept up in between
   const tick = setInterval(() => {
     if (!showing || !r.current) return;
@@ -55,6 +57,13 @@ function drawShow() {
     $(".smain", box).replaceChildren(quizScreen(z) || "");
     $(".spoll", box).replaceChildren();
     return quizClock(box, z);
+  }
+  const sb = shownBoard();
+  box.classList.toggle("boardon", !!sb);
+  if (sb) {
+    $(".smain", box).replaceChildren(boardScreen(sb) || "");
+    $(".spoll", box).replaceChildren();
+    return;
   }
   const poll = [...room.msgs.values()].reverse().find((v) => v.poll);
   const pollBox = poll ? el("div", { class: "spollbox" }, pollView(livePoll(poll), null)) : null;

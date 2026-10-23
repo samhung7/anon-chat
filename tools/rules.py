@@ -331,13 +331,16 @@ BOARD_MARK = {".validate": j("newData.val() === true", is_staff(PROOM),
 #   live    where it's at: ph (add: notes go up, vote: votes go in, done: the result is out; add and vote can swap, done
 #           is for good), v (votes each person has: 1, 3 or 5, changed only while notes go up), lim (notes each person may
 #           put up, kept by their device), an (anonymous: notes carry no name; set when it's opened, never changed),
-#           lock (the host paused new notes)
+#           lock (the host paused new notes), hd (hidden: set only when it's opened, true while the notes' words stay
+#           hidden, then false for good once the host shows them; the vote and the result wait for it)
 #   cols    the columns, [{k, n}] in order: written by the hosts, JSON in a plain room, sealed in a Private Salon
 #   n/{note}  a note: its words t, colour c, column k and place o (a string that sorts between its neighbours'), and its
 #           author's room name (nm, av) unless the board is anonymous; in a Private Salon the words and the name are
 #           sealed in x. Who wrote it sits apart in nb/{note}, which only the author reads, so a note can be anonymous even
 #           to the hosts. Its author changes it or takes it back while notes go up; the hosts move any note (k, o) until
 #           the result is out, and take any note down. Putting one up is rate-limited like posting (ln names it)
+#   w/{note}  on a board opened hidden (live has hd), a note's words and name sit here instead of in n/{note}: only
+#           its author reads them until the host shows them all (hd false); written, changed and taken away with n/{note}
 #   bk/{uid}  the key someone votes under, which only they read; v/{key} their votes: the notes picked, a note again for
 #           each more vote on it ("a,a,b"; sealed in a Private Salon, where the rules can't count them). Each person reads
 #           only their own until the result is out; then everyone reads them all.
@@ -354,6 +357,7 @@ NOTEROOM = "newData.parent().parent().parent().parent()"   # from rooms/$code/sb
 # the room name on a note is the author's own, and only on a board that isn't anonymous (unchecked when sealed)
 named = o(S_ENC, j(f"{SL}.child('an').val() === true", "!newData.hasChild('nm')", "!newData.hasChild('av')"),
           j(f"{SL}.child('an').val() !== true", f"newData.child('nm').val() === {SROOM}.child('members/' + auth.uid + '/name').val()", "newData.hasChild('av')"))
+SPLIT = f"{SL}.child('hd').exists()"   # opened hidden: the words are in w/{note}
 moving = j(s_host(3), "data.exists()", "newData.exists()", f"{SL}.child('ph').val() !== 'done'")
 PICK = "[A-Za-z0-9_-]{20}"
 picks = lambda n: f"newData.val().matches(/^{PICK}(,{PICK}){{0,{n - 1}}}$/)"
@@ -367,8 +371,9 @@ BOARD = {"$b": {
            ".validate": "newData.isString()"},
     "live": {
         ".read": s_read, ".write": j(s_host(1), "newData.exists()"),
-        ".validate": "newData.hasChildren(['ph', 'v', 'lim', 'an'])",
+        ".validate": j("newData.hasChildren(['ph', 'v', 'lim', 'an'])", o("!data.hasChild('hd')", "newData.hasChild('hd')")),
         "ph": {".validate": j(r"newData.isString() && newData.val().matches(/^(add|vote|done)$/)",
+                              o("newData.val() === 'add'", "newData.parent().child('hd').val() !== true"),
                               o("newData.val() === data.val()", j("!data.exists()", "newData.val() === 'add'"),
                                 "data.val() === 'add' && newData.val() === 'vote'", "data.val() === 'vote' && newData.val() === 'add'",
                                 "data.val() !== 'done' && newData.val() === 'done'"))},
@@ -377,6 +382,8 @@ BOARD = {"$b": {
         "lim": {".validate": "newData.val() === 3 || newData.val() === 5 || newData.val() === 10 || newData.val() === 20"},
         "an": {".validate": j("newData.isBoolean()", o("!data.exists()", "newData.val() === data.val()"))},
         "lock": {".validate": "newData.isBoolean()"},
+        "hd": {".validate": j("newData.isBoolean()", o(j("!data.exists()", "!data.parent().exists()"), "newData.val() === data.val()",
+                                                    "data.val() === true && newData.val() === false"))},
         "$other": NO,
     },
     "cols": {".read": s_read, ".write": j(s_host(1), "newData.exists()"), ".validate": o(j(S_ENC, SEALED(3000)), j("!" + S_ENC, S(1000)))},
@@ -384,15 +391,17 @@ BOARD = {"$b": {
         ".write": j("auth != null", NOTE_ID, o(
             # a new note, by someone in the room while notes go up, its author named apart; stamped like a message
             j("!data.exists()", "newData.exists()", s_open, f"{SL}.child('ph').val() === 'add'", f"{SL}.child('lock').val() !== true",
-              f"newData.parent().parent().child('nb/' + $note).val() === auth.uid", named,
+              f"newData.parent().parent().child('nb/' + $note).val() === auth.uid", o(j(SPLIT, "newData.parent().parent().child('w/' + $note).exists()"), j("!" + SPLIT, named)),
               f"{NOTEROOM}.child('members/' + auth.uid + '/ls').val() === now", f"{NOTEROOM}.child('members/' + auth.uid + '/ln').val() === $note"),
             # its author changes it, or takes it back, while notes go up
             j("data.exists()", f"{SB}.child('nb/' + $note).val() === auth.uid", is_member(SROOM), alive(SROOM), f"{SL}.child('ph').val() === 'add'",
-              o("!newData.exists()", named)),
+              o("!newData.exists()", SPLIT, named)),
             # the owner or a co-host takes any note down, or StoaTalk's operator
             j("!newData.exists()", o(is_staff(SROOM), is_admin)))),
-        ".validate": j("newData.hasChildren(['c', 'k', 'o', 'at'])", o(j(S_ENC, "newData.hasChild('x')", "!newData.hasChild('t')"),
-                                                                    j("!" + S_ENC, "newData.hasChild('t')", "!newData.hasChild('x')"))),
+        ".validate": j("newData.hasChildren(['c', 'k', 'o', 'at'])", o(
+            j(SPLIT, "!newData.hasChild('t')", "!newData.hasChild('x')", "!newData.hasChild('nm')", "!newData.hasChild('av')"),
+            j("!" + SPLIT, S_ENC, "newData.hasChild('x')", "!newData.hasChild('t')"),
+            j("!" + SPLIT, "!" + S_ENC, "newData.hasChild('t')", "!newData.hasChild('x')"))),
         "t": {".validate": NONEMPTY(200) + " && !" + S_ENC},
         "x": {".validate": SEALED(1600) + " && " + S_ENC},   # {t, n?, a?} sealed to the board and the note
         "c": {".validate": r"newData.isString() && newData.val().matches(/^[0-5]$/)"},
@@ -403,8 +412,23 @@ BOARD = {"$b": {
         "at": {".validate": "newData.val() === now || newData.val() === data.val()"},
         "$other": NO,
     }},
+    # a hidden board's words: everyone reads them once shown; until then each author reads their own
+    "w": {".read": j(s_read, f"{SL}.child('hd').val() === false"), "$note": {
+        ".read": f"auth != null && {SB}.child('nb/' + $note).val() === auth.uid",
+        ".write": j("auth != null", NOTE_ID, o(
+            j("!data.exists()", "newData.exists()", SPLIT, "newData.parent().parent().child('nb/' + $note).val() === auth.uid",
+              f"!{SB}.child('n/' + $note).exists()", "newData.parent().parent().child('n/' + $note).exists()"),
+            j("data.exists()", "newData.exists()", f"{SB}.child('nb/' + $note).val() === auth.uid", is_member(SROOM), alive(SROOM), f"{SL}.child('ph').val() === 'add'"),
+            j("!newData.exists()", "!newData.parent().parent().child('n/' + $note).exists()"))),
+        ".validate": j(named, o(j(S_ENC, "newData.hasChild('x')", "!newData.hasChild('t')"), j("!" + S_ENC, "newData.hasChild('t')", "!newData.hasChild('x')"))),
+        "t": {".validate": NONEMPTY(200) + " && !" + S_ENC},
+        "x": {".validate": SEALED(1600) + " && " + S_ENC},
+        "nm": {".validate": S(24) + " && !" + S_ENC}, "av": {".validate": S(8) + " && !" + S_ENC},
+        "$other": NO,
+    }},
     "nb": {"$note": {
-        ".read": "auth != null && data.val() === auth.uid",
+        # (StoaTalk's operator reads it too, to act on a report)
+        ".read": "auth != null && (data.val() === auth.uid || " + is_admin + ")",
         ".write": j("auth != null", NOTE_ID, o(
             j("!data.exists()", "newData.val() === auth.uid", "newData.parent().parent().child('n/' + $note).exists()", f"!{SB}.child('n/' + $note).exists()"),
             j("!newData.exists()", "!newData.parent().parent().child('n/' + $note).exists()"))),
@@ -427,18 +451,22 @@ EDIT_ROOM = "data.parent().parent().parent()"   # from rooms/$code/msgs/$id/<fie
 edit_write = j("auth != null", "data.parent().child('by').val() === auth.uid", is_member(EDIT_ROOM), alive(EDIT_ROOM))
 edit_field = j(edit_write, "data.exists()", "newData.exists()")
 # a report: one per person per message, with a reason (0 harassment, 1 spam, 2 inappropriate, 3 other), read by the owner and co-hosts.
-# A comment under a long post is reported the same way, under the comment's id, naming the post it's under (p)
+# A comment under a long post is reported the same way, under the comment's id, naming the post it's under (p); so is a
+# note on a sticky-notes board, naming the board (b), never by its own author
 REP_ROOM = "data.parent().parent().parent()"   # from rooms/$code/reports/$msg/$uid
 REPORT = {
     ".write": j("auth != null", o(
         j("auth.uid === $uid", "!data.exists()", "newData.exists()", is_member(REP_ROOM),
-          o(j("!newData.hasChild('p')", f"{REP_ROOM}.child('msgs/' + $msg).exists()"),
-            f"{REP_ROOM}.child('pc/' + newData.child('p').val() + '/' + $msg).exists()")),
+          o(j("!newData.hasChild('p')", "!newData.hasChild('b')", f"{REP_ROOM}.child('msgs/' + $msg).exists()"),
+            j("newData.hasChild('p')", f"{REP_ROOM}.child('pc/' + newData.child('p').val() + '/' + $msg).exists()"),
+            j("!newData.hasChild('p')", f"{REP_ROOM}.child('sb/' + newData.child('b').val() + '/n/' + $msg).exists()",
+              f"{REP_ROOM}.child('sb/' + newData.child('b').val() + '/nb/' + $msg).val() !== auth.uid"))),
         j("!newData.exists()", is_staff(REP_ROOM)))),
     ".validate": "newData.hasChildren(['r', 'at'])",
     "r": {".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"},
     "at": {".validate": "newData.val() === now"},
     "p": {".validate": PUSH_ID},
+    "b": {".validate": PUSH_ID},
     "$other": NO,
 }
 # comments under a long post: pc/{post}/{id}, apart from the post's text so opening a post fetches them only when shown.
@@ -790,15 +818,19 @@ rules = {"rules": {
                     j("!data.exists()", "newData.child('by').val() === auth.uid",
                       "$id === newData.child('code').val() + '_' + newData.child('msg').val() + '_' + auth.uid",
                       "root.child('rooms/' + newData.child('code').val() + '/members/' + auth.uid).exists()",
-                      # a message, or a comment under the long post p
-                      o(j("!newData.hasChild('p')", "root.child('rooms/' + newData.child('code').val() + '/msgs/' + newData.child('msg').val() + '/by').val() === newData.child('who').val()"),
-                        "root.child('rooms/' + newData.child('code').val() + '/pc/' + newData.child('p').val() + '/' + newData.child('msg').val() + '/by').val() === newData.child('who').val()"),
+                      # a message, a comment under the long post p, or a note on the board b (whose author the
+                      # reporter can't know: the operator's page looks it up)
+                      o(j("!newData.hasChild('p')", "!newData.hasChild('b')", "root.child('rooms/' + newData.child('code').val() + '/msgs/' + newData.child('msg').val() + '/by').val() === newData.child('who').val()"),
+                        j("newData.hasChild('p')", "root.child('rooms/' + newData.child('code').val() + '/pc/' + newData.child('p').val() + '/' + newData.child('msg').val() + '/by').val() === newData.child('who').val()"),
+                        j("!newData.hasChild('p')", "!newData.hasChild('who')", "root.child('rooms/' + newData.child('code').val() + '/sb/' + newData.child('b').val() + '/n/' + newData.child('msg').val()).exists()",
+                          "root.child('rooms/' + newData.child('code').val() + '/sb/' + newData.child('b').val() + '/nb/' + newData.child('msg').val()).val() !== auth.uid")),
                       "newData.child('who').val() !== auth.uid"),
                     j("!newData.exists()", is_admin))),
-                ".validate": "newData.hasChildren(['code', 'msg', 'by', 'who', 'r', 'at'])",
+                ".validate": "newData.hasChildren(['code', 'msg', 'by', 'r', 'at']) && (newData.hasChild('who') || newData.hasChild('b'))",
                 "code": {".validate": r"newData.isString() && newData.val().matches(/^[2-9A-HJKMNP-Z]{4}$/)"},
                 "msg": {".validate": PUSH_ID}, "by": {".validate": S(128)}, "who": {".validate": S(128)},
                 "p": {".validate": PUSH_ID},     # msg is a comment under this long post
+                "b": {".validate": PUSH_ID},     # msg is a note on this sticky-notes board
                 "r": {".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"},
                 "at": {".validate": "newData.val() === now"},
                 "t": {".validate": S(1000)},     # the message as the reporter saw it (a photo, poll or GIF as a short label)
