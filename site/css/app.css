@@ -1203,7 +1203,8 @@ button.qzopt:active { transform: scale(var(--press-scale)); }
 .sbbig small:empty { display: none; }
 /* a note lying face down (a hidden board, before the host shows them): its colour, no words */
 .sbnote.facedown { background: repeating-linear-gradient(135deg, var(--sn) 0 10px, color-mix(in srgb, var(--sn) 82%, var(--on-sn)) 10px 11px); }
-.sbnote .sbhid { display: grid; place-items: center; color: color-mix(in srgb, var(--on-sn) 55%, transparent); }
+/* the icon in the very middle of the note, whatever its foot holds */
+.sbnote .sbhid { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; color: color-mix(in srgb, var(--on-sn) 55%, transparent); }
 .sbnote .sbhid .st-i { width: 28px; height: 28px; }
 .sbbig.facedown p { color: color-mix(in srgb, var(--on-sn) 70%, transparent); }
 /* on the projector screen (js/app/show.js): the columns side by side, beside how to join */
