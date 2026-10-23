@@ -1523,10 +1523,9 @@ async function withCamera(as, { deny = false } = {}) {
     navigator.mediaDevices.getUserMedia = async () => {
       if (deny) throw new DOMException("no", "NotAllowedError");
       const c = Object.assign(document.createElement("canvas"), { width: 480, height: 480 }), g = c.getContext("2d");
-      let drawn = null;
+      // painted afresh every frame, as a camera keeps sending them
       setInterval(() => {
-        if (window.qrText === drawn) return;
-        drawn = window.qrText;
+        const drawn = window.qrText;
         g.fillStyle = "#fff"; g.fillRect(0, 0, 480, 480);
         if (drawn) { const q = qrcode(0, "M"); q.addData(drawn); q.make(); const n = q.getModuleCount(), s = Math.floor(360 / n);
           g.fillStyle = "#000"; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) g.fillRect(60 + k * s, 60 + r * s, s, s); }

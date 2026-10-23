@@ -130,8 +130,10 @@
     <div class="sec">
       <h2 data-i18n="joinRoom">加入聊天室</h2>
       <form id="joinForm" class="joinrow" autocomplete="off">
-        <input id="joinCode" class="codein" maxlength="4" placeholder="輸入 4 碼" aria-label="聊天室代碼" data-i18n-attr="placeholder:codePh;aria-label:codeAria" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
-        <button id="scanBtn" class="btn scanbtn" type="button" aria-label="掃描 QR Code" title="掃描 QR Code" data-i18n-attr="aria-label:scanAria;title:scanAria"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-qr"></use></svg></button>
+        <div class="codebox">
+          <input id="joinCode" class="codein" maxlength="4" placeholder="輸入 4 碼" aria-label="聊天室代碼" data-i18n-attr="placeholder:codePh;aria-label:codeAria" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+          <button id="scanBtn" class="scanin" type="button" aria-label="掃描 QR Code" title="掃描 QR Code" data-i18n-attr="aria-label:scanAria;title:scanAria"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-qr"></use></svg></button>
+        </div>
         <button class="btn" type="submit" data-i18n="join">加入</button>
       </form>
     </div>
