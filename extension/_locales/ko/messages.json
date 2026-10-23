@@ -7,5 +7,11 @@
   },
   "open": {
     "message": "사이드 패널에서 StoaTalk 열기"
+  },
+  "loading": {
+    "message": "StoaTalk 여는 중…"
+  },
+  "openTab": {
+    "message": "탭에서 열기"
   }
 }

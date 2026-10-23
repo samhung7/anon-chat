@@ -7,5 +7,11 @@
   },
   "open": {
     "message": "Abrir o StoaTalk no painel lateral"
+  },
+  "loading": {
+    "message": "Abrindo o StoaTalk…"
+  },
+  "openTab": {
+    "message": "Abrir em uma aba"
   }
 }

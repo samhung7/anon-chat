@@ -73,15 +73,15 @@ test("the side panel extension frames stoatalk.app, may reach its storage, and o
   const EXT = new URL("../extension/", import.meta.url);
   const manifest = JSON.parse(readFileSync(new URL("manifest.json", EXT), "utf8"));
   const panel = readFileSync(new URL(manifest.side_panel.default_path, EXT), "utf8");
-  const [, src] = panel.match(/<iframe src="([^"]+)"/);
-  assert.equal(src, "https://stoatalk.app/");
+  const [, script] = panel.match(/<script src="([^"]+)"><\/script>/);
+  assert.match(readFileSync(new URL(script, EXT), "utf8"), /^const SITE = "https:\/\/stoatalk\.app\/";$/m);
   // without host permission Chrome may give the frame a storage of its own, and the panel would be someone else
   assert.deepEqual(manifest.host_permissions, ["https://stoatalk.app/*"]);
   for (const f of [manifest.background.service_worker, ...Object.values(manifest.icons)]) readFileSync(new URL(f, EXT));
   const locales = readdirSync(new URL("_locales/", EXT));
   for (const l of locales) {
     const m = JSON.parse(readFileSync(new URL(`_locales/${l}/messages.json`, EXT), "utf8"));
-    for (const k of ["name", "description", "open"]) assert.ok(m[k]?.message, `${l} has ${k}`);
+    for (const k of ["name", "description", "open", "loading", "openTab"]) assert.ok(m[k]?.message, `${l} has ${k}`);
     assert.ok(m.description.message.length <= 132, `${l} description fits the store's 132 characters`);
   }
   assert.ok(locales.includes(manifest.default_locale));
