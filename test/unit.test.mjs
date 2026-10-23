@@ -319,3 +319,20 @@ test("sticky notes: notes and votes are cleaned as they come in, and the result 
   assert.equal(boardCsv(cols, rows, ["欄", "內容", "票", "作者"], false), "﻿欄,內容,票\r\n優點,甲,1\r\n缺點,\"乙, \"\"引號\"\"\",3\r\n");
   assert.equal(boardMd("主題", cols, rows, (n) => `${n} 票`, false), "# 主題\n\n## 優點\n\n- 甲 (1 票)\n\n## 缺點\n\n- 乙, \"引號\" (3 票)\n");
 });
+
+test("Google sign-in's pages at stoatalk.app/__/auth go on to Firebase's, and nowhere else", async () => {
+  const { onRequest, FIREBASE_AUTH } = await import(new URL("../functions/__/[[path]].js", import.meta.url));
+  const fetched = [], realFetch = globalThis.fetch;
+  globalThis.fetch = async (req) => { fetched.push(req); return new Response("ok"); };
+  try {
+    const res = await onRequest({ request: new Request("https://stoatalk.app/__/auth/handler?apiKey=k&providerId=google.com", { headers: { "Accept-Language": "zh-TW" } }) });
+    assert.equal(await res.text(), "ok");
+    assert.equal(fetched[0].url, `https://${FIREBASE_AUTH}/__/auth/handler?apiKey=k&providerId=google.com`);
+    assert.equal(fetched[0].headers.get("Accept-Language"), "zh-TW");
+    await onRequest({ request: new Request("https://stoatalk.app/__/firebase/init.json") });
+    assert.equal(fetched[1].url, `https://${FIREBASE_AUTH}/__/firebase/init.json`);
+    assert.equal((await onRequest({ request: new Request("https://x.stoatalk.pages.dev/__/auth/handler") })).status, 404);
+    assert.equal((await onRequest({ request: new Request("https://stoatalk.app/__/other") })).status, 404);
+    assert.equal(fetched.length, 2);
+  } finally { globalThis.fetch = realFetch; }
+});

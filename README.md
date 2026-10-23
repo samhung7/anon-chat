@@ -145,6 +145,11 @@ The domain is connected under Workers & Pages > `stoatalk` > Custom domains (it 
 3. **Realtime Database** > Create database (Singapore, `asia-southeast1`, is closest to Taiwan), start in locked mode, then paste `database.rules.json` into the **Rules** tab and publish. Or: `npx firebase deploy --only database --project <project-id>`.
 4. Project settings > Your apps > add a **Web app**, and copy its config (`apiKey`, `authDomain`, `databaseURL`, `projectId`, `appId`) into `site/js/config.js`.
 5. Authentication > Settings > Authorized domains: add your site's domain (`stoatalk.app`, and `stoatalk.pages.dev` for trying a deploy).
+   For Google sign-in: enable **Google** under Sign-in method. `authDomain` is `stoatalk.app` rather than
+   `<project>.firebaseapp.com`, so Google names the site on its sign-in screen and Safari doesn't block the sign-in;
+   `functions/__/[[path]].js` (a Cloudflare Pages Function) passes `/__/auth/*` and `/__/firebase/*` on to Firebase.
+   In Google Cloud > APIs & Services > Credentials, the OAuth client Firebase made needs
+   `https://stoatalk.app/__/auth/handler` among its authorized redirect URIs, before this goes live.
 6. For the hourly cleanup and for publishing rule changes automatically: Project settings > Service accounts > Generate new private key, then in the GitHub repository add the secrets `FIREBASE_SERVICE_ACCOUNT` (the whole JSON file) and `FIREBASE_DATABASE_URL`. Without them the cleanup job skips itself, and idle rooms stay until someone tries to open them or their code is reused. With them, `deploy-rules.yml` publishes `database.rules.json` whenever it changes on `main`.
 7. GIF search: create a key at https://klipy.com/developers and put it in `site/js/config.js` as `klipyKey`. Without one the GIF button is hidden. GIFs are only accepted from `*.klipy.com` (checked in the rules too).
 
