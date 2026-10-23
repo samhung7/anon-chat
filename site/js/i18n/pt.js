@@ -671,6 +671,7 @@ I18N.add("pt", {
   qzTitlePh: "Nome do conjunto",
   qzQPh: "Pergunta",
   qzOptPh: "Opção {n}",
+  qzOptPhOpt: "Opção {n} (opcional)",
   qzMarkRight: "Resposta certa",
   qzAddQ: "Adicionar pergunta",
   qzQn: "Pergunta {n}",

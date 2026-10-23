@@ -671,6 +671,7 @@ I18N.add("zh-TW", {
   qzTitlePh: "題目集名稱",
   qzQPh: "題目",
   qzOptPh: "選項 {n}",
+  qzOptPhOpt: "選項 {n}（選填）",
   qzMarkRight: "正確答案",
   qzAddQ: "新增題目",
   qzQn: "第 {n} 題",

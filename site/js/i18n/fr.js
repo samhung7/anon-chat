@@ -671,6 +671,7 @@ I18N.add("fr", {
   qzTitlePh: "Nom de la série",
   qzQPh: "Question",
   qzOptPh: "Option {n}",
+  qzOptPhOpt: "Option {n} (facultatif)",
   qzMarkRight: "Bonne réponse",
   qzAddQ: "Ajouter une question",
   qzQn: "Question {n}",

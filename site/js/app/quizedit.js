@@ -165,7 +165,9 @@ export function editSet(x, focusAt = -1) {
     });
     drawImg();
     const opts = q.o.map((o, k) => {
-      const input = el("input", { class: "field", maxlength: QUIZ.option, placeholder: t("qzOptPh", { n: k + 1 }), "aria-label": t("qzOptPh", { n: k + 1 }), value: o });
+      // two options are enough: the last two say so
+      const ph = t(k < 2 ? "qzOptPh" : "qzOptPhOpt", { n: k + 1 });
+      const input = el("input", { class: "field", maxlength: QUIZ.option, placeholder: ph, "aria-label": ph, value: o });
       input.addEventListener("input", () => { q.o[k] = input.value; changed(); });
       const right = el("button", { type: "button", class: "qzeright", "aria-pressed": String(q.c.includes(k)), "aria-label": t("qzMarkRight"), title: t("qzMarkRight"), onclick: () => {
         q.c = q.c.includes(k) ? q.c.filter((c) => c !== k) : [...q.c, k].sort();
