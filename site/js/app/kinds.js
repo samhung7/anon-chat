@@ -1,4 +1,4 @@
-/* The kinds of message: text, GIF, photo, poll, draw, a mini-game's result, a long post and a quiz. Each kind says, in one place, how it is stored (plain
+/* The kinds of message: text, GIF, photo, poll, draw, a mini-game's result, a long post, a quiz and a sticky-note board. Each kind says, in one place, how it is stored (plain
    and sealed), cleaned, shown, summed up in a line, offered in a message's ⋯ menu, and kept in an exported record.
    Everything else asks the kind (kindOf / savedKindOf) instead of checking fields, so a new kind is one more
    object here. Order matters: a message is the first kind that claims it, and text claims what's left.
@@ -20,6 +20,7 @@ import { GAMES, DAY_RE } from "./puzzles.js?v=dev";
 import { postCard, savedPostCard, openPost, editPost, copyPost, knownBody, postName } from "./posts.js?v=dev";
 import { knownComments } from "./comments.js?v=dev";
 import { quizCard, savedQuizCard, quizResult, dropQuizPictures } from "./quiz.js?v=dev";
+import { boardCard, savedBoardCard, boardResult, boardText } from "./sticky.js?v=dev";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 export { esc as escHtml };
@@ -283,6 +284,34 @@ const quiz = {
   savedBubble: (m) => savedQuizCard(m),
 };
 
+// a sticky-note board (sticky.js): its card here, { t (title) }, and the board itself apart in sb/{id}; bm marks it, sealed
+// or not. A record keeps its notes as r: [{ c (column), t, v (votes) }], best first
+const cleanBoard = (x) => (isObj(x) && str(x.t, 60) ? { t: str(x.t, 60) } : null);
+const board = {
+  name: "board", stat: "boards", roomOnly: true,
+  live: (v) => !!v.board, saved: (m) => !!m.board,
+  pack: (x) => [{ board: x, bm: true }, { bd: x }], mark: { bm: true },
+  plain: (v) => ("board" in v ? { board: v.bm === true ? cleanBoard(v.board) : null } : {}),
+  unsealed: (p, dm) => (p.bd && !dm ? { board: cleanBoard(p.bd) } : null),
+  // sealed as a board but not marked as one (the rules check the mark): not shown as one
+  async opened(out, raw, id) { if (out.board && raw.bm !== true) { delete out.board; Object.assign(out, { text: t("cantDecrypt"), bad: true }); } else if (out.board) out.bid = id; },
+  snippet: (v) => "🗒️ " + v.board.t,
+  bubble: (id, v) => boardCard(id, v),
+  preview: (v) => quoteText(snippet(v)),
+  pinned: (v) => "🗒️ " + v.board.t,
+  notice: (v) => `🗒️ ${t("sticky")}${t("colon")}${v.board.t}`,
+  // the board goes with its card
+  removes: (v, id) => ({ ["sb/" + id]: null }),
+  toSaved: (v) => { if (!v.board) return {}; const r = boardResult(v.bid); return { board: { ...v.board, r: r.length ? r : undefined } }; },
+  readSaved: (m) => {
+    const b = cleanBoard(m?.board), r = arr(m?.board?.r).slice(0, 300).map((x) => ({ c: str(x?.c, 30), t: str(x?.t, 200), v: clamp(Math.round(num(x?.v)), 0, 9999) })).filter((x) => x.t);
+    return { board: b ? { ...b, r: r.length ? r : undefined } : undefined };
+  },
+  savedText: (m) => boardText(m.board),
+  savedHtml: (m) => savedHtmlText(boardText(m.board)),
+  savedBubble: (m) => savedBoardCard(m),
+};
+
 // a line saying someone went (composer.js goneNote): left (ev "l", under the name they had) or removed by a host (ev "k",
 // naming them in tn and ta). Not a message anyone wrote: no bubble, menu or reactions, and not kept in an exported record
 const goneName = (n, a) => `${str(a, 8) || "👤"} ${str(n, 24) || "？"}`;
@@ -295,8 +324,8 @@ const gone = {
   toSaved: () => ({}), readSaved: () => ({}),
 };
 
-export const KIND = { text, gif, photo, poll, draw, game, post, quiz };
-const KINDS = [gone, gif, photo, poll, draw, game, post, quiz, text];
+export const KIND = { text, gif, photo, poll, draw, game, post, quiz, board };
+const KINDS = [gone, gif, photo, poll, draw, game, post, quiz, board, text];
 export const kindOf = (v) => KINDS.find((k) => k.live(v));
 export const savedKindOf = (m) => KINDS.find((k) => k.saved(m));
 export const snippet = (v) => kindOf(v).snippet(v).replace(/\s+/g, " ").slice(0, 80);
@@ -309,7 +338,7 @@ export async function finishOpen(out, raw, id) { for (const k of KINDS) await k.
 
 // a message's fields in an exported record (pics collects the photos an .html file carries), and from an untrusted one
 export const toSaved = (v, pics, m) => Object.assign(m, ...KINDS.map((k) => k.toSaved(v, pics, m)));
-export const readSaved = (m) => Object.assign({}, ...[text, gif, photo, poll, draw, game, post, quiz].map((k) => k.readSaved(m)));
+export const readSaved = (m) => Object.assign({}, ...[text, gif, photo, poll, draw, game, post, quiz, board].map((k) => k.readSaved(m)));
 // reactions as counts per emoji, kept in a record
 export function readReactions(r) {
   if (!isObj(r)) return undefined;

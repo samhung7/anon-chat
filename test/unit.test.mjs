@@ -186,6 +186,14 @@ test("kinds of message: each message is exactly one, and says itself in a line",
     [{ poll: { q: "Q", o: ["a", "b"], m: true }, an: true, rv: 5 }, { p: { q: "Q", o: ["a", "b"], m: true } }, { an: true, rv: 5 }]);
   assert.equal(KIND.poll.unsealed({ p: { q: "Q", o: ["a", "b"] } }, true), null, "no polls in private chats");
   assert.deepEqual(KIND.poll.unsealed({ p: { q: "Q", o: { 0: "a", 1: "b" }, m: "yes" } }, false), { poll: { q: "Q", o: ["a", "b"], m: false } });
+  // a sticky-note board: marked beside its card, sealed or not; shown as one only when marked
+  assert.equal(kindOf({ board: { t: "Ideas" } }), KIND.board);
+  assert.equal(snippet({ board: { t: "Ideas" } }), "🗒️ Ideas");
+  assert.deepEqual(KIND.board.pack({ t: "Ideas" }), [{ board: { t: "Ideas" }, bm: true }, { bd: { t: "Ideas" } }]);
+  assert.deepEqual(KIND.board.plain({ board: { t: "Ideas" } }), { board: null });
+  assert.deepEqual(KIND.board.plain({ board: { t: "x".repeat(70) }, bm: true }), { board: { t: "x".repeat(60) } });
+  assert.equal(KIND.board.unsealed({ bd: { t: "Ideas" } }, true), null, "no boards in private chats");
+  assert.deepEqual(KIND.board.readSaved({ board: { t: "Ideas", r: [{ c: "A", t: "one", v: 2 }, { t: "" }] } }), { board: { t: "Ideas", r: [{ c: "A", t: "one", v: 2 }] } });
 });
 
 test("a message's time gains the month and day from yesterday back, and the year before this year", async () => {
@@ -268,4 +276,46 @@ test("a scanned QR Code joins only when it's a StoaTalk invite link, and keeps a
   assert.equal(roomLink("https://stoatalk.app/index.html?lang=ja&room=K7QM&show=1"), "?room=K7QM");
   for (const no of ["https://evil.example/?room=K7QM", "http://stoatalk.app/?room=K7QM", "https://stoatalk.app.evil.example/?room=K7QM",
     "https://stoatalk.app/?room=K7Q", "https://stoatalk.app/", "K7QM", "javascript:alert(1)", "", null]) assert.equal(roomLink(no), null, String(no));
+});
+
+test("sticky notes: a note's place sorts between its neighbours, however often notes move", async () => {
+  const { between, placeAt, byPlace } = await import(new URL("stickyset.js?v=dev", APP));
+  assert.equal(between(), "i");
+  for (const [a, b] of [["", "i"], ["i", null], ["i", "j"], ["i", "i9"], ["", "1"], ["0i", "1"], ["zz", null], ["a", "a1"]]) {
+    const m = between(a, b);
+    assert.ok(m > a && (b == null || m < b), `${a} < ${m} < ${b}`);
+    assert.match(m, /^[0-9a-z]+[1-9a-z]$|^[1-9a-z]$/);
+  }
+  // keep dropping a note at the front, and at the second place, of a column: the order holds and the keys stay short
+  let list = [{ id: "a", o: "i", at: 1 }];
+  for (let n = 0; n < 60; n++) {
+    list.splice(n % 2, 0, { id: "n" + n, o: placeAt(list, n % 2), at: 2 });
+    const sorted = [...list].sort(byPlace).map((x) => x.id);
+    assert.deepEqual(sorted, list.map((x) => x.id));
+  }
+  assert.ok(Math.max(...list.map((x) => x.o.length)) <= 40);
+  // a place that would sort before what comes ahead falls back to after it
+  assert.ok(between("m", "c") > "m");
+});
+
+test("sticky notes: notes and votes are cleaned as they come in, and the result adds up and goes out as a file", async () => {
+  const { cleanNote, cleanCols, cleanLive, cleanPicks, tally, ranked, boardCsv, boardMd } = await import(new URL("stickyset.js?v=dev", APP));
+  assert.equal(cleanLive({ ph: "nope" }), null);
+  assert.deepEqual(cleanLive({ ph: "vote", v: 4, lim: 10, an: false }), { ph: "vote", v: 3, lim: 10, an: false, lock: false });
+  assert.deepEqual(cleanCols([{ k: "0", n: "A" }, { k: "0", n: "B" }, { k: "7", n: "C" }, { k: "1", n: "x".repeat(40) }]), [{ k: "0", n: "A" }, { k: "1", n: "x".repeat(30) }]);
+  assert.equal(cleanNote({ t: "", c: "0", k: "0", o: "i" }), null);
+  assert.deepEqual(cleanNote({ t: "讀書會", c: "9", k: "x", o: "BAD", at: 5 }), { t: "讀書會", c: 0, k: "0", o: "i", at: 5 });
+  assert.deepEqual(cleanNote({ x: "c2VhbGVk", c: "2", k: "1", o: "a", at: 1 }, { t: "密", n: "熊", a: "🐻" }), { t: "密", c: 2, k: "1", o: "a", at: 1, nm: "熊", av: "🐻" });
+  assert.equal(cleanNote({ x: "c2VhbGVk", c: "2", k: "1", o: "a" }, null), null);   // didn't open
+  const A = "A".repeat(20), B = "B".repeat(20), G = "G".repeat(20);
+  assert.deepEqual(cleanPicks(`${A},${A},bad,${B},${B}`, 3), [A, A, B]);
+  const notes = new Map([[A, { t: "甲", c: 0, k: "0", o: "i", at: 1 }], [B, { t: "乙, \"引號\"", c: 1, k: "1", o: "i", at: 2 }]]);
+  // only each person's first votes count, and only on notes still there
+  const counts = tally({ k1: [A, A, B, B], k2: [B, G] }, notes, 3);
+  assert.deepEqual(counts, { [A]: 2, [B]: 2 });
+  const cols = [{ k: "0", n: "優點" }, { k: "1", n: "缺點" }];
+  const rows = ranked(cols, notes, { [A]: 1, [B]: 3 });
+  assert.deepEqual(rows.map((r) => [r.t, r.v]), [["乙, \"引號\"", 3], ["甲", 1]]);
+  assert.equal(boardCsv(cols, rows, ["欄", "內容", "票", "作者"], false), "﻿欄,內容,票\r\n優點,甲,1\r\n缺點,\"乙, \"\"引號\"\"\",3\r\n");
+  assert.equal(boardMd("主題", cols, rows, (n) => `${n} 票`, false), "# 主題\n\n## 優點\n\n- 甲 (1 票)\n\n## 缺點\n\n- 乙, \"引號\" (3 票)\n");
 });

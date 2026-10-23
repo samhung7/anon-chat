@@ -10,6 +10,7 @@ import { room as current } from "./session.js?v=dev";
 import { plainFields, unsealedFields, finishOpen, openPicks } from "./kinds.js?v=dev";
 import { RoomApi } from "./api.js?v=dev";
 import { cleanLive, cleanAsked, cleanKey, cleanScores, cleanPlayer, cleanChoice } from "./quizset.js?v=dev";
+import { cleanLive as cleanBoardLive, cleanCols, cleanNote, cleanPicks } from "./stickyset.js?v=dev";
 
 export const pairKey = (a, b) => (a < b ? `${a}_${b}` : `${b}_${a}`);
 // the key a nickname is claimed under: the name itself, lowercased, or in an encrypted room a keyed hash of it
@@ -39,7 +40,7 @@ class Emitter {
 }
 
 /* Events: meta, ended, lost, arrivals({ joined, left }), members, msg(id, v), msg-changed(id, v, old),
-   msg-removed(id), dm(other, id, v), typing, qs, qq({ more }), reports({ more }), quiz(id) */
+   msg-removed(id), dm(other, id, v), typing, qs, qq({ more }), reports({ more }), quiz(id), board(id) */
 export class Room extends Emitter {
   constructor(code, cipher) {
     super();
@@ -62,6 +63,7 @@ export class Room extends Emitter {
     this.imgs = new Map();      // photo id -> blob: URL
     this.ballots = new Map();   // poll id -> its votes, when they're kept apart (followBallots)
     this.quizzes = new Map();   // quiz id (its card's) -> where it's at (followQuiz)
+    this.boards = new Map();    // sticky-note board id (its card's) -> what's on it (followBoard)
     this.off = [];              // what stops each subscription
     this.gone = false; this.ready = false;
     this.readOnly = false;      // nobody spoke for 24 hours (js/app/expiry.js): read and save, nothing new
@@ -176,6 +178,7 @@ export class Room extends Emitter {
       const v = this.withBallots(s.key, await this.openMsg(s.val(), null, s.key));
       this.msgs.set(s.key, v); this.lastAt = Math.max(this.lastAt, +v.at || 0);
       if (v.quiz) this.followQuiz(s.key);
+      if (v.board) this.followBoard(s.key);
       this.emit("msg", s.key, v);
     }), lost));
     on(fb.onChildChanged(msgs, (s) => this.queue(async () => {
@@ -183,9 +186,10 @@ export class Room extends Emitter {
       this.msgs.set(s.key, v);
       this.emit("msg-changed", s.key, v, old);
     })));
-    on(fb.onChildRemoved(msgs, (s) => this.queue(() => { this.msgs.delete(s.key); this.dropBallots(s.key); this.dropQuiz(s.key); this.emit("msg-removed", s.key); })));
+    on(fb.onChildRemoved(msgs, (s) => this.queue(() => { this.msgs.delete(s.key); this.dropBallots(s.key); this.dropQuiz(s.key); this.dropBoard(s.key); this.emit("msg-removed", s.key); })));
     on(() => [...this.ballots.keys()].forEach((id) => this.dropBallots(id)));
     on(() => [...this.quizzes.keys()].forEach((id) => this.dropQuiz(id)));
+    on(() => [...this.boards.keys()].forEach((id) => this.dropBoard(id)));
     on(fb.onValue(api.ref("typing"), (s) => { this.typing = s.val() || {}; this.emit("typing"); }, () => {}));
     on(fb.onValue(api.ref("qs"), (s) => this.queue(async () => {
       this.qs = await this.openQs(s.val());
@@ -405,6 +409,73 @@ export class Room extends Emitter {
     if (!e) return;
     this.quizzes.delete(z);
     [...e.offs, ...e.more, ...e.iOffs].forEach((f) => { try { f(); } catch (e) {} });
+  }
+  /* ---------- sticky-note boards (sticky.js) ----------
+     A board's card follows the whole board: where it's at (sb/{id}/live), its columns and its notes, and my own votes
+     (under the key only I know, bk/{me}); everyone's votes once the result is out. Which notes are mine is asked note by
+     note (nb/{note}, which only its author reads), and only while the board is open on this device (mineOn). The hosts'
+     columns are JSON in a plain room and sealed in a Private Salon; so are a note's words and name (x) and the votes. */
+  followBoard(b) {
+    let e = this.boards.get(b);
+    if (e) return e;
+    e = { live: null, cols: [], notes: new Map(), mine: new Set(), asked: new Set(), watch: false, key: null, picks: [], votes: null, offs: [], all: null, pickOff: null };
+    this.boards.set(b, e);
+    const { fb } = backend, ref = (p) => this.api.ref(`sb/${b}/${p}`), changed = () => this.emit("board", b);
+    e.offs.push(fb.onValue(ref("live"), (s) => this.queue(() => {
+      e.live = cleanBoardLive(s.val());
+      if (e.live?.ph === "done" && !e.all) e.all = fb.onValue(ref("v"), (v) => this.queue(async () => {
+        const out = {};
+        for (const [k, x] of Object.entries(v.val() || {})) out[k] = await this.openPicks(b, k, x, e.live.v);
+        e.votes = out; changed();
+      }), () => {});
+      changed();
+    }), () => {}));
+    e.offs.push(fb.onValue(ref("cols"), (s) => this.queue(async () => { e.cols = cleanCols(await this.openBlob(s.val(), `bm:${b}`)); changed(); }), () => {}));
+    e.offs.push(fb.onValue(ref("n"), (s) => this.queue(async () => {
+      const next = new Map();
+      for (const [id, v] of Object.entries(s.val() || {})) {
+        const p = v?.x && this.cipher ? await this.open(this.cipher.aes, v.x, `bn:${b}:${id}`) : null;
+        const n = cleanNote(v, p);
+        if (n) next.set(id, n);
+      }
+      e.notes = next; changed();
+      this.askMine(b, e);
+    }), () => {}));
+    // my votes: the key I vote under, then what's under it
+    e.offs.push(fb.onValue(ref("bk/" + this.uid), (s) => {
+      const key = typeof s.val() === "string" ? s.val() : null;
+      if (!key || key === e.key) return;
+      e.key = key; e.pickOff?.();
+      e.pickOff = fb.onValue(ref("v/" + key), (v) => this.queue(async () => { e.picks = await this.openPicks(b, key, v.val(), e.live?.v || 5); changed(); }), () => {});
+    }, () => {}));
+    return e;
+  }
+  async openPicks(b, key, x, most) {
+    if (typeof x !== "string" || !x) return [];
+    return cleanPicks(this.cipher ? await this.open(this.cipher.aes, x, `bv:${b}:${key}`) : x, most);
+  }
+  // which notes on a board are mine, while it's open here: each one asked once
+  mineOn(b, on) {
+    const e = this.boards.get(b);
+    if (!e) return;
+    e.watch = on;
+    if (on) this.askMine(b, e);
+  }
+  askMine(b, e) {
+    if (!e.watch || e.live?.ph === "done") return;
+    for (const id of e.notes.keys()) {
+      if (e.asked.has(id)) continue;
+      e.asked.add(id);
+      backend.val(this.api.ref(`sb/${b}/nb/${id}`)).then((who) => {
+        if (who === this.uid && !e.mine.has(id)) { e.mine.add(id); if (this.current) this.emit("board", b); }
+      }, () => {});
+    }
+  }
+  dropBoard(b) {
+    const e = this.boards.get(b);
+    if (!e) return;
+    this.boards.delete(b);
+    [...e.offs, e.all, e.pickOff].forEach((f) => { try { f?.(); } catch (err) {} });
   }
   // the room went away under us: "ended", "kicked" or "left" (null if this room is no longer the one on screen)
   async whyGone() {
