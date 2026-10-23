@@ -9,6 +9,9 @@
    A quiz's pictures (site/js/app/quiz.js) go in the same way, with an id that starts with the quiz's (QUIZ_IMG) and no
    marker of their own: one stays while its quiz (rooms/{code}/qz/{quiz}) is there.
      DELETE /room/{code}                         anyone deletes the photos of a room that no longer exists
+   A Google account's quiz library (site/js/app/quizlib.js) keeps its pictures at u/{uid}/{id}.jpg, the id being the
+   picture's own SHA-256, so the same one is kept once and never replaced by another:
+     PUT    /lib/{uid}/{id}.jpg                  the signed-in person, signed in with Google, adds a picture to their library
    What a delete misses (a closed tab, a room that expired) the hourly cleanup (tools/cleanup) takes away.
 
    Web Push, so people hear about new messages while their page is closed:
@@ -27,6 +30,8 @@ import { vapid, sealSub, openSub, send, validSubscription, devices } from "./pus
 const CODE = /^[2-9A-HJKMNP-Z]{4}$/, UID = /^[A-Za-z0-9]{1,128}$/, ID = /^[A-Za-z0-9_-]{1,32}$/;
 export const QUIZ_IMG = /^([A-Za-z0-9_-]{20})[A-Za-z0-9]{10}$/; // a quiz's id (a 20-character push id), then 10 random letters and digits
 const MAX = 330000 + 28; // the page's largest photo, plus the IV and tag when sealed
+const LIB_MAX = 165000, LIB_IMG = /^([A-Za-z0-9_-]{22})\.jpg$/; // a quiz picture (site/js/app/quizset.js QUIZ.imgChars), and its name
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const TYPES = { jpg: "image/jpeg", bin: "application/octet-stream" };
 const CACHE = "public, max-age=3600"; // a deleted photo can linger in Cloudflare's cache for at most this long
 const PAGE = 40, QUIET = 20000, FRESH = 120000;
@@ -89,6 +94,20 @@ export function makeHandler({ verify, read, fetcher = (...a) => fetch(...a) }) {
         const key = `${code}/${uid}/${file}`;
         if (await bucket.head(key)) return out(409); // never replaced: a message's photo stays the one it was sent with
         await bucket.put(key, body, { httpMetadata: { contentType: TYPES[m[2]], cacheControl: CACHE } });
+        return out(201);
+      }
+      if (req.method === "PUT" && parts[0] === "lib" && parts.length === 3) {
+        const [, by, file] = parts, m = LIB_IMG.exec(file);
+        if (by !== uid || !m) return out(400);
+        if (+req.headers.get("Content-Length") > LIB_MAX) return out(413);
+        const body = new Uint8Array(await req.arrayBuffer());
+        if (!body.length || body.length > LIB_MAX) return out(413);
+        if (!(body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff)) return out(415);
+        if (b64u(await crypto.subtle.digest("SHA-256", body)).slice(0, 22) !== m[1]) return out(400);
+        if ((await read(`users/${uid}/dh`, token, env)) === null) return out(403); // only an account signed in with Google has one
+        const key = `u/${uid}/${file}`;
+        if (await bucket.head(key)) return out(409);
+        await bucket.put(key, body, { httpMetadata: { contentType: TYPES.jpg, cacheControl: CACHE } });
         return out(201);
       }
       if (req.method === "DELETE" && parts[0] === "photo" && parts.length === 4) {

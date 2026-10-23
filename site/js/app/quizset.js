@@ -142,3 +142,30 @@ export function scoresCsv(rows, head) {
   const cell = (v) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
   return "﻿" + [head, ...rows].map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
 }
+
+/* ---------- the library kept in a Google account (quizlib.js) ---------- */
+// a set's id in the library (quizlib.js newId), its picture's id in the account (from the JPEG's SHA-256), and the
+// largest set as the account keeps it, as JSON (the rules say the same)
+export const LIB = { id: /^[a-z0-9]{8,20}$/, img: /^[A-Za-z0-9_-]{22}$/, body: 250000 };
+// the account's list: id → { at, t, n }, or { at, gone } for a set deleted on some device; what isn't one is left out
+export function cleanIndex(x) {
+  const out = {};
+  for (const [id, e] of Object.entries(x && typeof x === "object" ? x : {})) {
+    if (!LIB.id.test(id) || !e || typeof e !== "object" || !(+e.at > 0)) continue;
+    out[id] = e.gone === true ? { at: +e.at, gone: true } : { at: +e.at, t: str(e.t, QUIZ.title), n: Math.max(0, Math.round(+e.n || 0)) };
+  }
+  return out;
+}
+// What brings this device's library (local: [{ id, at }]) and the account's (index: cleanIndex) together: the side
+// that changed a set last wins. up: sets to put in the account; down: to take from it; drop: to delete here, as they
+// were deleted elsewhere (a set changed here after that is put back, like any other change).
+export function syncPlan(local, index) {
+  const up = [], down = [], drop = [], here = new Map(local.map((x) => [x.id, x.at]));
+  for (const [id, at] of here) {
+    const e = index[id];
+    if (!e || at > e.at) up.push(id);
+    else if (e.gone) drop.push(id);
+  }
+  for (const [id, e] of Object.entries(index)) if (!e.gone && !(here.get(id) >= e.at)) down.push(id);
+  return { up, down, drop };
+}

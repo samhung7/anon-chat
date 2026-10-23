@@ -873,6 +873,18 @@ rules = {"rules": {
         ".write": j("auth != null", "auth.uid === $uid", o("!newData.exists()", "auth.token.email != null")),
         "rooms": {"$code": {".validate": j(r"$code.matches(/^[2-9A-HJKMNP-Z]{4}$/)", "newData.isNumber()", "newData.val() <= now")}},
         "dh": {".validate": SEALED(120)},
+        # the quiz library (site/js/app/quizlib.js): what the list shows of each set, or the mark a deleted one leaves,
+        # and the set itself as JSON (its pictures are in R2); the page cleans what it reads, as from a file
+        "qz": {"$id": {
+            ".validate": j(r"$id.matches(/^[a-z0-9]{8,20}$/)", o("newData.hasChildren(['at', 't', 'n'])", "newData.hasChildren(['at', 'gone'])"),
+                           "!newData.hasChildren(['t', 'gone'])", "!newData.parent().parent().child('qzs/' + $id).exists() || !newData.child('gone').exists()"),
+            "at": {".validate": "newData.isNumber() && newData.val() > 0"},
+            "t": {".validate": S(60)},
+            "n": {".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"},
+            "gone": {".validate": "newData.val() === true"},
+            "$other": NO,
+        }},
+        "qzs": {"$id": {".validate": j(r"$id.matches(/^[a-z0-9]{8,20}$/)", S(250000), "newData.parent().parent().child('qz/' + $id + '/t').exists()")}},
         "$other": NO,
     }},
     # old password rooms' passwords: never readable, and can only be cleared (the daily cleanup removes them)

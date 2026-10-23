@@ -1315,6 +1315,27 @@ test("accounts: only the person signed in with Google keeps their rooms and publ
   await assertSucceeds(remove(ref(db("ann"), "users/ann")));   // deleting the account, whatever the token says
 });
 
+test("accounts: the quiz library, each set listed and kept as JSON, and a mark where one was deleted", async () => {
+  const now = Date.now(), kept = (id, at = now) => ({ [`qz/${id}`]: { at, t: "期中", n: 2 }, [`qzs/${id}`]: JSON.stringify({ t: "期中", q: [] }) });
+  await assertSucceeds(update(ref(gDb("ann"), "users/ann"), kept("mo0abc12xy")));
+  await assertSucceeds(get(ref(gDb("ann"), "users/ann/qzs/mo0abc12xy")));
+  await assertFails(get(ref(gDb("bob"), "users/ann/qzs/mo0abc12xy")));
+  await assertFails(update(ref(gDb("bob"), "users/ann"), kept("mo0abc12xz")));             // someone else's
+  await assertFails(update(ref(db("carl"), "users/carl"), kept("mo0abc12xy")));            // not signed in with Google
+  await assertFails(update(ref(gDb("ann"), "users/ann"), kept("BAD/id")));
+  await assertFails(set(ref(gDb("ann"), "users/ann/qzs/mo0abc12zz"), "{}"));               // not listed
+  await assertFails(update(ref(gDb("ann"), "users/ann"), { ...kept("mo0abc12zz"), "qzs/mo0abc12zz": "x".repeat(250001) })); // too big
+  await assertFails(update(ref(gDb("ann"), "users/ann"), { "qz/mo0abc12zz": { at: now, t: "x", n: 101 }, "qzs/mo0abc12zz": "{}" }));
+  await assertFails(set(ref(gDb("ann"), "users/ann/qz/mo0abc12zz"), { at: now, t: "x", n: 1, z: 1 }));
+  // deleted: the set goes, a mark stays; a mark beside the set itself isn't one
+  await assertFails(set(ref(gDb("ann"), "users/ann/qz/mo0abc12xy"), { at: now + 1, gone: true }));
+  await assertSucceeds(update(ref(gDb("ann"), "users/ann"), { "qz/mo0abc12xy": { at: now + 1, gone: true }, "qzs/mo0abc12xy": null }));
+  await assertFails(set(ref(gDb("ann"), "users/ann/qz/mo0abc12xy"), { at: now + 1, gone: false }));
+  // changed again on a device that hadn't heard: it's back
+  await assertSucceeds(update(ref(gDb("ann"), "users/ann"), kept("mo0abc12xy", now + 2)));
+  await assertSucceeds(remove(ref(db("ann"), "users/ann")));
+});
+
 test("accounts: the hourly job's Google-ban hashes are nobody's to read or write", async () => {
   await makeAdmin("op");
   await assertFails(get(ref(opDb(), "ops/gbans")));

@@ -205,6 +205,25 @@ test("a message's time gains the month and day from yesterday back, and the year
   assert.match(fmtWhen(new Date(2026, 9, 18, 23, 5)), /October 18, 2026.*23:05/);
 });
 
+test("quiz library in a Google account: the side that changed a set last wins, and a deletion goes everywhere", async () => {
+  const Q = await import(new URL("quizset.js?v=dev", APP));
+  const index = Q.cleanIndex({
+    aaaaaaaa1: { at: 100, t: "same", n: 3 }, aaaaaaaa2: { at: 200, t: "newer there", n: 1 }, aaaaaaaa3: { at: 50, t: "older there", n: 1 },
+    aaaaaaaa4: { at: 300, gone: true }, aaaaaaaa5: { at: 300, gone: true }, aaaaaaaa6: { at: 10, t: "only there", n: 0 },
+    aaaaaaaa7: { at: 10, gone: true }, "BAD/id": { at: 1, t: "x" }, aaaaaaaa8: { t: "no time" },
+  });
+  assert.deepEqual(Object.keys(index), ["aaaaaaaa1", "aaaaaaaa2", "aaaaaaaa3", "aaaaaaaa4", "aaaaaaaa5", "aaaaaaaa6", "aaaaaaaa7"]);
+  assert.deepEqual(index.aaaaaaaa4, { at: 300, gone: true });
+  const local = [{ id: "aaaaaaaa1", at: 100 }, { id: "aaaaaaaa2", at: 150 }, { id: "aaaaaaaa3", at: 60 }, { id: "aaaaaaaa4", at: 250 },
+    { id: "aaaaaaaa5", at: 400 }, { id: "aaaaaaaa9", at: 5 }];
+  assert.deepEqual(Q.syncPlan(local, index), {
+    up: ["aaaaaaaa3", "aaaaaaaa5", "aaaaaaaa9"],   // changed here last, changed here after it was deleted, only here
+    down: ["aaaaaaaa2", "aaaaaaaa6"],               // changed there last, only there
+    drop: ["aaaaaaaa4"],                            // deleted on another device after it last changed here
+  });
+  assert.deepEqual(Q.syncPlan([], {}), { up: [], down: [], drop: [] });
+});
+
 test("quiz: a set is cleaned, asked without its answers, scored by speed, ranked, and kept in a file", async () => {
   const Q = await import(new URL("quizset.js?v=dev", APP));
   const set = Q.cleanSet({ t: " 期中 ", q: [
@@ -318,4 +337,21 @@ test("sticky notes: notes and votes are cleaned as they come in, and the result 
   assert.deepEqual(rows.map((r) => [r.t, r.v]), [["乙, \"引號\"", 3], ["甲", 1]]);
   assert.equal(boardCsv(cols, rows, ["欄", "內容", "票", "作者"], false), "﻿欄,內容,票\r\n優點,甲,1\r\n缺點,\"乙, \"\"引號\"\"\",3\r\n");
   assert.equal(boardMd("主題", cols, rows, (n) => `${n} 票`, false), "# 主題\n\n## 優點\n\n- 甲 (1 票)\n\n## 缺點\n\n- 乙, \"引號\" (3 票)\n");
+});
+
+test("Google sign-in's pages at stoatalk.app/__/auth go on to Firebase's, and nowhere else", async () => {
+  const { onRequest, FIREBASE_AUTH } = await import(new URL("../functions/__/[[path]].js", import.meta.url));
+  const fetched = [], realFetch = globalThis.fetch;
+  globalThis.fetch = async (req) => { fetched.push(req); return new Response("ok"); };
+  try {
+    const res = await onRequest({ request: new Request("https://stoatalk.app/__/auth/handler?apiKey=k&providerId=google.com", { headers: { "Accept-Language": "zh-TW" } }) });
+    assert.equal(await res.text(), "ok");
+    assert.equal(fetched[0].url, `https://${FIREBASE_AUTH}/__/auth/handler?apiKey=k&providerId=google.com`);
+    assert.equal(fetched[0].headers.get("Accept-Language"), "zh-TW");
+    await onRequest({ request: new Request("https://stoatalk.app/__/firebase/init.json") });
+    assert.equal(fetched[1].url, `https://${FIREBASE_AUTH}/__/firebase/init.json`);
+    assert.equal((await onRequest({ request: new Request("https://x.stoatalk.pages.dev/__/auth/handler") })).status, 404);
+    assert.equal((await onRequest({ request: new Request("https://stoatalk.app/__/other") })).status, 404);
+    assert.equal(fetched.length, 2);
+  } finally { globalThis.fetch = realFetch; }
 });

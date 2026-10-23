@@ -93,6 +93,22 @@ test("photo service: a quiz's picture goes once its quiz is gone", async () => {
   assert.equal(bucket.objects.size, 0);
 });
 
+test("photo service: a Google account's quiz library puts in its own pictures, named by their SHA-256", async () => {
+  const id = Buffer.from(await crypto.subtle.digest("SHA-256", JPEG)).toString("base64url").slice(0, 22);
+  assert.equal(await call("PUT", `/lib/ann/${id}.jpg`, "ann", JPEG), 403); // not signed in with Google: no users/ann/dh
+  await db("users/ann/dh", "BPub_key-123");
+  assert.equal(await call("PUT", `/lib/ann/${id}.jpg`, "ann", JPEG), 201);
+  assert.equal(bucket.objects.get(`u/ann/${id}.jpg`).httpMetadata.contentType, "image/jpeg");
+  assert.equal(await call("PUT", `/lib/ann/${id}.jpg`, "ann", JPEG), 409); // there already: the same picture
+  assert.equal(await call("PUT", `/lib/ann/${"A".repeat(22)}.jpg`, "ann", JPEG), 400); // not its hash
+  assert.equal(await call("PUT", `/lib/bob/${id}.jpg`, "ann", JPEG), 400); // someone else's library
+  assert.equal(await call("PUT", `/lib/ann/${id}.jpg`, null, JPEG), 401);
+  const html = new TextEncoder().encode("<html>"), hid = Buffer.from(await crypto.subtle.digest("SHA-256", html)).toString("base64url").slice(0, 22);
+  assert.equal(await call("PUT", `/lib/ann/${hid}.jpg`, "ann", html), 415);
+  assert.equal(await call("PUT", `/lib/ann/${id}.jpg`, "ann", new Uint8Array(165001).fill(0xff)), 413);
+  assert.equal(bucket.objects.size, 1);
+});
+
 test("cleanup: photos no marker points at, once they're old enough", async () => {
   const t = Date.now(), old = t - GRACE - 1;
   const objects = [
@@ -110,6 +126,18 @@ test("cleanup: photos no marker points at, once they're old enough", async () =>
   const quizBy = async (code, z) => (code === "ABCD" && z === "-Nquiz0000000000000A" ? "bob" : null);
   assert.deepEqual(await strayPhotos(objects, markers, t, quizBy), ["ABCD/bob/f2.jpg", "ABCD/eve/f1.jpg", "WXYZ/bob/f1.bin", "junk",
     "ABCD/bob/-Nquiz0000000000000Babc123XYZ0.jpg", "ABCD/eve/-Nquiz0000000000000Aabc123XYZ1.bin"]);
+});
+
+test("cleanup: a quiz library's pictures go once no set in the account points at them", async () => {
+  const t = Date.now(), old = t - GRACE - 1, A = "A".repeat(22), B = "B".repeat(22), C = "C".repeat(22);
+  const objects = [
+    { key: `u/ann/${A}.jpg`, uploaded: old },     // a set has it
+    { key: `u/ann/${B}.jpg`, uploaded: old },     // none does any more
+    { key: `u/ann/${C}.jpg`, uploaded: t - 1000 }, // just put in, its set on the way
+    { key: `u/gone/${A}.jpg`, uploaded: old },    // the account was deleted
+  ];
+  const library = async (uid) => (uid === "ann" ? { s1: JSON.stringify({ t: "x", q: [{ t: "q", img: { f: A, w: 1, h: 1 } }, { t: "r" }] }), s2: "not JSON" } : null);
+  assert.deepEqual(await strayPhotos(objects, async () => null, t, async () => null, library), [`u/ann/${B}.jpg`, `u/gone/${A}.jpg`]);
 });
 
 test("cleanup: the bucket listed page by page over R2's S3 API", async () => {

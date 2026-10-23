@@ -5,8 +5,8 @@
    Signing in ties the Google account to this device's id, which stays the same (the rooms it's in carry on), unless
    the account already has an id from another device: then this device takes that one, and is no longer in the rooms
    it was in under the old one.
-   What the account keeps, in users/{uid}: the rooms it's in, and the public key its private messages are sealed to
-   (the first device's: crypto.js). Never a Private Salon's key or the private half of that key, which stay on
+   What the account keeps, in users/{uid}: the rooms it's in, the public key its private messages are sealed to
+   (the first device's: crypto.js), and the quiz library (quizlib.js; its pictures are in R2). Never a Private Salon's key or the private half of that key, which stay on
    devices: the server mustn't be able to read what's end-to-end encrypted.
    With the emulator, a made-up Google account (KEYS.emuPick, else someone@example.com) stands in, and its id is kept
    where Google would keep it, in the emulator's database (emu-accounts/). */
@@ -17,6 +17,7 @@ import { backend, EMU } from "./backend.js?v=dev";
 import { params } from "./constants.js?v=dev";
 import { deviceKeys, setAccountPub } from "./crypto.js?v=dev";
 import { deviceId } from "./push.js?v=dev";
+import { forgetLibrary } from "./quizlib.js?v=dev";
 
 // the Google account this device is signed in with ({ email, name }), or null; known before connecting from what the
 // device kept, and for sure once connected
@@ -62,14 +63,17 @@ export function dropRoom(code) {
 
 /* ---------- this device stops being theirs ----------
    Signing out or deleting the account: what this device kept for the person goes (the rooms they're in, Private
-   Salons' keys, their private messages' key pair, where they read up to, their push subscription), so the next person
-   at this device finds none of it. Nickname, language, theme, quick replies and saved records stay. */
+   Salons' keys, their private messages' key pair, where they read up to, their push subscription, their quiz sets), so
+   the next person at this device finds none of it. Nickname, language, theme, quick replies and saved records stay.
+   Switching to an account that's already somebody's from another device keeps the quiz sets: they were made here, and
+   join that account's. */
 // stillIn: still signed in as them, so this device's subscriptions can come out of their rooms
-async function forgetDevice(stillIn = true) {
+async function forgetDevice(stillIn = true, keepSets = false) {
   const codes = store.json(KEYS.rooms) || [];
   if (stillIn) await Promise.all(codes.map((c) => backend.fb.set(backend.roomRef(c, `push/${backend.uid}/${deviceId()}`), null).catch(() => {})));
   try { await (await (await navigator.serviceWorker?.getRegistration())?.pushManager.getSubscription())?.unsubscribe(); } catch (e) {}
   [KEYS.rooms, KEYS.roomsSeen, KEYS.push, KEYS.dh, KEYS.account, KEYS.blocked].forEach((k) => store.set(k, null));
+  if (!keepSets) await forgetLibrary();
   store.drop(["chat-key:", "chat-read:", "chat-dmread:", "chat-myq:", "chat-mute:", "chat-desc-hidden:", "chat-post-draft:", "chat-game:"]);
 }
 const emuKey = (email) => "emu-accounts/" + email.replace(/[.#$[\]/]/g, "_");
@@ -94,7 +98,7 @@ async function googleSignIn() {
     if (e?.code !== "auth/credential-already-in-use") throw e;
     const cred = fb.GoogleAuthProvider.credentialFromError(e);
     if (!cred || !(await switchOk())) return;
-    await forgetDevice();
+    await forgetDevice(true, true);
     signedAs((await fb.signInWithCredential(backend.auth, cred)).user.email);
   }
   restart();
@@ -104,7 +108,7 @@ async function emuSignIn() {
   const theirs = await backend.emuOwner(emuKey(email));
   if (theirs && theirs !== backend.uid) {
     if (!(await switchOk())) return;
-    await forgetDevice();
+    await forgetDevice(true, true);
     store.set(KEYS.emuUid(as), theirs);
   } else await backend.emuOwner(emuKey(email), "PUT", backend.uid);
   store.set(KEYS.emuGoogle(as), email);

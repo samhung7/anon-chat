@@ -1,7 +1,7 @@
 // Deletes rooms nobody has written in for 48 hours (read-only for the last 24 of them), so "聊完即刪" holds even when
 // the owner never ends the room, and warns their members by Web Push an hour before each step (expiry.mjs). Runs hourly from .github/workflows/cleanup.yml with a Firebase service account; the database rules can't delete on a timer by themselves.
 // Then it tells the operator about new reports (a GitHub issue), keeps bans on Google accounts past their deletion
-// (accounts.mjs), and deletes the photos in R2 that no room points at any more (photos.mjs).
+// (accounts.mjs), and deletes the photos in R2 that no room or quiz library points at any more (photos.mjs).
 // Env: FIREBASE_SERVICE_ACCOUNT (the service account JSON), FIREBASE_DATABASE_URL; for photos also CLOUDFLARE_ACCOUNT_ID,
 // R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY (without them photos are skipped); for the warnings VAPID_KEY, the push
 // service's own secret (worker/; without it no warning is sent). DRY_RUN=1 only lists what would go.
@@ -107,7 +107,8 @@ if (account && keyId && secret) {
   const aws = new AwsClient({ accessKeyId: keyId, secretAccessKey: secret, service: "s3", region: "auto" });
   const bucket = s3Bucket((url, init) => aws.fetch(url, init), `https://${account}.r2.cloudflarestorage.com/${process.env.R2_BUCKET || "stoatalk-photos"}`);
   const stray = await strayPhotos(await bucket.list(), (code) => db.ref(`rooms/${code}/files`).get().then((s) => s.val()), Date.now(),
-    (code, quiz) => db.ref(`rooms/${code}/qz/${quiz}/by`).get().then((s) => s.val()));
+    (code, quiz) => db.ref(`rooms/${code}/qz/${quiz}/by`).get().then((s) => s.val()),
+    (uid) => db.ref(`users/${uid}/qzs`).get().then((s) => s.val()));
   console.log(`stray photos: ${stray.length}`);
   if (!process.env.DRY_RUN) for (const key of stray) await bucket.remove(key);
 } else console.log("R2 keys not set; photos skipped");
