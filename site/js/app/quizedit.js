@@ -1,7 +1,7 @@
-/* Question sets for quizzes (quiz.js), made and kept on the host's own device: there are no accounts, so "my
-   library" is this browser's IndexedDB. A set can go out as a file (.stoaquiz, JSON) to keep, move to another
-   device or hand to someone else, and come back in from one, into any room. Sets are saved as they're edited.
-   The ＋ panel opens the library for the owner and co-hosts; a set is started from there or from its editor. */
+/* Question sets for quizzes (quiz.js): the library and the editor. The sets are kept on the host's device, and in
+   their Google account when they've signed in (quizlib.js). A set can go out as a file (.stoaquiz, JSON) to keep,
+   move to another device or hand to someone else, and come back in from one, into any room. Sets are saved as
+   they're edited. The ＋ panel opens the library for the owner and co-hosts; a set is started from there or from its editor. */
 import { t } from "./text.js?v=dev";
 import { el, toast, icon, sheet, confirmSheet, saveFile } from "./dom.js?v=dev";
 import { room } from "./session.js?v=dev";
@@ -10,33 +10,9 @@ import { b64u } from "./crypto.js?v=dev";
 import { shrinkPhoto } from "./photos.js?v=dev";
 import { QUIZ, SHAPES, blankQuestion, cleanSet, setProblem, toFile, fromFile } from "./quizset.js?v=dev";
 import { startQuiz, openQuiz } from "./quiz.js?v=dev";
+import { library, newId } from "./quizlib.js?v=dev";
+import { backend } from "./backend.js?v=dev";
 
-/* ---------- the library ---------- */
-const DB = "stoatalk", STORE = "quizzes";
-let opened = null;
-function db() {
-  return (opened ||= new Promise((ok, no) => {
-    const req = indexedDB.open(DB, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id" });
-    req.onsuccess = () => ok(req.result);
-    req.onerror = () => no(req.error);
-  }).catch((e) => { opened = null; throw e; }));
-}
-const run = (mode, fn) => db().then((d) => new Promise((ok, no) => {
-  const tx = d.transaction(STORE, mode), req = fn(tx.objectStore(STORE));
-  tx.oncomplete = () => ok(req?.result);
-  tx.onerror = tx.onabort = () => no(tx.error);
-}));
-const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-// a set as kept: { id, at (last changed), t, q }, cleaned on the way out like one from a file
-const kept = (x) => { const s = x && typeof x.id === "string" ? cleanSet(x) : null; return s ? { id: x.id, at: +x.at || 0, ...s } : null; };
-export const library = {
-  all: () => run("readonly", (s) => s.getAll()).then((list) => (list || []).map(kept).filter(Boolean).sort((a, b) => b.at - a.at)),
-  put: (x) => run("readwrite", (s) => s.put({ id: x.id, at: Date.now(), t: x.t, q: x.q })),
-  drop: (id) => run("readwrite", (s) => s.delete(id)),
-  // a new entry for a set from somewhere else (a file, or a quiz played in a room)
-  add: async (set) => { const x = { id: newId(), ...cleanSet(set) }; await library.put(x); return x; },
-};
 const day = (at) => new Date(at).toLocaleDateString(I18N.lang, { year: "numeric", month: "numeric", day: "numeric" });
 const titleOf = (x) => x.t || t("qzUntitled");
 // a question's picture (base64url) as something an <img> shows
@@ -63,8 +39,8 @@ export async function quizSheet() {
       icon("forward", "sm")))
       : [el("p", { class: "muted small lbnone", text: t("qzLibNone") })]));
   }, (e) => { console.error(e); list.replaceChildren(el("p", { class: "note warn", text: t("qzLibFail") })); });
-  fill();
-  const body = el("div", { class: "games" }, onRow, list, importBtn, el("p", { class: "muted small", text: t("qzLibNote") }), file);
+  fill().then(() => library.sync()).then((changed) => changed && fill());
+  const body = el("div", { class: "games" }, onRow, list, importBtn, el("p", { class: "muted small", text: t(backend.google ? "qzLibNoteAcct" : "qzLibNote") }), file);
   let picked = null;
   const a = await sheet(t("qzLib"), body, [["close", t("close")], ["new", t("qzNewSet"), "primary"]], { onOpen: (ov) => {
     body.addEventListener("click", (e) => {

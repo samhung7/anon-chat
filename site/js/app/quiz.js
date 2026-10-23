@@ -22,7 +22,7 @@ import { me } from "./identity.js?v=dev";
 import { post } from "./composer.js?v=dev";
 import { KIND } from "./kinds.js?v=dev";
 import { QUIZ, SHAPES, pad, asked, settle, ranking, cleanSet, cleanScores, scoresCsv } from "./quizset.js?v=dev";
-import { library } from "./quizedit.js?v=dev";
+import { library } from "./quizlib.js?v=dev";
 
 const AUTO_NEXT = 6000; // ms the scores stay up before the next question, when the host lets it go on by itself
 const SHOW_AFTER = 5 * 60e3; // ms the projector keeps showing a quiz's result after it saw the quiz end

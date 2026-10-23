@@ -99,10 +99,10 @@ a { color: var(--ink); }
     <ul>
       <li><b>誰蒐集</b>：StoaTalk 營運方，聯絡方式見本頁最下方。</li>
       <li><b>目的</b>：讓你在不同裝置用同一個匿名身分登入，以及處理檢舉、停權等維護服務安全的事。</li>
-      <li><b>哪些資料</b>：Google 提供的 Email、名稱、大頭貼和 Google 帳號 ID，存在 Google Firebase Authentication。你的帳號另外保存你所在的聊天室清單（代碼和最後進入的時間）和私訊用的公開金鑰。</li>
+      <li><b>哪些資料</b>：Google 提供的 Email、名稱、大頭貼和 Google 帳號 ID，存在 Google Firebase Authentication。你的帳號另外保存你所在的聊天室清單（代碼和最後進入的時間）、私訊用的公開金鑰，以及你的競答題目集（題目和圖片；圖片存放在 Cloudflare R2）。</li>
       <li><b>誰看得到</b>：聊天室裡的其他人，包括房主和副房主，都只看得到你的暱稱和頭像，看不到你的 Google 帳號。只有營運方能把你的匿名 ID 對到 Google 帳號，而且只在處理檢舉、停權或法律要求時這麼做。</li>
-      <li><b>不會上傳的</b>：私人沙龍的金鑰和私訊的私密金鑰不會離開你的裝置，所以登入後我們仍然無法讀取私人沙龍和私訊的內容。</li>
-      <li><b>存多久</b>：存到你刪除帳號為止。刪除帳號時，帳號和上述雲端資料立即刪除；你在聊天室裡傳過的訊息照一般規則，留到聊天室刪除為止。例外：被停權的帳號，我們會從停權起保留 1 年一個無法反推出 Email 或 Google 帳號 ID 的代碼，只用來防止刪除帳號再登入繞過停權；送給營運方的檢舉照下方規則最多保留 90 天。</li>
+      <li><b>不會上傳的</b>：私人沙龍的金鑰和私訊的私密金鑰不會離開你的裝置，所以登入後我們仍然無法讀取私人沙龍和私訊的內容。競答題目集不是端對端加密的：只有你的帳號能讀取，但技術上營運方看得到，即使你在私人沙龍裡使用它。</li>
+      <li><b>存多久</b>：存到你刪除帳號為止。刪除帳號時，帳號和上述雲端資料立即刪除（題目集的圖片在一天內清除）；你在聊天室裡傳過的訊息照一般規則，留到聊天室刪除為止。例外：被停權的帳號，我們會從停權起保留 1 年一個無法反推出 Email 或 Google 帳號 ID 的代碼，只用來防止刪除帳號再登入繞過停權；送給營運方的檢舉照下方規則最多保留 90 天。</li>
       <li><b>你的權利</b>：你可以隨時在選單裡登出或刪除帳號，也可以寫信要求查詢、複製、更正、停止使用或刪除你的資料。不登入不影響你使用 StoaTalk 的任何功能。</li>
     </ul>
     <h3>3. 存多久</h3>
@@ -110,11 +110,11 @@ a { color: var(--ink); }
     <h3>使用統計</h3>
     <p>為了了解服務的使用情形，我們會記錄每天的總數，例如開了幾間聊天室、送出幾則訊息、提了幾個問題。這些只是每日加總的數字，不包含任何內容、暱稱、帳號 ID 或聊天室代碼，也無法對應到任何人。</p>
     <h3>4. 存在你裝置上的資料</h3>
-    <p>瀏覽器的本機儲存空間會保存：你的暱稱和頭像、你在的聊天室清單、私人沙龍的金鑰、私訊用的金鑰、讀到哪裡、你封鎖的人、語言和外觀設定，以及你存下來的聊天記錄。這些資料不會上傳（登入 Google 時，聊天室清單會同步到你的帳號），清除瀏覽器資料就會刪除。登出或刪除帳號時，這台裝置上屬於帳號的資料（聊天室清單、金鑰、讀到哪裡、封鎖名單）會一併清除，存下來的聊天記錄則保留。</p>
+    <p>瀏覽器的本機儲存空間會保存：你的暱稱和頭像、你在的聊天室清單、私人沙龍的金鑰、私訊用的金鑰、讀到哪裡、你封鎖的人、語言和外觀設定、競答題目集，以及你存下來的聊天記錄。這些資料不會上傳（登入 Google 時，聊天室清單和競答題目集會同步到你的帳號），清除瀏覽器資料就會刪除。登出或刪除帳號時，這台裝置上屬於帳號的資料（聊天室清單、金鑰、讀到哪裡、封鎖名單、競答題目集）會一併清除，存下來的聊天記錄則保留。</p>
     <h3>5. 我們使用的第三方服務</h3>
     <ul>
       <li><b>Google Firebase</b>：資料庫、匿名登入，以及你選擇時的 Google 帳號登入。</li>
-      <li><b>Cloudflare</b>：網站由 Cloudflare Pages 託管，照片存放在 Cloudflare R2，並透過 Cloudflare 的網路傳送；網域和電子郵件轉寄也由 Cloudflare 處理。Cloudflare 可能會留下一般的連線紀錄（例如 IP 位址）。私人沙龍的照片在 Cloudflare 上只是密文。</li>
+      <li><b>Cloudflare</b>：網站由 Cloudflare Pages 託管，照片和競答題目集的圖片存放在 Cloudflare R2，並透過 Cloudflare 的網路傳送；網域和電子郵件轉寄也由 Cloudflare 處理。Cloudflare 可能會留下一般的連線紀錄（例如 IP 位址）。私人沙龍的照片在 Cloudflare 上只是密文。</li>
       <li><b>KLIPY</b>：只有在你搜尋 GIF 時，搜尋字和你的連線資訊才會傳給 KLIPY。</li>
       <li><b>瀏覽器的推播服務</b>（例如 Google、Apple、Mozilla）：開啟通知後，推播會經過你瀏覽器廠商的推播服務送達。推播內容在送出前已加密，只有你的瀏覽器能讀。</li>
     </ul>
@@ -182,10 +182,10 @@ a { color: var(--ink); }
     <ul>
       <li><b>Who collects it</b>: the StoaTalk team; contact details are at the bottom of this page.</li>
       <li><b>Why</b>: to sign you in as the same anonymous person on different devices, and to keep the service safe, such as handling reports and suspensions.</li>
-      <li><b>What</b>: the email address, name, profile picture and Google account ID that Google provides, kept in Google Firebase Authentication. Your account also keeps the list of rooms you're in (their codes and when you last entered) and the public key for your private messages.</li>
+      <li><b>What</b>: the email address, name, profile picture and Google account ID that Google provides, kept in Google Firebase Authentication. Your account also keeps the list of rooms you're in (their codes and when you last entered), the public key for your private messages, and your quiz question sets (questions and pictures; the pictures are stored in Cloudflare R2).</li>
       <li><b>Who can see it</b>: other people in a room, owners and co-hosts included, see only your nickname and picture, never your Google account. Only the StoaTalk team can tie your anonymous ID to your Google account, and does so only to handle a report or a suspension, or when the law requires it.</li>
-      <li><b>What is never uploaded</b>: Private Salon keys and your private-message private key never leave your devices, so even signed in, we still can't read Private Salons or private messages.</li>
-      <li><b>How long</b>: until you delete the account. Deleting it deletes the account and the data above at once; messages you sent in rooms follow the usual rules and stay until their room is deleted. One exception: for an account we suspended, we keep for one year from the suspension a code that can't be turned back into the email or the Google account ID, only so that deleting the account and signing in again doesn't get round the suspension. Reports sent to the StoaTalk team are kept 90 days at most, as below.</li>
+      <li><b>What is never uploaded</b>: Private Salon keys and your private-message private key never leave your devices, so even signed in, we still can't read Private Salons or private messages. Quiz question sets are not end-to-end encrypted: only your account can read them, but the StoaTalk team technically could, even if you use one in a Private Salon.</li>
+      <li><b>How long</b>: until you delete the account. Deleting it deletes the account and the data above at once (question-set pictures within a day); messages you sent in rooms follow the usual rules and stay until their room is deleted. One exception: for an account we suspended, we keep for one year from the suspension a code that can't be turned back into the email or the Google account ID, only so that deleting the account and signing in again doesn't get round the suspension. Reports sent to the StoaTalk team are kept 90 days at most, as below.</li>
       <li><b>Your rights</b>: sign out or delete the account from the menu at any time, or write to us to see, copy, correct, stop the use of, or delete your data. Not signing in takes nothing away from what you can do on StoaTalk.</li>
     </ul>
     <h3>3. How long it's kept</h3>
@@ -193,11 +193,11 @@ a { color: var(--ink); }
     <h3>Usage statistics</h3>
     <p>To understand how the service is used, we count daily totals, such as how many rooms were opened, messages sent and questions asked. These are only numbers added up per day. They hold no content, nicknames, account IDs or room codes, and can't be traced to anyone.</p>
     <h3>4. What stays on your device</h3>
-    <p>Your browser's local storage keeps your nickname and avatar, the rooms you're in, Private Salon keys, your private-message key, where you stopped reading, who you've blocked, your language and appearance settings, and records you saved. None of this is uploaded (signed in with Google, the room list also goes to your account), and clearing your browser data deletes it. Signing out or deleting the account clears what belongs to the account from that device (the room list, keys, where you stopped reading, who you've blocked); records you saved stay.</p>
+    <p>Your browser's local storage keeps your nickname and avatar, the rooms you're in, Private Salon keys, your private-message key, where you stopped reading, who you've blocked, your language and appearance settings, quiz question sets, and records you saved. None of this is uploaded (signed in with Google, the room list and quiz question sets also go to your account), and clearing your browser data deletes it. Signing out or deleting the account clears what belongs to the account from that device (the room list, keys, where you stopped reading, who you've blocked, quiz question sets); records you saved stay.</p>
     <h3>5. Third-party services</h3>
     <ul>
       <li><b>Google Firebase</b>: the database, anonymous sign-in, and Google sign-in when you choose it.</li>
-      <li><b>Cloudflare</b>: hosts the site on Cloudflare Pages, stores photos in Cloudflare R2 and delivers them over its network, and handles the domain and email forwarding. It may keep ordinary access logs, such as IP addresses. Private Salon photos are only ciphertext there.</li>
+      <li><b>Cloudflare</b>: hosts the site on Cloudflare Pages, stores photos and quiz question-set pictures in Cloudflare R2 and delivers them over its network, and handles the domain and email forwarding. It may keep ordinary access logs, such as IP addresses. Private Salon photos are only ciphertext there.</li>
       <li><b>KLIPY</b>: only when you search for a GIF are your search words and connection details sent to KLIPY.</li>
       <li><b>Your browser's push service</b> (such as Google, Apple or Mozilla): with notifications on, pushes reach you through it. They're encrypted before they're sent, so only your browser can read them.</li>
     </ul>

@@ -1860,3 +1860,61 @@ test("Google account: the same person on two devices, rooms follow, private mess
   assert.notEqual(await emuUid(alice, "a"), aId);
   noErrors();
 });
+
+test("Google account: the quiz library follows the host to another device, pictures and all, and a set deleted there goes here too", async () => {
+  const alice = await person("a");
+  await signInGoogle(alice, "alice@example.com");
+  const aId = await emuUid(alice, "a");
+  const { code } = await createRoom(alice, "Alice");
+  const ed = await writeQuiz(alice, "Synced", [{ t: "What colour is it?", o: ["Red", "Black"], right: 1, d: 10 }]);
+  await ed.locator(".qzeq .qzeimg input[type=file]").setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: PNG });
+  await ed.locator(".qzeq .qzeimg img[src^='data:image/jpeg']").waitFor();
+  await alice.keyboard.press("Escape");
+  await ed.waitFor({ state: "detached" });
+  // a moment later the set is in the account, its picture in R2 under the account's own folder
+  let id;
+  await until(async () => { const qz = await dbGet(`users/${aId}/qz`); id = Object.keys(qz || {})[0]; return qz?.[id]?.t === "Synced"; });
+  const kept = JSON.parse(await dbGet(`users/${aId}/qzs/${id}`));
+  assert.match(kept.q[0].img.f, /^[A-Za-z0-9_-]{22}$/);
+  assert.ok(!kept.q[0].img.d, "the picture's bytes aren't in the database");
+  assert.ok(photos.bucket.objects.has(`u/${aId}/${kept.q[0].img.f}.jpg`));
+
+  // her tablet: signed in, the set is in the library there, with its picture
+  const tablet = await person("t");
+  await signInGoogle(tablet, "alice@example.com", { switching: true });
+  await tablet.locator(`#resume .roomrow[data-code="${code}"]`).click();
+  await tablet.locator("#chat").waitFor();
+  await tablet.locator("#composer [data-a=more]").click();
+  await tablet.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(tablet).locator(".games p", { hasText: "kept in your Google account" }).waitFor();
+  await sheet(tablet).locator(".gmrow", { hasText: "Synced" }).click();
+  await press(tablet, "edit");
+  const ted = tablet.locator(".qzedit");
+  await ted.locator(".qzeq .qzeimg img[src^='data:image/jpeg']").waitFor();
+  assert.equal(await ted.locator(".qzeq textarea").inputValue(), "What colour is it?");
+  await tablet.keyboard.press("Escape");
+  await ted.waitFor({ state: "detached" });
+  // deleted on the tablet: a mark in the account, and gone from her first device's library when it next opens
+  await tablet.locator("#composer [data-a=more]").click();
+  await tablet.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(tablet).locator(".gmrow", { hasText: "Synced" }).click();
+  await press(tablet, "drop");
+  await press(tablet, "yes");
+  await until(async () => (await dbGet(`users/${aId}/qz/${id}`))?.gone === true);
+  assert.equal(await dbGet(`users/${aId}/qzs/${id}`), null);
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(alice).locator(".lbnone").waitFor();
+
+  // signing out on the tablet takes the library off it too
+  await tablet.goto(`${base}/?emu&as=t`); await tablet.locator("#createBtn").waitFor();
+  const before = await tablet.evaluate(() => new Promise((ok) => { const r = indexedDB.open("stoatalk", 1); r.onupgradeneeded = () => r.result.createObjectStore("quizzes", { keyPath: "id" }); r.onsuccess = () => { const tx = r.result.transaction("quizzes", "readwrite"); tx.objectStore("quizzes").put({ id: "zzzzzzzz1", at: 1, t: "left here", q: [] }); tx.oncomplete = () => { r.result.close(); ok(true); }; }; }));
+  assert.ok(before);
+  await accountSheet(tablet);
+  const out = tablet.waitForEvent("load");
+  await press(tablet, "out"); await press(tablet, "yes");
+  await out; await tablet.locator("#createBtn").waitFor();
+  const left = await tablet.evaluate(() => new Promise((ok) => { const r = indexedDB.open("stoatalk", 1); r.onsuccess = () => { const q = r.result.transaction("quizzes").objectStore("quizzes").count(); q.onsuccess = () => ok(q.result); }; }));
+  assert.equal(left, 0);
+  noErrors();
+});

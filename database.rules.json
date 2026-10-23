@@ -1073,6 +1073,31 @@
         "dh": {
           ".validate": "newData.isString() && newData.val().length <= 120 && newData.val().matches(/^[A-Za-z0-9_-]+$/)"
         },
+        "qz": {
+          "$id": {
+            ".validate": "($id.matches(/^[a-z0-9]{8,20}$/)) && ((newData.hasChildren(['at', 't', 'n'])) || (newData.hasChildren(['at', 'gone']))) && (!newData.hasChildren(['t', 'gone'])) && (!newData.parent().parent().child('qzs/' + $id).exists() || !newData.child('gone').exists())",
+            "at": {
+              ".validate": "newData.isNumber() && newData.val() > 0"
+            },
+            "t": {
+              ".validate": "newData.isString() && newData.val().length <= 60"
+            },
+            "n": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100"
+            },
+            "gone": {
+              ".validate": "newData.val() === true"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "qzs": {
+          "$id": {
+            ".validate": "($id.matches(/^[a-z0-9]{8,20}$/)) && (newData.isString() && newData.val().length <= 250000) && (newData.parent().parent().child('qz/' + $id + '/t').exists())"
+          }
+        },
         "$other": {
           ".validate": false
         }

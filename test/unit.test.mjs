@@ -205,6 +205,25 @@ test("a message's time gains the month and day from yesterday back, and the year
   assert.match(fmtWhen(new Date(2026, 9, 18, 23, 5)), /October 18, 2026.*23:05/);
 });
 
+test("quiz library in a Google account: the side that changed a set last wins, and a deletion goes everywhere", async () => {
+  const Q = await import(new URL("quizset.js?v=dev", APP));
+  const index = Q.cleanIndex({
+    aaaaaaaa1: { at: 100, t: "same", n: 3 }, aaaaaaaa2: { at: 200, t: "newer there", n: 1 }, aaaaaaaa3: { at: 50, t: "older there", n: 1 },
+    aaaaaaaa4: { at: 300, gone: true }, aaaaaaaa5: { at: 300, gone: true }, aaaaaaaa6: { at: 10, t: "only there", n: 0 },
+    aaaaaaaa7: { at: 10, gone: true }, "BAD/id": { at: 1, t: "x" }, aaaaaaaa8: { t: "no time" },
+  });
+  assert.deepEqual(Object.keys(index), ["aaaaaaaa1", "aaaaaaaa2", "aaaaaaaa3", "aaaaaaaa4", "aaaaaaaa5", "aaaaaaaa6", "aaaaaaaa7"]);
+  assert.deepEqual(index.aaaaaaaa4, { at: 300, gone: true });
+  const local = [{ id: "aaaaaaaa1", at: 100 }, { id: "aaaaaaaa2", at: 150 }, { id: "aaaaaaaa3", at: 60 }, { id: "aaaaaaaa4", at: 250 },
+    { id: "aaaaaaaa5", at: 400 }, { id: "aaaaaaaa9", at: 5 }];
+  assert.deepEqual(Q.syncPlan(local, index), {
+    up: ["aaaaaaaa3", "aaaaaaaa5", "aaaaaaaa9"],   // changed here last, changed here after it was deleted, only here
+    down: ["aaaaaaaa2", "aaaaaaaa6"],               // changed there last, only there
+    drop: ["aaaaaaaa4"],                            // deleted on another device after it last changed here
+  });
+  assert.deepEqual(Q.syncPlan([], {}), { up: [], down: [], drop: [] });
+});
+
 test("quiz: a set is cleaned, asked without its answers, scored by speed, ranked, and kept in a file", async () => {
   const Q = await import(new URL("quizset.js?v=dev", APP));
   const set = Q.cleanSet({ t: " 期中 ", q: [
