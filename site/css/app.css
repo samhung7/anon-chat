@@ -134,13 +134,20 @@ code { font-size: .9em; }
 /* the stoa mark: its roof in the accent ink (muted in dark), its columns and step in the text colour */
 .mark { display: block; fill: var(--text); }
 .mark .top { fill: var(--mark-top, var(--accent-ink)); }
-.brand { display: flex; flex-direction: column; gap: 2px; padding-bottom: var(--sp-1); }
+/* the logo and the menu stay at the top of the screen as the page scrolls; the page itself still scrolls, so a phone
+   browser's own bars fold away. The bar reaches out over the page's side padding and under the status bar of the
+   home-screen app so nothing shows past it, and gets a hairline once something has scrolled under it */
+.brand {
+  position: sticky; top: 0; z-index: 3; background: var(--bg);
+  margin: calc(-1 * env(safe-area-inset-top)) calc(-1 * var(--sp-4)) 0; padding: env(safe-area-inset-top) var(--sp-4) 0;
+  border-bottom: 1px solid transparent; transition: border-color .15s;
+}
+.home.scrolled .brand { border-bottom-color: var(--line); }
 .brand .row { display: flex; align-items: center; gap: 10px; min-height: 57px; }
 .brand .logo { width: 40px; height: 40px; flex: none; border: 0; padding: var(--sp-1) 2px; border-radius: var(--radius-sm); background: none; overflow: hidden; cursor: pointer; }
 .brand .logo .mark { width: 100%; height: 100%; }
 .brand .logo:active { transform: scale(.94); }
 .brand h1 { flex: 1; min-width: 0; font: var(--fw-bold) 34px/1 var(--font-brand); letter-spacing: -.005em; }
-.brand .tag { margin: 0; color: var(--muted); font-size: var(--fs-md); text-wrap: pretty; }
 .me { flex: none; display: flex; align-items: center; gap: 6px; height: var(--hit); padding: 0 var(--sp-3) 0 5px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface); color: var(--text); }
 .me:hover { background: var(--surface-2); }
 .me:active { background: var(--accent-2); }
@@ -178,7 +185,8 @@ code { font-size: .9em; }
 .code.salon { background: var(--salon); color: var(--on-salon); padding-left: 7px; }
 .code .st-i { width: 12px; height: 12px; }
 .tag { display: inline-flex; align-items: center; gap: var(--sp-1); border-radius: var(--radius-pill); padding: 2px var(--sp-2); font: var(--fw-semibold) var(--fs-xs)/1.4 var(--font-sans); background: var(--accent-2); color: var(--accent-ink); white-space: nowrap; }
-.brand .tag { display: block; background: none; padding: 0; font-weight: var(--fw-regular); white-space: normal; border-radius: 0; }
+/* the tagline sits just under the bar, out of it so it scrolls away */
+.home > .tag { display: block; background: none; padding: 0; margin: -13px 0 var(--sp-1); color: var(--muted); font: var(--fw-regular) var(--fs-md)/1.4 var(--font-sans); white-space: normal; text-wrap: pretty; border-radius: 0; }
 .tag .st-i { width: 13px; height: 13px; }
 .tag.warn { background: var(--warn-bg); color: var(--warn); }
 .encnote { display: flex; gap: 10px; margin-top: var(--sp-3); padding: var(--sp-3) 14px; border-radius: var(--radius-md); background: var(--salon-2); font-size: var(--fs-md); }

@@ -116,6 +116,8 @@ $("#mentionBar").addEventListener("mousedown", (e) => e.preventDefault()); // ke
 const scrolled = () => { if (room && !$("#chat").hidden) { markSeen(); showJump(); } };
 LIST().addEventListener("scroll", scrolled, { passive: true });
 addEventListener("scroll", scrolled, { passive: true });
+// the home page's bar stays at the top and gets its hairline once something has scrolled under it
+addEventListener("scroll", () => $("#home").classList.toggle("scrolled", scrollY > 0), { passive: true });
 ["touchstart", "wheel"].forEach((ev) => LIST().addEventListener(ev, () => { if (room) room.ui.touched = true; }, { passive: true }));
 $("#jumpBtn").addEventListener("click", () => { if (room) room.ui.touched = true; toEnd("smooth"); });
 // a picture pasted into the box is sent as a photo
