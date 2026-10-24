@@ -31,7 +31,7 @@ import { showMe } from "./identity.js?v=dev";
 import { create, join, cleanCode } from "./lobby.js?v=dev";
 import { LIST, setView, markSeen, showJump, setFlow, fromEnd, toEnd } from "./chat.js?v=dev";
 import { send, cancelReply, typing, renderTyping, mentionBar, box } from "./composer.js?v=dev";
-import { renderQuick, wireQuick, wireDoubleTap } from "./quick.js?v=dev";
+import { renderQuick, wireQuick, wireDoubleTap, emptySendTap } from "./quick.js?v=dev";
 import { ask } from "./qa.js?v=dev";
 import { sendPhotos } from "./photos.js?v=dev";
 import { menu, share } from "./menu.js?v=dev";
@@ -202,7 +202,7 @@ ta.addEventListener("keydown", (e) => {
 $("#composer").addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = ta.value;
-  if (!text.trim()) return;
+  if (!text.trim()) { if (e.submitter?.classList.contains("send")) emptySendTap(e.submitter); return; } // quick.js: five in a row fly my animal
   ta.value = ""; grow(); mentionBar(); renderQuick();
   if (!(await (room?.ui.view === "qa" ? ask(text) : send(text))) && !ta.value) { ta.value = text; grow(); renderQuick(); } // not sent: give the text back
   else if (pickerOpen() === "emoji") closePicker();
