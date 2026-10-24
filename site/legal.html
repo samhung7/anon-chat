@@ -11,6 +11,7 @@
 <!-- Traditional Chinese and English; other interface languages read the English. Shown by the language chosen in
      the app (localStorage chat-lang) or the device's, and both without JavaScript. -->
 <style>
+@font-face { font-family: "Cormorant Garamond"; font-weight: 600; font-display: swap; src: url(/fonts/cormorant-garamond-600.woff2) format("woff2"); }
 :root { --bg: #f4efe6; --surface: #fbfaf8; --line: #e4dccc; --text: #3a3128; --muted: #857a6b; --accent: #d9cdb6; --ink: #7d6b52; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1b1916; --surface: #25221e; --line: #3e3a33; --text: #f4efe6; --muted: #b3aa9b; --accent: #e7decd; --ink: #e7decd; } }
 :root[data-theme="dark"] { --bg: #1b1916; --surface: #25221e; --line: #3e3a33; --text: #f4efe6; --muted: #b3aa9b; --accent: #e7decd; --ink: #e7decd; }
@@ -18,7 +19,7 @@
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.7 system-ui, -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; }
 main { max-width: 720px; margin: 0 auto; padding: 20px 16px 48px; }
 header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-header a.home { color: var(--ink); font-weight: 700; text-decoration: none; font-size: 18px; }
+header a.home { color: var(--ink); text-decoration: none; font: 600 24px/1.2 "Cormorant Garamond", Garamond, serif; }
 nav.langs { margin-left: auto; display: flex; gap: 6px; }
 nav.langs button { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 14px; cursor: pointer; }
 nav.langs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #3a3128; }
