@@ -1,3 +1,5 @@
+/* the wordmark's face, as in the logo: Cormorant Garamond Bold, Latin only (fonts/OFL-CormorantGaramond.txt) */
+@font-face { font-family: "Cormorant Garamond"; font-style: normal; font-weight: 700; font-display: swap; src: url(../fonts/cormorant-garamond-700.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122; }
 :root {
   /* StoaTalk design system (Claude Design, 2026-10): warm paper (sand), dark ink, and the Private Salon slate.
      Text pairs are checked to WCAG AA: 4.5:1 for text, 3:1 for control edges; ratios against --bg. */
@@ -27,6 +29,7 @@
   --shadow: 0 10px 30px rgba(58, 49, 40, .1); --shadow-sm: 0 2px 8px rgba(58, 49, 40, .08);
 
   --font-sans: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --font-brand: "Cormorant Garamond", Garamond, "Times New Roman", serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --fs-2xs: 11px; --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-body: 16px; --fs-h2: 17px; --fs-sheet: 18px; --fs-h1: 22px;
   --fs-code: 24px; --fs-code-xl: 52px;
@@ -136,7 +139,7 @@ code { font-size: .9em; }
 .brand .logo { width: 40px; height: 40px; flex: none; border: 0; padding: var(--sp-1) 2px; border-radius: var(--radius-sm); background: none; overflow: hidden; cursor: pointer; }
 .brand .logo .mark { width: 100%; height: 100%; }
 .brand .logo:active { transform: scale(.94); }
-.brand h1 { flex: 1; min-width: 0; font: var(--fw-bold) var(--fs-h1)/1.2 var(--font-sans); letter-spacing: -.01em; }
+.brand h1 { flex: 1; min-width: 0; font: var(--fw-bold) 34px/1 var(--font-brand); letter-spacing: -.005em; }
 .brand .tag { margin: 0; color: var(--muted); font-size: var(--fs-md); text-wrap: pretty; }
 .me { flex: none; display: flex; align-items: center; gap: 6px; height: var(--hit); padding: 0 var(--sp-3) 0 5px; border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface); color: var(--text); }
 .me:hover { background: var(--surface-2); }
@@ -584,7 +587,7 @@ html.opening #home { display: none; }
 .splash { display: none; }
 html.opening .splash, html.l10n .splash { position: fixed; inset: 0; z-index: 10; visibility: visible; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); background: var(--bg); color: var(--text); animation: fade .3s .15s both; }
 .splash .mark { width: 64px; height: 60px; }
-.splash b { font-size: 22px; letter-spacing: .02em; }
+.splash b { font: var(--fw-bold) 32px/1 var(--font-brand); }
 .splash .spin { width: 26px; height: 26px; margin-top: var(--sp-2); border: 3px solid var(--line); border-top-color: var(--accent-ink); border-radius: 50%; animation: spin .8s linear infinite; }
 .splash p { margin: 0; color: var(--muted); font-size: 14px; animation: fade .4s 2.5s both; }
 html.l10n .splash p { visibility: hidden; }
