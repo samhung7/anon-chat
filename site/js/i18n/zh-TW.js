@@ -45,6 +45,7 @@ I18N.add("zh-TW", {
   notifyNo: "不用",
   cancelReply: "取消回覆",
   textPh: "說點什麼…",
+  textPhAs: "以 {name} 的身分發言…",
   msgAria: "訊息",
   emojiAria: "表情符號",
   sendAria: "送出",

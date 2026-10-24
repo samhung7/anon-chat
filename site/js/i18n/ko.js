@@ -45,6 +45,7 @@ I18N.add("ko", {
   notifyNo: "괜찮아요",
   cancelReply: "답장 취소",
   textPh: "메시지를 입력하세요…",
+  textPhAs: "{name}(으)로 메시지 입력…",
   msgAria: "메시지",
   emojiAria: "이모지",
   sendAria: "보내기",

@@ -73,7 +73,7 @@ function watchChat(r) {
       left.forEach((m) => toast(t("leftToast", { who: `${m.avatar} ${m.name}` })));
     })
     .on("members", () => {
-      renderHeader(); refreshNames();
+      renderHeader(); refreshNames(); textPlaceholder();
       // once I'm in: this room's push subscription, if this device wants to hear from it while the page is closed
       if (!r.pushSynced && r.members[backend.uid]) { r.pushSynced = true; if (notifyOn(r.code)) syncPush(r.code, true); }
     })
@@ -246,6 +246,12 @@ const lastRead = (other) => +store.get(KEYS.dmRead(room.code, other)) || 0;
 const markRead = (other, at) => { if (typeof at === "number" && at > lastRead(other)) store.set(KEYS.dmRead(room.code, other), String(at)); };
 
 /* ---------- views: the room, its questions, or a private chat ---------- */
+// in the room the box says whose name I'm writing under here, since each room can have its own nickname
+function textPlaceholder() {
+  if (room.ui.view !== "all") return;
+  const me = room.members[backend.uid];
+  box().placeholder = me ? t("textPhAs", { name: `${me.avatar} ${me.name}` }) : t("textPh");
+}
 export function setView(view) { room.ui.view = view; renderView(); }
 export function renderView() {
   closePicker();
@@ -272,7 +278,7 @@ export function renderView() {
     if (!room.msgs.size) list.append(el("p", { class: "empty", text: t("emptyRoom") }));
     ui.readMark = +store.get(KEYS.read(room.code)) || 0; // where this device stopped reading (messages still loading go through addMsg)
     room.msgs.forEach((v, id) => { newLine(list, v); list.append(bubble(id, v)); });
-    ta.placeholder = t("textPh");
+    textPlaceholder();
   } else if (ui.view === "qa") {
     ta.placeholder = t("askPh");
     renderQa(); refreshWait();
