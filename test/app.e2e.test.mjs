@@ -185,6 +185,19 @@ test("a made-up nickname: 🎲 picks a colour and an animal, and one that is tak
   await press(bob, "yes");
   await bob.locator("#chat").waitFor();
   assert.ok(await dbGet(`rooms/${code}/names/${(colour + " owl").toLowerCase()}`), "joined under the name made up");
+  // the box says whose name I'm writing under in this room, and follows a rename
+  const ph = () => bob.locator("#text").getAttribute("placeholder");
+  assert.match(await ph(), new RegExp(`^Speak as \\S+ ${colour} Owl…$`));
+  await menuPick(bob, "me");
+  await bob.locator("#meName").fill("Bob");
+  await press(bob, "yes");
+  await bob.waitForFunction(() => /^Speak as \S+ Bob…$/.test(document.querySelector("#text").placeholder));
+  // the emoji button sits inside the box; its panel has every tab of a phone's keyboard, flags too
+  await bob.locator("#composer .textbox [data-a=emoji]").click();
+  assert.equal(await bob.locator("#picker .cats button").count(), 9);
+  await bob.locator("#picker .cats button").last().click();
+  await bob.locator("#picker .emo", { hasText: "🇹🇼" }).click();
+  assert.equal(await bob.locator("#text").inputValue(), "🇹🇼");
   // someone whose made-up name is already taken in the room joins under another made-up one, without being asked
   const carol = await person("c");
   await carol.evaluate(() => localStorage.setItem("chat-me", JSON.stringify({ avatar: "🦊", name: "Red Fox", col: 0, auto: true })));
@@ -288,6 +301,7 @@ test("private salon: only ciphertext on the server, the link is needed, private 
 
   await joinByLink(bob, url, "Bob");
   await titleIs(bob, "Secret");
+  assert.match(await bob.locator("#text").getAttribute("placeholder"), /^Speak as \S+ Bob…$/, "a sealed name too");
   await setDesc(alice, "Salon rules");
   await bob.locator("#desc .dtext", { hasText: "Salon rules" }).waitFor();
   const sealed = await dbGet(`rooms/${code}/meta`);

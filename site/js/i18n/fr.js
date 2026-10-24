@@ -45,6 +45,7 @@ I18N.add("fr", {
   notifyNo: "Non merci",
   cancelReply: "Annuler la réponse",
   textPh: "Écrivez quelque chose…",
+  textPhAs: "En tant que {name}…",
   msgAria: "Message",
   emojiAria: "Emoji",
   sendAria: "Envoyer",

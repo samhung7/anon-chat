@@ -45,6 +45,7 @@ I18N.add("ja", {
   notifyNo: "今はしない",
   cancelReply: "返信をキャンセル",
   textPh: "メッセージを入力…",
+  textPhAs: "{name} として発言…",
   msgAria: "メッセージ",
   emojiAria: "絵文字",
   sendAria: "送信",
