@@ -316,9 +316,13 @@ html.flow .list { flex: 1 0 auto; overflow: visible; }
 .chat.salon .composer { border-top-color: color-mix(in srgb, var(--salon) 30%, transparent); }
 .chat.salon .send { background: var(--salon); color: var(--on-salon); }
 .composer.off { opacity: .5; pointer-events: none; }
+/* the message box, with the emoji button inside it on the right, at its last line as it grows */
+.textbox { flex: 1; min-width: 0; position: relative; display: flex; margin: 0 var(--sp-1); }
+.textbox .inbox { position: absolute; inset-inline-end: 2px; bottom: 0; border-radius: 50%; }
+.textbox .inbox:hover { background: none; }
 #text {
-  flex: 1; min-width: 0; margin: 0 var(--sp-1); resize: none; font: var(--text-body); line-height: 1.4; color: var(--text); background: var(--surface-2); border: 1px solid var(--line-strong);
-  border-radius: 22px; padding: 10px var(--sp-4); min-height: var(--hit); max-height: 160px;
+  flex: 1; min-width: 0; resize: none; font: var(--text-body); line-height: 1.4; color: var(--text); background: var(--surface-2); border: 1px solid var(--line-strong);
+  border-radius: 22px; padding: 10px 46px 10px var(--sp-4); min-height: var(--hit); max-height: 160px;
 }
 .send { flex: none; width: var(--hit); height: var(--hit); display: grid; place-items: center; border-radius: 50%; border: 0; background: var(--accent); color: var(--on-accent); }
 
@@ -471,8 +475,8 @@ html.flow .list { flex: 1 0 auto; overflow: visible; }
 .tool:hover { color: var(--text); background: var(--surface-2); }
 .tool[aria-pressed="true"] { background: var(--accent-2); color: var(--accent-ink); }
 .picker { background: var(--surface); border-top: 1px solid var(--line); height: min(300px, 42dvh); display: flex; flex-direction: column; padding: var(--sp-2) 10px 0; }
-.cats { display: flex; gap: var(--sp-1); padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-.cats button { border: 0; background: none; font-size: 20px; width: 40px; height: 34px; border-radius: 10px; }
+.cats { display: flex; gap: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.cats button { flex: 1 0 34px; border: 0; background: none; font-size: 20px; max-width: 44px; height: 34px; border-radius: 10px; padding: 0; }
 .cats button[aria-selected="true"] { background: var(--accent-2); }
 .emojigrid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 2px; padding: 6px 0; }
 .emo { border: 0; background: none; font-size: 26px; height: 42px; border-radius: 10px; padding: 0; }
