@@ -45,7 +45,7 @@ I18N.add("zh-CN", {
   notifyNo: "暂不需要",
   cancelReply: "取消回复",
   textPh: "说点什么…",
-  textPhAs: "以 {name} 的身份发言…",
+  textPhAs: "以 {name} 发言…",
   msgAria: "消息",
   emojiAria: "表情",
   sendAria: "发送",

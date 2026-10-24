@@ -125,6 +125,7 @@ code { font-size: .9em; }
   border: 1px solid var(--line-strong); border-radius: var(--radius-md); padding: 10px var(--sp-3); min-height: var(--hit);
 }
 .field::placeholder, #text::placeholder { color: var(--muted); }
+#text::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* one line, even with a long nickname in it */
 .field:focus, .codein:focus, #text:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
 .lbl { display: block; font: var(--fw-semibold) var(--fs-md)/1.4 var(--font-sans); margin: 14px 0 6px; }
 .link { display: inline-flex; align-items: center; gap: var(--sp-1); background: none; border: 0; color: var(--accent-ink); padding: var(--sp-1) 0; font-weight: var(--fw-semibold); }

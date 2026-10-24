@@ -45,7 +45,7 @@ I18N.add("en", {
   notifyNo: "No thanks",
   cancelReply: "Cancel reply",
   textPh: "Say something…",
-  textPhAs: "Say something as {name}…",
+  textPhAs: "Speak as {name}…",
   msgAria: "Message",
   emojiAria: "Emoji",
   sendAria: "Send",

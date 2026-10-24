@@ -45,7 +45,7 @@ I18N.add("pt", {
   notifyNo: "Agora não",
   cancelReply: "Cancelar resposta",
   textPh: "Diga alguma coisa…",
-  textPhAs: "Escreva como {name}…",
+  textPhAs: "Fale como {name}…",
   msgAria: "Mensagem",
   emojiAria: "Emoji",
   sendAria: "Enviar",
