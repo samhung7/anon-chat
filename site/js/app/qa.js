@@ -12,7 +12,7 @@ import { room } from "./session.js?v=dev";
 import { me } from "./identity.js?v=dev";
 import { linkify } from "./richtext.js?v=dev";
 import { posts } from "./composer.js?v=dev";
-import { LIST, setView } from "./chat.js?v=dev";
+import { LIST, SCROLLER, setView } from "./chat.js?v=dev";
 
 const MAX_MINE = 200;
 export function watchQa(r) {
@@ -141,7 +141,7 @@ export const ansBox = (a, when) => el("div", { class: "qans" },
   el("p", { class: "qtext" }, linkify(a.text)));
 export function renderQa() {
   if (!room || room.ui.view !== "qa" || $("#chat").hidden) return;
-  const list = LIST(), keep = list.scrollTop, staff = room.isStaff(), meta = room.meta;
+  const list = LIST(), keep = SCROLLER().scrollTop, staff = room.isStaff(), meta = room.meta;
   const all = [...room.qs.values()];
   const onScreen = (q) => meta?.qnow === q.id && !!q.ans; // an answered question stays up top while it's on the projector
   const open = all.filter((q) => !q.done || onScreen(q)).sort(byVotes), done = all.filter((q) => q.done && !onScreen(q)).sort((a, b) => b.done - a.done);
@@ -158,5 +158,5 @@ export function renderQa() {
     parts.push(d);
   }
   list.replaceChildren(...parts);
-  list.scrollTop = keep;
+  SCROLLER().scrollTop = keep;
 }

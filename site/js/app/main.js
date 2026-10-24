@@ -29,7 +29,7 @@ import { backend, asParam } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { showMe } from "./identity.js?v=dev";
 import { create, join, cleanCode } from "./lobby.js?v=dev";
-import { LIST, setView, markSeen, showJump } from "./chat.js?v=dev";
+import { LIST, setView, markSeen, showJump, setFlow, fromEnd, toEnd } from "./chat.js?v=dev";
 import { send, cancelReply, typing, renderTyping, mentionBar, box } from "./composer.js?v=dev";
 import { renderQuick, wireQuick, wireDoubleTap } from "./quick.js?v=dev";
 import { ask } from "./qa.js?v=dev";
@@ -113,9 +113,11 @@ ta.addEventListener("input", grow);
 ta.addEventListener("input", () => { typing.ping(); mentionBar(); renderQuick(); });
 wireQuick(); wireDoubleTap(LIST());
 $("#mentionBar").addEventListener("mousedown", (e) => e.preventDefault()); // keep the keyboard up while picking a name
-LIST().addEventListener("scroll", () => { if (room) { markSeen(); showJump(); } }, { passive: true });
+const scrolled = () => { if (room && !$("#chat").hidden) { markSeen(); showJump(); } };
+LIST().addEventListener("scroll", scrolled, { passive: true });
+addEventListener("scroll", scrolled, { passive: true });
 ["touchstart", "wheel"].forEach((ev) => LIST().addEventListener(ev, () => { if (room) room.ui.touched = true; }, { passive: true }));
-$("#jumpBtn").addEventListener("click", () => { if (room) room.ui.touched = true; const l = LIST(); l.scrollTo({ top: l.scrollHeight, behavior: "smooth" }); });
+$("#jumpBtn").addEventListener("click", () => { if (room) room.ui.touched = true; toEnd("smooth"); });
 // a picture pasted into the box is sent as a photo
 ta.addEventListener("paste", (e) => {
   const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
@@ -124,6 +126,19 @@ ta.addEventListener("paste", (e) => {
 // the keyboard covers the home indicator, so the home-screen app's extra space under the box goes while typing
 ta.addEventListener("focus", () => document.body.classList.add("typing"));
 ta.addEventListener("blur", () => { document.body.classList.remove("typing"); typing.stop(); });
+// on a phone's browser the room scrolls the page (see setFlow), but only while nothing is being typed: a field gaining
+// focus puts the chat back in its fixed frame at once, before the keyboard comes, so the keyboard is handled as below
+const typingIn = () => document.activeElement?.matches("textarea, input:not([type=checkbox], [type=radio], [type=file]), [contenteditable=true]");
+const syncFlow = () => { const chat = $("#chat"); setFlow(!chat.hidden && !chat.style.height && !document.documentElement.classList.contains("kb") && !typingIn()); };
+new MutationObserver(syncFlow).observe($("#chat"), { attributes: true, attributeFilter: ["hidden"] });
+document.addEventListener("focusin", syncFlow);
+document.addEventListener("focusout", () => setTimeout(syncFlow));
+// the bars and the box stay on the screen over the page, so a message brought into view lands between them
+const bars = new ResizeObserver(() => {
+  const s = document.documentElement.style;
+  s.setProperty("--chattop", `${$(".chattop").offsetHeight}px`); s.setProperty("--chatfoot", `${$(".chatfoot").offsetHeight}px`);
+});
+[".chattop", ".chatfoot"].forEach((s) => bars.observe($(s)));
 // iOS doesn't shrink the page for the keyboard: it slides the whole page up behind it, which takes the room's
 // header off the top (and in a private chat can leave only blank space above the box), and leaves a bottom sheet
 // (a description, an answer, a new room…) under the keyboard with only its title showing. While the keyboard is up,
@@ -139,17 +154,19 @@ const fitScreen = () => {
   const chat = $("#chat"), sheets = document.querySelectorAll(".overlay");
   const up = Math.abs(vv.scale - 1) < .01 && innerHeight - vv.height > 1;
   document.documentElement.classList.toggle("kb", up);
+  syncFlow(); // the keyboard takes the chat out of the page's scroll before it's fitted, and gives it back once it isn't
   if (!up && !chat.style.height && ![...sheets].some((o) => o.style.height)) return;
   // the home page scrolls as usual under its own fields; only the chat and sheets need putting back
   const fitting = !chat.hidden || sheets.length;
   if (up && !fitting) return;
-  const l = LIST(), stick = l.scrollHeight - l.scrollTop - l.clientHeight < 80;
+  const stick = fromEnd() < 80;
   // the home-screen app can scroll the page itself rather than the visible part, which leaves a fixed chat behind
   // at the top, so the page is put back at the top first; the fitted chat then fits with nothing left to scroll
   if (up && (scrollY || vv.offsetTop)) scrollTo(0, 0);
   fit(chat, up && !chat.hidden);
   sheets.forEach((o) => fit(o, up));
-  if (stick) l.scrollTop = l.scrollHeight;
+  if (stick) toEnd();
+  syncFlow();
   // a long sheet (a new room, a poll) scrolls inside itself, so the field being typed in is brought into its view
   const f = document.activeElement;
   if (up && f?.closest(".sheet")) f.scrollIntoView({ block: "nearest" });

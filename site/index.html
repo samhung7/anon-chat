@@ -176,6 +176,7 @@
 
 <!-- ---------- chat ---------- -->
 <main id="chat" class="chat" hidden>
+  <div class="chattop">
   <header class="bar">
     <button class="icon" type="button" data-a="home" aria-label="回首頁" data-i18n-attr="aria-label:backHome"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-back"></use></svg></button>
     <div class="ttl">
@@ -201,11 +202,13 @@
     <button class="link" type="button" data-a="notifyYes" data-i18n="notifyYes">開啟通知</button>
     <button class="link" type="button" data-a="notifyNo" data-i18n="notifyNo">不用</button>
   </div>
+  </div>
   <div class="listwrap">
     <div id="list" class="list" aria-live="polite"></div>
-    <div id="typingBar" class="typingbar" hidden></div>
-    <button id="jumpBtn" class="jump" type="button" aria-label="回到最新的訊息" data-i18n-attr="aria-label:jumpAria" hidden><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-jump"></use></svg><span class="jn"></span></button>
   </div>
+  <div class="chatfoot">
+  <div id="typingBar" class="typingbar" hidden></div>
+  <button id="jumpBtn" class="jump" type="button" aria-label="回到最新的訊息" data-i18n-attr="aria-label:jumpAria" hidden><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-jump"></use></svg><span class="jn"></span></button>
   <div id="replyBar" class="replybar" hidden>
     <span class="rtxt"></span>
     <button class="icon small" type="button" data-a="noreply" aria-label="取消回覆" data-i18n-attr="aria-label:cancelReply"><svg class="st-i sm" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-close"></use></svg></button>
@@ -225,6 +228,7 @@
     <button class="send" type="submit" aria-label="送出" data-i18n-attr="aria-label:sendAria"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-send"></use></svg></button>
   </form>
   <div id="roBox" class="robox" role="status" hidden></div>
+  </div>
   <input id="photoFile" type="file" accept="image/*" multiple hidden>
 </main>
 

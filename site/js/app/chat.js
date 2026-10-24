@@ -27,6 +27,23 @@ import { renderQuick } from "./quick.js?v=dev";
 import { phase, hoursLeft, minutesLeft } from "./expiry.js?v=dev";
 
 export const LIST = () => $("#list");
+// on a phone's browser the messages scroll the page itself (html.flow, so the browser's bars fold away); otherwise,
+// in the home-screen app and while typing, they scroll inside the list. Either way the list's top is at 0 and its
+// end where nothing is left below the box
+const flowOk = () => matchMedia("(pointer: coarse)").matches && !matchMedia("(display-mode: standalone)").matches && !navigator.standalone;
+const flowing = () => document.documentElement.classList.contains("flow");
+export const SCROLLER = () => (flowing() ? document.scrollingElement : LIST());
+export const fromEnd = () => { const s = SCROLLER(); return s.scrollHeight - s.scrollTop - (flowing() ? innerHeight : s.clientHeight); };
+export const toEnd = (behavior) => { const s = SCROLLER(); s.scrollTo({ top: s.scrollHeight, behavior }); };
+// switch between the two, keeping the messages where they were on the screen; true when it switched
+export function setFlow(on) {
+  on = on && flowOk();
+  if (on === flowing()) return false;
+  const top = SCROLLER().scrollTop, stick = fromEnd() < 80;
+  document.documentElement.classList.toggle("flow", on);
+  if (stick) toEnd(); else SCROLLER().scrollTop = top;
+  return true;
+}
 
 /* ---------- entering and leaving ---------- */
 // stop following a room (typing goes too)
@@ -188,7 +205,7 @@ function fillReacts(node, v) {
 }
 export const react = (id, k, on) => orToast(room.api.react(id, k, on));
 
-const nearEnd = () => { const l = LIST(); return l.scrollHeight - l.scrollTop - l.clientHeight < 80; };
+const nearEnd = () => fromEnd() < 80;
 function addMsg(id, v, dm) {
   const list = LIST(), ui = room.ui;
   const stick = nearEnd() || v.by === backend.uid;
@@ -196,7 +213,7 @@ function addMsg(id, v, dm) {
   if (!dm) newLine(list, v);
   list.append(bubble(id, v, dm));
   if (ui.div?.isConnected && !ui.touched && v.at <= room.t0) ui.div.scrollIntoView({ block: "start" }); // history still loading: start where they left off
-  else if (stick) list.scrollTop = list.scrollHeight;
+  else if (stick) toEnd();
   else if (v.by !== backend.uid && v.at > room.t0) ui.below++;
   showJump(); markSeen();
 }
@@ -220,8 +237,8 @@ export function markSeen() {
 }
 // the ↓ button: back to the newest message, with how many came in while scrolled up
 export function showJump() {
-  const b = $("#jumpBtn"), l = LIST();
-  b.hidden = !room || room.gone || l.scrollHeight - l.scrollTop - l.clientHeight < 300;
+  const b = $("#jumpBtn");
+  b.hidden = !room || room.gone || fromEnd() < 300;
   $(".jn", b).textContent = room?.ui.below ? t("jumpNew", { n: room.ui.below }) : "";
 }
 // when this device last read each private chat, so a reload doesn't count old messages as new
@@ -267,8 +284,8 @@ export function renderView() {
     ta.placeholder = t("dmPh", { name: room.nameOf(ui.view) });
   }
   renderHeader(); renderTyping();
-  if (ui.view === "qa") list.scrollTop = 0;
-  else if (ui.div) ui.div.scrollIntoView({ block: "start" }); else list.scrollTop = list.scrollHeight;
+  if (ui.view === "qa") SCROLLER().scrollTop = 0;
+  else if (ui.div) ui.div.scrollIntoView({ block: "start" }); else toEnd();
   ui.below = 0; showJump(); markSeen();
 }
 export function openDm(other) {

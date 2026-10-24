@@ -229,12 +229,24 @@ code { font-size: .9em; }
 /* ---------- chat ---------- */
 /* pinned to all four edges rather than a 100dvh height, which can come out short in an iPhone home-screen app */
 .chat { position: fixed; inset: 0; display: flex; flex-direction: column; max-width: 760px; margin: 0 auto; background: var(--bg); }
+/* the bars over the messages, and the box with what sits on it (replying to, the pickers) under them */
+.chattop, .chatfoot { flex: none; position: relative; z-index: 2; }
+/* on a phone's browser the chat scrolls the page itself rather than a box inside it, so the browser's own bars fold
+   away as the messages scroll, as on the home page; the bars and the box stay put on the screen. js/app/main.js turns
+   it off while something is being typed (the keyboard is handled as before) and in the home-screen app */
+html.flow, html.flow body { height: auto; }
+html.flow { overscroll-behavior-y: none; scroll-padding: var(--chattop, 0px) 0 var(--chatfoot, 0px); }
+html.flow .chat { position: relative; inset: auto; min-height: 100vh; min-height: 100dvh; }
+html.flow .chattop { position: sticky; top: 0; }
+html.flow .chatfoot { position: sticky; bottom: 0; }
+html.flow .listwrap { flex: 1 0 auto; }
+html.flow .list { flex: 1 0 auto; overflow: visible; }
 .bar {
   display: flex; align-items: center; gap: var(--sp-1); padding: calc(6px + env(safe-area-inset-top)) var(--sp-2) 6px; min-height: 57px;
   background: var(--surface); border-bottom: 1px solid var(--line);
 }
 /* a Private Salon's bar: tinted slate with a slate rule along its top */
-.chat.salon > .bar { background: var(--salon-2); border-bottom-color: color-mix(in srgb, var(--salon) 30%, transparent); box-shadow: inset 0 3px 0 var(--salon); }
+.chat.salon .bar { background: var(--salon-2); border-bottom-color: color-mix(in srgb, var(--salon) 30%, transparent); box-shadow: inset 0 3px 0 var(--salon); }
 .icon { display: inline-grid; grid-auto-flow: column; gap: var(--sp-1); place-items: center; background: none; border: 0; color: var(--text); min-width: var(--hit); height: var(--hit); border-radius: var(--radius-md); padding: 0 6px; position: relative; }
 .icon:hover { background: var(--surface-2); }
 .icon:active { background: var(--accent-2); }
@@ -743,7 +755,7 @@ html.l10n .splash p { visibility: hidden; }
 /* ---------- moderation, mentions, unread, typing ---------- */
 /* the list and what floats over its bottom edge: who's typing, and the way back to the newest message */
 .listwrap { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
-.typingbar { position: absolute; left: 12px; bottom: 6px; max-width: calc(100% - 90px); display: flex; align-items: center; gap: var(--sp-2); background: var(--surface); border: 1px solid var(--line); color: var(--muted);
+.typingbar { position: absolute; left: 12px; bottom: calc(100% + 6px); max-width: calc(100% - 90px); display: flex; align-items: center; gap: var(--sp-2); background: var(--surface); border: 1px solid var(--line); color: var(--muted);
   font-size: var(--fs-sm); border-radius: var(--radius-pill); padding: 3px var(--sp-3) 3px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .typingbar .dots { display: inline-flex; gap: 3px; flex: none; }
 .typingbar .dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .5; animation: dot 1.2s infinite; }
@@ -751,7 +763,7 @@ html.l10n .splash p { visibility: hidden; }
 .typingbar .dots i:nth-child(3) { animation-delay: .4s; }
 @keyframes dot { 0%, 60%, 100% { opacity: .35; } 30% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .typingbar .dots i { animation: none; } }
-.jump { position: absolute; right: 12px; bottom: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: var(--hit); height: var(--hit); padding: 0 var(--sp-3); border-radius: var(--radius-pill); border: 1px solid var(--line-strong);
+.jump { position: absolute; right: 12px; bottom: calc(100% + 8px); display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: var(--hit); height: var(--hit); padding: 0 var(--sp-3); border-radius: var(--radius-pill); border: 1px solid var(--line-strong);
   background: var(--surface); color: var(--text); font-size: var(--fs-md); font-weight: var(--fw-semibold); box-shadow: var(--shadow); cursor: pointer; }
 .jump .jn:empty { display: none; }
 .newline { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-4) var(--sp-1) var(--sp-1); color: var(--accent-ink); font-size: var(--fs-xs); font-weight: var(--fw-semibold); }

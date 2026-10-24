@@ -1258,7 +1258,7 @@ test("on iPhone the keyboard doesn't cover a sheet being typed in", async () => 
   // iOS keeps the page its full height under the keyboard and only the visible part (visualViewport) shrinks,
   // so the phone's keyboard is played by a visualViewport that loses KB pixels at the bottom
   const KB = 340;
-  const ctx = await browser.newContext({ locale: "en-US", viewport: { width: 390, height: 844 }, hasTouch: true });
+  const ctx = await browser.newContext({ locale: "en-US", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await ctx.addInitScript(() => {
     const vv = new EventTarget();
     Object.assign(vv, { offsetTop: 0, offsetLeft: 0, scale: 1 });
@@ -1305,6 +1305,41 @@ test("on iPhone the keyboard doesn't cover a sheet being typed in", async () => 
   await page.evaluate((h) => window.keyboard(h), KB);
   await until(async () => (await page.locator("#composer").boundingBox()).y + (await page.locator("#composer").boundingBox()).height <= shown + 1);
   assert.ok((await page.locator("#chat .bar").boundingBox()).y >= 0);
+  await ctx.close();
+  noErrors();
+});
+
+test("on a phone's browser the room scrolls the page, so the browser's bars can fold away", async () => {
+  const ctx = await browser.newContext({ locale: "en-US", viewport: { width: 390, height: 700 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => errors.push(`f: ${e.message}`));
+  await page.goto(`${base}/?emu&as=f`);
+  await page.locator("#createBtn").waitFor();
+  await createRoom(page, "Flo");
+  for (let i = 1; i <= 25; i++) await say(page, `line ${i}`);
+  await bubble(page, "line 25").waitFor();
+  await page.locator("#text").blur();
+  const flow = () => page.evaluate(() => document.documentElement.classList.contains("flow"));
+  await until(flow);
+  // the newest message is on screen, the page itself is what scrolled, and the bars and the box stay in view
+  await until(() => page.evaluate(() => scrollY > 0));
+  const box = async (s) => page.locator(s).boundingBox();
+  assert.ok((await box("#chat .bar")).y >= 0 && Math.abs((await box("#composer")).y + (await box("#composer")).height - 700) < 2);
+  assert.ok((await box("#composer")).y > (await bubble(page, "line 25").boundingBox()).y);
+  // scrolled back to the start: the header is still at the top and the ↓ button shows
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.locator("#jumpBtn").waitFor();
+  assert.ok(Math.abs((await box("#chat .bar")).y) < 1);
+  await page.locator("#jumpBtn").click();
+  await until(() => page.evaluate(() => document.scrollingElement.scrollHeight - scrollY - innerHeight < 2));
+  // typing puts the chat back in its own frame (the keyboard is handled as before), still at the newest message
+  await page.locator("#text").focus();
+  assert.equal(await flow(), false);
+  assert.equal(await page.evaluate(() => scrollY), 0);
+  await until(() => page.evaluate(() => { const l = document.getElementById("list"); return l.scrollHeight - l.scrollTop - l.clientHeight < 2; }));
+  await page.locator("#text").blur();
+  await until(flow);
+  assert.ok(await page.evaluate(() => document.scrollingElement.scrollHeight - scrollY - innerHeight < 2));
   await ctx.close();
   noErrors();
 });
