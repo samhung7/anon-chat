@@ -2,10 +2,10 @@
    typing. In the row: while replying to a message, a few answers to it; the room's own (the owner or a co-host writes
    them, meta/qr, sealed as xr in an encrypted room; a lecture's "too fast" or "got it"); and my own, kept on this
    device (until I edit them, the presets in my language). A quick reply is an ordinary text message. Tapping a
-   message twice gives it a 👍. */
-import { LIMITS, REACTS } from "./constants.js?v=dev";
+   message twice gives it a 👍; tapping the send button five times with nothing written flies my animal up. */
+import { LIMITS, REACTS, ANIMALS } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { $, el, toast, sheet, orToast, icon } from "./dom.js?v=dev";
+import { $, el, toast, sheet, orToast, icon, avatar } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
@@ -144,4 +144,28 @@ function like(node, id) {
   $(".brow", node)?.append(pop);
   setTimeout(() => pop.remove(), 800);
   if (!v.re?.[0]?.[backend.uid]) orToast(room.api.react(id, 0, true));
+}
+
+/* ---------- a small surprise: five quick taps on the send button with nothing written ----------
+   Nothing is sent; my animal flies up off the button and fades into the room, on this screen only. Five more fly a
+   random animal each time, until three minutes go by without five taps: then it's my own again. */
+const EGG_TAPS = 5, EGG_GAP_MS = 600, EGG_MINE_MS = 3 * 60 * 1000;
+let eggTaps = 0, eggTapAt = 0, eggFlewAt = 0, eggShown = null;
+export function emptySendTap(btn) {
+  const now = Date.now();
+  eggTaps = now - eggTapAt < EGG_GAP_MS ? eggTaps + 1 : 1;
+  eggTapAt = now;
+  if (eggTaps < EGG_TAPS) return;
+  eggTaps = 0;
+  const mine = room?.members[backend.uid]?.avatar;
+  const others = ANIMALS.filter((a) => a !== eggShown);
+  const a = now - eggFlewAt > EGG_MINE_MS && mine ? mine : others[(Math.random() * others.length) | 0];
+  eggFlewAt = now; eggShown = a;
+  const r = btn.getBoundingClientRect(), top = $("#list").getBoundingClientRect().top;
+  const fly = el("span", { class: "eggfly", "aria-hidden": "true" }, avatar(a));
+  fly.style.left = `${r.left + r.width / 2}px`;
+  fly.style.top = `${r.top + r.height / 2}px`;
+  fly.style.setProperty("--rise", `${-Math.max(120, (r.top - top) * 0.75)}px`);
+  document.body.append(fly);
+  setTimeout(() => fly.remove(), 1600);
 }
