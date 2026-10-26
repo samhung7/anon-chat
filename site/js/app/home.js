@@ -1,18 +1,21 @@
 /* The screens (home, chat, projector, record), the address bar, and the home page: the rooms this device is in
-   and the ☰ menu (identity, language, theme, saved records). */
+   (and, signed in with Google, the rooms the account is in on any device) and the ☰ menu (identity, Google account,
+   language, theme, saved records). */
 import { CODE_RE } from "./constants.js?v=dev";
 import { phase, hoursLeft } from "./expiry.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { $, el, sheet, pickSheet } from "./dom.js?v=dev";
+import { $, el, sheet, pickSheet, icon, avatar, bare } from "./dom.js?v=dev";
 import { store, StoredList, KEYS } from "./storage.js?v=dev";
 import { backend, asParam } from "./backend.js?v=dev";
 import { RoomCipher } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { me, askMe, showMe } from "./identity.js?v=dev";
-import { renderView } from "./chat.js?v=dev";
+import { isBlocked } from "./blocking.js?v=dev";
+import { renderView, renderHeader, renderAge } from "./chat.js?v=dev";
 import { closePicker } from "./pickers.js?v=dev";
 import { SHOW, endShow, renderShow } from "./show.js?v=dev";
 import { records, openRecord, closeRecord } from "./records.js?v=dev";
+import { account, accountRooms, accountSheet, keepRoom, dropRoom } from "./account.js?v=dev";
 
 /* ---------- the address ---------- */
 // a room's invite link: an encrypted room's key rides after the #, which browsers never send to a server
@@ -32,6 +35,8 @@ export function showChat() {
   $("#home").hidden = true; $("#record").hidden = true;
   if (SHOW()) { $("#chat").hidden = true; $("#show").hidden = false; renderShow(); return; }
   $("#chat").hidden = false; renderView();
+  // back in a room that's still open here: home() put the message box back, so a read-only room takes it away again
+  renderHeader(); renderAge();
 }
 export function showRecordScreen() { opened(); $("#home").hidden = true; $("#chat").hidden = true; $("#record").hidden = false; }
 export function home() {
@@ -45,10 +50,18 @@ export function home() {
 }
 
 /* ---------- the rooms this device is in, most recently entered first ---------- */
-const MAX_ROOMS = 30, PAGE = 5;
+const MAX_ROOMS = 30, PAGE = 5, UNREAD_MAX = 100; // a room with 100 or more new messages shows 99+
 const myRooms = new StoredList(KEYS.rooms, (c) => typeof c === "string" && CODE_RE.test(c));
-export const rememberRoom = (code) => myRooms.save([code, ...myRooms.all().filter((c) => c !== code)].slice(0, MAX_ROOMS));
-export const forgetRoom = (code) => myRooms.save(myRooms.all().filter((c) => c !== code));
+export function rememberRoom(code) { myRooms.save([code, ...myRooms.all().filter((c) => c !== code)].slice(0, MAX_ROOMS)); keepRoom(code); }
+export function forgetRoom(code) { myRooms.save(myRooms.all().filter((c) => c !== code)); dropRoom(code); }
+// signed in: the account's rooms from other devices join this device's list (newest first, after this device's own),
+// and this device's own go into the account
+function mergeAccountRooms() {
+  const cloud = accountRooms(), mine = myRooms.all();
+  const theirs = Object.keys(cloud).filter((c) => CODE_RE.test(c) && !mine.includes(c)).sort((a, b) => cloud[b] - cloud[a]);
+  mine.filter((c) => !(c in cloud)).forEach(keepRoom);
+  if (theirs.length) myRooms.save([...mine, ...theirs].slice(0, MAX_ROOMS));
+}
 // before the list there was one room under chat-room
 export function adoptOldRoom() {
   const old = store.get(KEYS.oldRoom);
@@ -60,11 +73,13 @@ export function adoptOldRoom() {
 const seenRows = new StoredList(KEYS.roomsSeen, () => true);
 let resumePage = 0, resumeRows = [], resumeSeq = 0;
 export async function showResume() {
-  const seq = ++resumeSeq, codes = myRooms.all();
-  if (!codes.length || !backend.configured) { $("#resume").hidden = true; return; }
+  const seq = ++resumeSeq;
+  let codes = myRooms.all();
+  if ((!codes.length && !account()) || !backend.configured) { $("#resume").hidden = true; return; }
   const seen = seenRows.all().filter((r) => r && codes.includes(r.code));
   if (seen.length) { resumeRows = codes.map((c) => seen.find((r) => r.code === c)).filter(Boolean); renderResume(); }
   try { await backend.connect(); } catch (e) { return; }
+  if (backend.google) { mergeAccountRooms(); codes = myRooms.all(); }
   const rows = (await Promise.all(codes.map((code) => resumeRow(code, seen)))).filter(Boolean);
   if (seq !== resumeSeq) return;
   resumeRows = rows;
@@ -80,8 +95,17 @@ async function resumeRow(code, seen) {
   if (!inside) { forgetRoom(code); return null; }
   let title = meta.title || "";
   if (meta.enc) { try { title = (await (await RoomCipher.fromLink(store.get(KEYS.roomKey(code)))).unseal(meta.xt, "t"))?.t || ""; } catch (e) { title = ""; } }
-  return { code, t: title, enc: !!meta.enc, last: meta.last };
+  return { code, t: title, enc: !!meta.enc, last: meta.last, n: await unreadIn(code) };
 }
+// how many messages others wrote in a room since this device last read it (KEYS.read, set by chat.js markSeen);
+// a room this device never read here counts none, rather than all of its history
+async function unreadIn(code) {
+  const read = +store.get(KEYS.read(code)) || 0, { fb } = backend;
+  if (!read) return 0;
+  const msgs = await backend.val(fb.query(backend.roomRef(code, "msgs"), fb.orderByChild("at"), fb.startAfter(read), fb.limitToFirst(UNREAD_MAX)));
+  return Object.values(msgs || {}).filter((v) => v && !v.ev && v.by !== backend.uid && !isBlocked(v.by)).length; // ev: a "left" or "removed" line, not a message
+}
+const unreadText = (n) => (n >= UNREAD_MAX ? UNREAD_MAX - 1 + "+" : String(n));
 function renderResume() {
   const box = $("#resume"), rows = resumeRows, pages = Math.ceil(rows.length / PAGE);
   box.hidden = !rows.length;
@@ -91,14 +115,17 @@ function renderResume() {
   $(".roomlist", box).replaceChildren(...rows.slice(resumePage * PAGE, resumePage * PAGE + PAGE).map((r) => {
     // a read-only room (nobody spoke for 24 hours) says so, and how many hours it has left
     const p = typeof r.last === "number" ? phase(r.last, backend.now()) : null, ro = p?.state === "ro" || p?.state === "gone";
+    // a count from the list as last checked is gone at once for a room read since (the fresh one follows)
+    const n = r.n > 0 && !((+store.get(KEYS.read(r.code)) || 0) >= r.last) ? r.n : 0;
     return el("li", {},
       el("button", { type: "button", class: "roomrow" + (ro ? " ro" : ""), "data-code": r.code },
-        // laid out like the room's own header: its name, then the code on a chip
+        // laid out like the room's own header: its name, then its code; a Private Salon's code carries a lock
         el("span", { class: "txt" }, el("b", { text: r.t || t("room") }),
-          el("span", { class: "tags" }, el("span", { class: "codechip", text: (r.enc ? "🔐 " : "") + r.code }),
-            ro ? el("span", { class: "rotag", text: t("roTag") }) : null,
-            ro ? el("span", { class: "roleft", text: t("roLeft", { h: hoursLeft(p.left) }) }) : null)),
-        el("span", { class: "go", text: t("backToRoom") })));
+          el("span", { class: "tags" }, el("span", { class: "code" + (r.enc ? " salon" : "") }, r.enc ? icon("salon") : null, r.code),
+            ro ? el("span", { class: "tag warn" }, icon("hourglass"), t("roTag")) : null,
+            ro ? el("span", { class: "left", text: t("roLeft", { h: hoursLeft(p.left) }) }) : null)),
+        n ? el("span", { class: "unread" }, el("span", { "aria-hidden": "true", text: unreadText(n) }), el("span", { class: "vh", text: t("jumpNew", { n: unreadText(n) }) })) : null,
+        el("span", { class: "go" }, el("span", { class: "vh", text: t("backToRoom") }), icon("forward"))));
   }));
   $(".pager", box).hidden = pages < 2;
   $(".pager .pg", box).textContent = `${resumePage + 1} / ${pages}`;
@@ -108,21 +135,22 @@ function renderResume() {
 export function turnResumePage(step) { resumePage += step; renderResume(); }
 
 /* ---------- the ☰ menu: who I am, language, theme and my saved records ---------- */
-const menuRow = (a, icon, title, sub) => el("button", { type: "button", class: "merow", "data-a": a },
-  el("span", { class: "av", text: icon }), el("span", { class: "txt" }, el("b", { text: title }), el("small", { text: sub })), el("span", { class: "chev", text: "›" }));
+const menuRow = (a, lead, title, sub) => el("button", { type: "button", class: "merow", "data-a": a },
+  el("span", { class: "av" }, lead), el("span", { class: "txt" }, el("b", { text: title }), el("small", { text: sub })), icon("forward", "chev"));
 const languageWord = () => t("language") + (I18N.lang === "en" ? "" : " · Language");
 export function homeMenu() {
-  const m = me(), list = records();
+  const m = me(), list = records(), g = account();
   const body = el("div", { class: "hmenu" },
-    menuRow("me", m ? m.avatar : "🙂", m ? m.name : t("noIdentity"), t("editMeShort")),
-    menuRow("lang", "🌐", languageWord(), I18N.LANGS.find(([c]) => c === I18N.lang)[1]),
-    menuRow("theme", "🌓", t("theme"), t({ light: "themeLight", dark: "themeDark" }[THEME.get()] || "themeSystem")),
+    menuRow("me", m ? avatar(m.avatar) : icon("user"), m ? m.name : t("noIdentity"), t("editMeShort")),
+    menuRow("account", icon(g ? "secure" : "user"), g ? g.email || t("acctRowIn") : t("acctRow"), t(g ? "acctRowInSub" : "acctRowSub")),
+    menuRow("lang", icon("language"), languageWord(), I18N.LANGS.find(([c]) => c === I18N.lang)[1]),
+    menuRow("theme", icon("theme"), t("theme"), t({ light: "themeLight", dark: "themeDark" }[THEME.get()] || "themeSystem")),
     el("h3", { text: t("myRecords") }),
     list.length ? el("ul", { class: "reclist" }, list.map((r) => el("li", {},
       el("button", { type: "button", class: "rec", "data-open": r.id },
         el("b", { text: r.title }), el("small", { text: [r.code ? t("recCode", { code: r.code }) : null, t("recN", { n: r.n }), new Date(r.exported).toLocaleDateString(I18N.lang)].filter(Boolean).join(" · ") })))))
       : el("p", { class: "muted small", text: t("noRecords") }),
-    el("button", { type: "button", class: "btn wide", "data-a": "import", text: t("importRec") }));
+    el("button", { type: "button", class: "btn wide", "data-a": "import" }, icon("download"), bare(t("importRec"))));
   sheet(t("menu"), body, [["close", t("close")]], {
     onOpen: (ov) => body.addEventListener("click", (e) => {
       const b = e.target.closest("[data-a], [data-open]"); if (!b) return;
@@ -131,6 +159,7 @@ export function homeMenu() {
     }),
   }).then((a) => {
     if (a === "me") askMe(false);
+    else if (a === "account") accountSheet();
     else if (a === "lang") pickLang();
     else if (a === "theme") pickTheme();
     else if (a?.startsWith("open:")) openRecord(null, a.slice(5));
@@ -149,7 +178,7 @@ async function pickLang() {
 }
 // light, dark, or whatever the device uses (the default)
 async function pickTheme() {
-  const theme = await choose(t("theme"), [["", t("themeSystem")], ["light", "☀️ " + t("themeLight")], ["dark", "🌙 " + t("themeDark")]], THEME.get() || "", "theme");
+  const theme = await choose(t("theme"), [["", t("themeSystem")], ["light", t("themeLight")], ["dark", t("themeDark")]], THEME.get() || "", "theme");
   if (theme == null) return;
   THEME.set(theme || null);
   homeMenu();

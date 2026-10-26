@@ -3,13 +3,14 @@ import { LIMITS, POST_GAP_MS } from "./constants.js?v=dev";
 import { t, tEl } from "./text.js?v=dev";
 import { $, el, toast, pause } from "./dom.js?v=dev";
 import { backend, isDenied } from "./backend.js?v=dev";
-import { seal } from "./crypto.js?v=dev";
+import { seal, paired } from "./crypto.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { me } from "./identity.js?v=dev";
 import { pairKey } from "./room.js?v=dev";
 import { KIND, snippet } from "./kinds.js?v=dev";
 import { isBlocked } from "./blocking.js?v=dev";
 import { announce } from "./push.js?v=dev";
+import { renderQuick } from "./quick.js?v=dev";
 
 export const box = () => $("#text");
 
@@ -36,25 +37,27 @@ export function send(text) {
   return text ? post(KIND.text, text) : false;
 }
 export const sendGif = (gif) => post(KIND.gif, gif);
-// one message of a kind to the room or the private chat on view; more: other paths written in the same update (a photo's picture)
-export async function post(kind, value, more = {}) {
+// one message of a kind to the room or the private chat on view; more: other paths written in the same update (a photo's
+// picture), or a function that makes them from the message's id (a long post's text). wait: resolve once it's written
+export async function post(kind, value, more = {}, { wait } = {}) {
   if (!room || room.gone) return false;
   if (room.readOnly) { toast(t("roNoPost")); return false; }
-  const [body, sealed] = kind.pack(value), ui = room.ui, uid = backend.uid, T = backend.stamp();
+  const [body, sealed, mark] = kind.pack(value), ui = room.ui, uid = backend.uid, T = backend.stamp();
   const rp = ui.reply && !!ui.reply.dm === (ui.view !== "all") ? ui.reply.id : null;
   if (rp) { sealed.r = rp; if (!room.cipher) body.rp = rp; }
   const m = room.members[uid] || me(); // the name this room knows me by
   const at = (path) => room.api.root(path);
-  const upd = { [at("meta/last")]: T, [at(`members/${uid}/ls`)]: T, ...more };
+  const upd = { [at("meta/last")]: T, [at(`members/${uid}/ls`)]: T };
   const to = ui.view === "all" ? null : ui.view, code = room.code;
   let id;
   if (!to) {
     id = backend.pushKey(room.api.ref("msgs"));
     upd[at(`members/${uid}/lm`)] = id;
-    upd[at(`msgs/${id}`)] = room.cipher ? { by: uid, x: await room.cipher.seal({ ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T }
+    upd[at(`msgs/${id}`)] = room.cipher ? { by: uid, x: await room.cipher.seal({ ...sealed, n: m.name, a: m.avatar }, "m:" + uid), at: T, ...kind.mark, ...mark }
       : { by: uid, name: m.name, avatar: m.avatar, ...body, at: T };
   } else {
     if (!room.members[ui.view]) { toast(t("peerLeft")); return false; }
+    if (!(await paired())) { toast(t("dmUnpaired")); return false; } // what I'd seal, the other side couldn't open
     const key = await room.dmKey(ui.view);
     if (!key) { toast(t("peerOld")); return false; }
     const path = `dm/${pairKey(uid, ui.view)}`;
@@ -62,18 +65,43 @@ export async function post(kind, value, more = {}) {
     upd[at(`${path}/${id}`)] = { by: uid, to: ui.view, x: await seal(key, sealed, "d:" + uid), at: T };
     upd[at(`members/${uid}/lm`)] = id;
   }
+  Object.assign(upd, typeof more === "function" ? await more(id) : more);
   $("#list .empty")?.remove(); cancelReply(); typing.stop();
-  posts.write(upd, to ? "dms" : kind.stat).then((ok) => ok && announce(code, id, to));
-  return true;
+  const sent = posts.write(upd, to ? "dms" : kind.stat).then((ok) => { if (ok) announce(code, id, to); return ok; });
+  return wait ? sent : true;
 }
+/* ---------- someone went ----------
+   A line in the room saying someone left (ev "l", written by them in the update that takes them out) or was removed
+   (ev "k", written by the host who removes them, naming them). In a Private Salon the names are sealed like a message's.
+   Returns the paths, from the root, to write along with the leaving. */
+export async function goneNote(r, ev, them) {
+  const uid = backend.uid, T = backend.stamp(), id = backend.pushKey(r.api.ref("msgs"));
+  const m = r.members[uid] || me(), at = (path) => r.api.root(path);
+  const named = ev === "k" ? { tn: them.name, ta: them.avatar } : {};
+  const msg = r.cipher ? { by: uid, ev, x: await r.cipher.seal({ e: ev, ...named, n: m.name, a: m.avatar }, "m:" + uid), at: T }
+    : { by: uid, name: m.name, avatar: m.avatar, ev, ...named, at: T };
+  if (ev === "k") msg.tg = them.id;
+  const upd = { [at("msgs/" + id)]: msg };
+  // a host stays in the room, so it counts as their message: stamped like one
+  if (ev === "k") Object.assign(upd, { [at(`members/${uid}/ls`)]: T, [at(`members/${uid}/lm`)]: id });
+  return upd;
+}
+// write(note): the leaving with its line, tried again once a moment later (the rate limit); without it if it still won't go
+// (the room is read-only, say), since leaving matters more than the line
+export async function withNote(write, note) {
+  try { return await write(note); } catch {}
+  await pause(POST_GAP_MS);
+  try { return await write(note); } catch { return write({}); }
+}
+
 /* ---------- replying ---------- */
 export function startReply(id, v, dm) {
   room.ui.reply = { id, dm };
   const bar = $("#replyBar");
   $(".rtxt", bar).replaceChildren(...tEl("replyingTo", { name: el("b", { text: room.author(v, dm).name }), text: snippet(v) }));
-  bar.hidden = false; box().focus();
+  bar.hidden = false; box().focus(); renderQuick();
 }
-export function cancelReply() { if (room) room.ui.reply = null; $("#replyBar").hidden = true; }
+export function cancelReply() { if (room) room.ui.reply = null; $("#replyBar").hidden = true; renderQuick(); }
 
 export function insertAtCursor(s) {
   const ta = box();
@@ -115,7 +143,8 @@ export function renderTyping() {
     ? Object.entries(room.typing || {}).filter(([id, at]) => id !== uid && room.members[id] && !isBlocked(id) && fresh(at)).map(([id]) => id)
     : fresh(room.dmTyping[view]) && !isBlocked(view) ? [view] : [];
   const names = ids.map((id) => room.members[id]?.name || "");
-  bar.textContent = ids.length === 1 ? t("typing1", { a: names[0] }) : ids.length === 2 ? t("typing2", { a: names[0], b: names[1] }) : ids.length ? t("typingN") : "";
+  bar.replaceChildren(el("span", { class: "dots", "aria-hidden": "true" }, el("i"), el("i"), el("i")),
+    ids.length === 1 ? t("typing1", { a: names[0] }) : ids.length === 2 ? t("typing2", { a: names[0], b: names[1] }) : ids.length ? t("typingN") : "");
   bar.hidden = !ids.length;
 }
 

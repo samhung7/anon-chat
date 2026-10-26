@@ -1,24 +1,23 @@
-/* The panels above the message box: ＋ (photo, poll, draw), emoji, and GIF search (KLIPY, which needs klipyKey
+/* The panels above the message box: ＋ (photo, poll, draw, long post, quiz, sticky notes, games), emoji, and GIF search (KLIPY, which needs klipyKey
    in js/config.js). */
 import { KLIPY_KEY, GIF_HOST } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { $, el } from "./dom.js?v=dev";
+import { $, el, icon } from "./dom.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { insertAtCursor, sendGif } from "./composer.js?v=dev";
 import { newPoll } from "./polls.js?v=dev";
 import { newDraw } from "./draws.js?v=dev";
+import { gamesSheet, gamesOn } from "./games.js?v=dev";
+import { newPost, canPost } from "./posts.js?v=dev";
+import { quizSheet } from "./quizedit.js?v=dev";
+import { newBoard } from "./sticky.js?v=dev";
+import { room } from "./session.js?v=dev";
+import { renderQuick } from "./quick.js?v=dev";
+import { EMOJI } from "./emoji.js?v=dev";
 
-const EMOJI = {
-  "😀": "😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😋 😜 🤪 😝 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😌 😔 😪 😴 😷 🤒 🤕 🤢 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 🤡 👻 👽 🤖 💩",
-  "👍": "👍 👎 👌 🤌 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐️ 🖖 👋 👏 🙌 👐 🤲 🤝 🙏 💪 🫶 ✍️ 👀 🧠 🫡 🤷 🤦 🙋 🙆 🙅 💁 🙇",
-  "❤️": "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💯 💢 💥 💫 💦 💨 🕳️ 💬 💭 💤 ✨ 🔥 ⭐ 🌟 ⚡ 🎉 🎊 🎈 🎁 🏆 🥇",
-  "🐶": "🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🙈 🙉 🙊 🐔 🐧 🐦 🐤 🦆 🦉 🦄 🐝 🦋 🐌 🐞 🐢 🐍 🐙 🦑 🐠 🐬 🐳 🦈 🐲 🌸 🌻 🌈 ☀️ 🌙 ☔ ❄️",
-  "🍔": "🍎 🍊 🍋 🍌 🍉 🍇 🍓 🍑 🥭 🍍 🥝 🍅 🥑 🌽 🍞 🧀 🍳 🥓 🍔 🍟 🍕 🌭 🌮 🍜 🍝 🍣 🍱 🥟 🍙 🍚 🍦 🍩 🍪 🎂 🍰 🍫 🍬 🧋 ☕ 🍵 🍺 🍻 🥂 🍷",
-  "⚽": "⚽ 🏀 🏈 ⚾ 🎾 🏐 🏓 🏸 🥅 ⛳ 🎯 🎳 🎮 🕹️ 🎲 ♟️ 🧩 🎨 🎬 🎤 🎧 🎸 🎹 🥁 📚 📖 ✏️ 📝 📌 📎 💡 💻 📱 ⏰ 📅 🗳️ ✅ ❌ ❓ ❗ ⚠️ 🆗 🆒 🆕",
-};
 let open = null; // "more" | "emoji" | "gif" | null
 export const pickerOpen = () => open;
-export function closePicker() { open = null; $("#picker").hidden = true; $("#composer").querySelectorAll(".tool").forEach((b) => b.setAttribute("aria-pressed", "false")); }
+export function closePicker() { open = null; $("#picker").hidden = true; $("#composer").querySelectorAll(".tool").forEach((b) => b.setAttribute("aria-pressed", "false")); renderQuick(); }
 export function openPicker(kind) {
   if (open === kind) return closePicker();
   open = kind;
@@ -26,24 +25,30 @@ export function openPicker(kind) {
   const box = $("#picker");
   box.hidden = false;
   box.classList.toggle("short", kind === "more");
+  renderQuick();
   ({ more: morePanel, emoji: emojiPanel, gif: gifPanel })[kind](box);
 }
 function morePanel(box) {
-  const item = (icon, label, fn) => el("button", { type: "button", class: "morebtn", onclick: () => { fn(); closePicker(); } }, el("span", { class: "i", text: icon }), el("span", { text: label }));
+  const item = (name, label, fn) => el("button", { type: "button", class: "morebtn", onclick: () => { fn(); closePicker(); } }, icon(name, "lg"), el("span", { text: label }));
   // the file picker opens right inside the tap, or a phone may refuse to open it
   box.replaceChildren(el("div", { class: "morepanel" },
-    item("📷", t("photo"), () => $("#photoFile").click()), item("📊", t("poll"), newPoll), item("🎲", t("draw"), newDraw)));
+    item("photo", t("photo"), () => $("#photoFile").click()), item("poll", t("poll"), newPoll), item("draw", t("draw"), newDraw),
+    canPost() ? item("post", t("post"), newPost) : null,
+    room?.isStaff() && !room.readOnly ? item("trophy", t("quiz"), quizSheet) : null,
+    room?.isStaff() && !room.readOnly ? item("sticky", t("sticky"), newBoard) : null,
+    gamesOn() ? item("game", t("games"), gamesSheet) : null));
 }
 function emojiPanel(box) {
   const grid = el("div", { class: "emojigrid" });
-  const fill = (cat) => {
-    grid.replaceChildren(...EMOJI[cat].split(" ").map((e) => el("button", { type: "button", class: "emo", text: e })));
-    cats.querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.cat === cat)));
+  const fill = (i) => {
+    grid.replaceChildren(...EMOJI[i][1].split(" ").map((e) => el("button", { type: "button", class: "emo", text: e })));
+    grid.scrollTop = 0;
+    cats.querySelectorAll("button").forEach((b, j) => b.setAttribute("aria-selected", String(j === i)));
   };
-  const cats = el("div", { class: "cats", role: "tablist" }, Object.keys(EMOJI).map((c) => el("button", { type: "button", role: "tab", "data-cat": c, text: c, onclick: () => fill(c) })));
+  const cats = el("div", { class: "cats", role: "tablist" }, EMOJI.map(([c], i) => el("button", { type: "button", role: "tab", text: c, onclick: () => fill(i) })));
   grid.addEventListener("click", (e) => { const b = e.target.closest(".emo"); if (b) insertAtCursor(b.textContent); });
   box.replaceChildren(cats, grid);
-  fill(Object.keys(EMOJI)[0]);
+  fill(0);
 }
 
 /* ---------- KLIPY ---------- */

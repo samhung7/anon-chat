@@ -1,0 +1,17 @@
+{
+  "name": {
+    "message": "StoaTalk"
+  },
+  "description": {
+    "message": "사이드 패널에서 StoaTalk: 4자리 코드로 들어가는 채팅방. 탭의 StoaTalk와 같은 신원으로 이용합니다."
+  },
+  "open": {
+    "message": "사이드 패널에서 StoaTalk 열기"
+  },
+  "loading": {
+    "message": "StoaTalk 여는 중…"
+  },
+  "openTab": {
+    "message": "탭에서 열기"
+  }
+}

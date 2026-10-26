@@ -6,7 +6,12 @@
    them out, and asks the database, with the person's own ID token so the database rules decide, whether it may:
      PUT    /photo/{code}/{uid}/{id}.jpg|.bin   the signed-in person, a member of the room, adds their own photo
      DELETE /photo/{code}/{uid}/{id}             a member deletes a photo whose marker (files/{id}) is already gone
+   A quiz's pictures (site/js/app/quiz.js) go in the same way, with an id that starts with the quiz's (QUIZ_IMG) and no
+   marker of their own: one stays while its quiz (rooms/{code}/qz/{quiz}) is there.
      DELETE /room/{code}                         anyone deletes the photos of a room that no longer exists
+   A Google account's quiz library (site/js/app/quizlib.js) keeps its pictures at u/{uid}/{id}.jpg, the id being the
+   picture's own SHA-256, so the same one is kept once and never replaced by another:
+     PUT    /lib/{uid}/{id}.jpg                  the signed-in person, signed in with Google, adds a picture to their library
    What a delete misses (a closed tab, a room that expired) the hourly cleanup (tools/cleanup) takes away.
 
    Web Push, so people hear about new messages while their page is closed:
@@ -14,15 +19,19 @@
      POST   /push/seal                           a browser's subscription, sealed for the signed-in person to store in a room
      POST   /push/notify/{code}  {id, to?, from?}  the author of a message that just went out asks for it to be announced
    The notify call reads the room with the author's own sign-in (so the rules decide what it may see), checks the
-   message is theirs and new, and pushes to the members with a subscription there who aren't online. A room's
-   messages are announced at most every QUIET ms; a private message only to the person it's for. In an encrypted
-   room the push says only that there's something new. Each call sends at most PAGE pushes (a Worker's outgoing
+   message is theirs and new, and pushes to the members with a subscription there who aren't online (to each device
+   they have one from). A room's
+   messages are announced at most every QUIET ms (a call too soon is told how long to wait); a private message only
+   to the person it's for. In an encrypted room the push says only that there's something new. Each call sends at most PAGE pushes (a Worker's outgoing
    requests are limited) and says where to go on from. */
 import { verifier } from "./token.js";
-import { vapid, sealSub, openSub, send, validSubscription } from "./push.js";
+import { vapid, sealSub, openSub, send, validSubscription, devices } from "./push.js";
 
 const CODE = /^[2-9A-HJKMNP-Z]{4}$/, UID = /^[A-Za-z0-9]{1,128}$/, ID = /^[A-Za-z0-9_-]{1,32}$/;
+export const QUIZ_IMG = /^([A-Za-z0-9_-]{20})[A-Za-z0-9]{10}$/; // a quiz's id (a 20-character push id), then 10 random letters and digits
 const MAX = 330000 + 28; // the page's largest photo, plus the IV and tag when sealed
+const LIB_MAX = 165000, LIB_IMG = /^([A-Za-z0-9_-]{22})\.jpg$/; // a quiz picture (site/js/app/quizset.js QUIZ.imgChars), and its name
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const TYPES = { jpg: "image/jpeg", bin: "application/octet-stream" };
 const CACHE = "public, max-age=3600"; // a deleted photo can linger in Cloudflare's cache for at most this long
 const PAGE = 40, QUIET = 20000, FRESH = 120000;
@@ -48,10 +57,17 @@ function announce(code, msg, meta) {
   return { c: code, k: "m", n: msg.name, a: msg.avatar, r: meta.title || "", ...what };
 }
 
+// whether a page at origin may call the service: ORIGINS lists them, comma-separated; "https://*.x.dev" stands for
+// every https page one or more levels under x.dev (staging lets each pull request's preview at <branch>.stoatalk.pages.dev in)
+export function allowedOrigin(origin, list) {
+  return !!origin && (list || "").split(",").map((o) => o.trim()).some((o) => o === origin ||
+    (o.startsWith("https://*.") && origin.startsWith("https://") && origin.endsWith(o.slice(9)) && origin.length > o.length - 1 && !origin.includes("/", 8)));
+}
+
 export function makeHandler({ verify, read, fetcher = (...a) => fetch(...a) }) {
   return async (req, env) => {
     const origin = req.headers.get("Origin");
-    const cors = origin && (env.ORIGINS || "").split(",").includes(origin) ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {};
+    const cors = allowedOrigin(origin, env.ORIGINS) ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {};
     const out = (status) => new Response(null, { status, headers: cors });
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...cors,
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "86400" } });
@@ -80,10 +96,25 @@ export function makeHandler({ verify, read, fetcher = (...a) => fetch(...a) }) {
         await bucket.put(key, body, { httpMetadata: { contentType: TYPES[m[2]], cacheControl: CACHE } });
         return out(201);
       }
+      if (req.method === "PUT" && parts[0] === "lib" && parts.length === 3) {
+        const [, by, file] = parts, m = LIB_IMG.exec(file);
+        if (by !== uid || !m) return out(400);
+        if (+req.headers.get("Content-Length") > LIB_MAX) return out(413);
+        const body = new Uint8Array(await req.arrayBuffer());
+        if (!body.length || body.length > LIB_MAX) return out(413);
+        if (!(body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff)) return out(415);
+        if (b64u(await crypto.subtle.digest("SHA-256", body)).slice(0, 22) !== m[1]) return out(400);
+        if ((await read(`users/${uid}/dh`, token, env)) === null) return out(403); // only an account signed in with Google has one
+        const key = `u/${uid}/${file}`;
+        if (await bucket.head(key)) return out(409);
+        await bucket.put(key, body, { httpMetadata: { contentType: TYPES.jpg, cacheControl: CACHE } });
+        return out(201);
+      }
       if (req.method === "DELETE" && parts[0] === "photo" && parts.length === 4) {
         const [, code, by, id] = parts;
         if (!CODE.test(code) || !UID.test(by) || !ID.test(id)) return out(400);
-        if ((await read(`rooms/${code}/files/${id}`, token, env)) !== null) return out(409); // still shown
+        const quiz = QUIZ_IMG.exec(id);
+        if ((await read(quiz ? `rooms/${code}/qz/${quiz[1]}/by` : `rooms/${code}/files/${id}`, token, env)) !== null) return out(409); // still shown
         await bucket.delete([`${code}/${by}/${id}.jpg`, `${code}/${by}/${id}.bin`]);
         return out(204);
       }
@@ -112,22 +143,24 @@ export function makeHandler({ verify, read, fetcher = (...a) => fetch(...a) }) {
             const [msg, meta] = await Promise.all([read(`rooms/${code}/msgs/${id}`, token, env, false), read(`rooms/${code}/meta`, token, env, false)]);
             if (!msg || msg.by !== uid || !(msg.at > now - FRESH) || !meta) return out(409);
             if (!from) { // the page stamps meta/pa first (the rules allow that at most every QUIET ms)
-              if (!(meta.pa > now - QUIET) || lastPush.get(code) > now - QUIET) return json(200, { sent: 0, next: null });
+              if (!(meta.pa > now - QUIET)) return json(200, { sent: 0, next: null });
+              if (lastPush.get(code) > now - QUIET) return json(200, { sent: 0, next: null, wait: lastPush.get(code) + QUIET - now }); // try again then
               lastPush.set(code, now);
               if (lastPush.size > 10000) lastPush.clear();
             }
             payload = meta.enc ? { c: code, k: "x" } : announce(code, msg, meta);
             targets = Object.keys(subs || {}).sort();
           }
-          // only members with a subscription here who aren't on line now (an open page notifies by itself)
-          targets = targets.filter((u) => u !== uid && subs?.[u] && members[u] && members[u].online !== true);
-          const page = targets.slice(from, from + PAGE), text = JSON.stringify(payload);
-          const sent = await Promise.all(page.map(async (u) => {
-            const sub = await openSub(keys, u, subs[u]);
+          // only members with a subscription here who aren't on line now (an open page notifies by itself), each of
+          // their devices
+          const all = targets.filter((u) => u !== uid && members[u] && members[u].online !== true).flatMap((u) => devices(subs?.[u]).map((s) => [u, s]));
+          const page = all.slice(from, from + PAGE), text = JSON.stringify(payload);
+          const sent = await Promise.all(page.map(async ([u, sealed]) => {
+            const sub = await openSub(keys, u, sealed);
             if (!sub || !validSubscription(sub)) return false;
             try { return (await send(keys, sub, text, { topic: code, fetcher })) < 300; } catch (e) { return false; }
           }));
-          return json(200, { sent: sent.filter(Boolean).length, next: from + PAGE < targets.length ? from + PAGE : null });
+          return json(200, { sent: sent.filter(Boolean).length, next: from + PAGE < all.length ? from + PAGE : null });
         }
         return out(404);
       }

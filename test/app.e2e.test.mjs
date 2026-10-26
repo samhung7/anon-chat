@@ -8,6 +8,7 @@ import { readFile, readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { chromium } from "playwright";
 import { startPhotoStub } from "./photo-stub.mjs";
+import * as P from "../site/js/app/puzzles.js";
 
 const NS = "demo-anon-chat";
 const EMU = "http://127.0.0.1:9000";
@@ -62,7 +63,7 @@ async function pickName(page, name) {
 // opens a room and closes the invite sheet that follows; gives its code and invite link
 async function createRoom(page, name, { priv = false, title = "" } = {}) {
   await page.locator("#createBtn").click();
-  await pickName(page, name);
+  await page.locator("#meName").fill(name); // who I am is asked in the new-room sheet itself
   if (title) await page.locator("#newTitle").fill(title);
   if (priv) await sheet(page).locator(".seg [data-v=priv]").click();
   await press(page, "yes");
@@ -117,7 +118,7 @@ test("open room: create, join with the code, talk, react, reply, edit, delete", 
   assert.equal(await bob.locator("#joinCode").inputValue(), code);
   // the code alone is enough for an open room
   await bob.locator("#joinCode").fill(code.toLowerCase());
-  await bob.locator("#joinForm button").click();
+  await bob.locator("#joinForm [type=submit]").click();
   await pickName(bob, "Bob");
   await bob.locator("#chat").waitFor();
   await alice.locator("#peopleBtn .n", { hasText: "2" }).waitFor();
@@ -170,6 +171,161 @@ test("open room: create, join with the code, talk, react, reply, edit, delete", 
   noErrors();
 });
 
+test("a made-up nickname: 🎲 picks a colour and an animal, and one that is taken in the room is made up again", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Red Fox");
+  // 🎲 in the sheet: a colour on an animal, with that animal picked; picking another animal keeps the colour
+  await bob.goto(url);
+  await bob.locator(".nickrow .roll").click();
+  const made = await bob.locator("#meName").inputValue();
+  const [, colour, animal] = made.match(/^(Red|Orange|Yellow|Green|Blue|Purple|Pink|Golden|Silver|White) (.+)$/);
+  assert.equal(await sheet(bob).locator(".avpick [aria-pressed=true]").getAttribute("aria-label"), animal);
+  await sheet(bob).locator('.avpick [aria-label="Owl"]').click();
+  assert.equal(await bob.locator("#meName").inputValue(), colour + " Owl");
+  await press(bob, "yes");
+  await bob.locator("#chat").waitFor();
+  assert.ok(await dbGet(`rooms/${code}/names/${(colour + " owl").toLowerCase()}`), "joined under the name made up");
+  // the box says whose name I'm writing under in this room, and follows a rename
+  const ph = () => bob.locator("#text").getAttribute("placeholder");
+  assert.match(await ph(), new RegExp(`^Speak as \\S+ ${colour} Owl…$`));
+  await menuPick(bob, "me");
+  await bob.locator("#meName").fill("Bob");
+  await press(bob, "yes");
+  await bob.waitForFunction(() => /^Speak as \S+ Bob…$/.test(document.querySelector("#text").placeholder));
+  // the emoji button sits inside the box; its panel has every tab of a phone's keyboard, flags too
+  await bob.locator("#composer .textbox [data-a=emoji]").click();
+  assert.equal(await bob.locator("#picker .cats button").count(), 9);
+  await bob.locator("#picker .cats button").last().click();
+  await bob.locator("#picker .emo", { hasText: "🇹🇼" }).click();
+  assert.equal(await bob.locator("#text").inputValue(), "🇹🇼");
+  // someone whose made-up name is already taken in the room joins under another made-up one, without being asked
+  const carol = await person("c");
+  await carol.evaluate(() => localStorage.setItem("chat-me", JSON.stringify({ avatar: "🦊", name: "Red Fox", col: 0, auto: true })));
+  await carol.goto(url);
+  await carol.locator("#chat").waitFor();
+  const names = Object.keys(await dbGet(`rooms/${code}/names`));
+  assert.equal(names.length, 3);
+  assert.ok(names.includes("red fox"));
+  const mine = JSON.parse(await carol.evaluate(() => localStorage.getItem("chat-me")));
+  assert.notEqual(mine.name, "Red Fox");
+  assert.ok(names.includes(mine.name.toLowerCase()));
+  noErrors();
+});
+
+test("five taps on the send button with nothing written fly my animal, then random ones; nothing is sent", async () => {
+  const alice = await person("a");
+  const { code } = await createRoom(alice, "Alice");
+  const send = alice.locator("#composer .send");
+  const art = (emoji) => alice.evaluate(async (e) => (await import("./js/app/constants.js?v=dev")).ANIMAL_ART[e], emoji);
+  const mine = await art(Object.values(await dbGet(`rooms/${code}/members`))[0].avatar);
+  const five = async () => { for (let i = 0; i < 5; i++) await send.click({ delay: 10 }); };
+  const flown = async () => {
+    const fly = alice.locator(".eggfly img").last();
+    await fly.waitFor({ state: "attached" });
+    const src = await fly.getAttribute("src");
+    await alice.locator(".eggfly").waitFor({ state: "detached" });
+    return src.match(/avatars\/(\w+)\.svg/)[1];
+  };
+  // four taps do nothing
+  for (let i = 0; i < 4; i++) await send.click();
+  await alice.waitForTimeout(700);
+  assert.equal(await alice.locator(".eggfly").count(), 0);
+  // five: my own animal
+  await five();
+  assert.equal(await flown(), mine);
+  // five more: another one each time
+  await five();
+  const next = await flown();
+  assert.notEqual(next, mine);
+  await five();
+  assert.notEqual(await flown(), next);
+  // three quiet minutes later, my own again
+  await alice.evaluate(() => { const now = Date.now; Date.now = () => now() + 3 * 60 * 1000 + 1000; });
+  await five();
+  assert.equal(await flown(), mine);
+  assert.equal(await dbGet(`rooms/${code}/msgs`), null, "nothing went to the room");
+  noErrors();
+});
+
+test("quick replies: one tap sends, answers while replying, my own and the room's; a double tap gives a 👍", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  await say(alice, "Welcome, everyone");
+  await bubble(bob, "Welcome, everyone").waitFor();
+
+  // the presets, in my language, above the empty box; one tap sends, and the chip rests a moment so it isn't sent twice
+  const bar = bob.locator("#quickBar");
+  await bar.locator(".chip", { hasText: "Agreed" }).click();
+  await bubble(alice, "👍 Agreed").waitFor();
+  assert.ok(await bar.locator(".chip", { hasText: "Agreed" }).isDisabled());
+  // it gives way while something is being typed
+  await bob.locator("#text").fill("typing…");
+  await bar.waitFor({ state: "hidden" });
+  await bob.locator("#text").fill("");
+  await bar.waitFor();
+
+  // while replying, answers to that message come first, and go out as a reply
+  await bob.locator("#list .msg:not(.mine) .more").first().click();
+  await press(bob, "reply");
+  await bar.locator(".chip.rp", { hasText: "I see it differently" }).click();
+  await alice.locator("#list .msg .rpq", { hasText: "Welcome" }).waitFor();
+  await bubble(alice, "🤔 I see it differently").waitFor();
+  assert.equal(await bar.locator(".chip.rp").count(), 0, "the reply is done");
+
+  // a double tap on a message gives it a 👍, and a second one doesn't take it back
+  await bubble(bob, "Welcome, everyone").dblclick();
+  await alice.locator("#list .msg .re .chip", { hasText: "👍 1" }).waitFor();
+  await bubble(bob, "Welcome, everyone").dblclick();
+  await bob.waitForTimeout(500);
+  const re = Object.values(await dbGet(`rooms/${code}/msgs`)).find((m) => m.text === "Welcome, everyone").re;
+  assert.equal(Object.keys(re[0]).length, 1);
+
+  // my own, from the ✎ at the end of the row: kept on this device only
+  await bar.locator("[data-a=quickEdit]").click();
+  await sheet(bob).locator(".qrow input").first().fill("Count me in");
+  await sheet(bob).locator(".qadd").click();
+  await sheet(bob).locator(".qrow input").last().fill("Brb");
+  await press(bob, "yes");
+  await bar.locator(".chip", { hasText: "Count me in" }).waitFor();
+  await bar.locator(".chip", { hasText: "Brb" }).waitFor();
+  assert.equal(await bar.locator(".chip", { hasText: "Agreed" }).count(), 0);
+  const kept = JSON.parse(await bob.evaluate(() => localStorage.getItem("chat-quick")));
+  assert.equal(kept[0], "Count me in");
+  assert.equal(kept.length, 7);
+  // turned off, the row goes; the ⋯ menu brings it back
+  await menuPick(bob, "quick");
+  await sheet(bob).locator("#quickOn").uncheck();
+  await press(bob, "yes");
+  await bar.waitFor({ state: "hidden" });
+  await menuPick(bob, "quick");
+  await press(bob, "quickreset");
+  await sheet(bob).locator("#quickOn").check();
+  await press(bob, "yes");
+  await bar.locator(".chip", { hasText: "Agreed" }).waitFor();
+  assert.equal(await bob.evaluate(() => localStorage.getItem("chat-quick")), null, "the presets aren't kept, so they follow the language");
+
+  // the room's own, from the host: first in everyone's row; members can't write them
+  await bob.locator("#chat .bar [data-a=menu]").click();
+  assert.equal(await sheet(bob).locator("[data-a=roomquick]").count(), 0);
+  await bob.keyboard.press("Escape");
+  await menuPick(alice, "roomquick");
+  await press(alice, "quicksample");
+  await press(alice, "yes");
+  await bar.locator(".chip.host", { hasText: "Got it" }).waitFor();
+  assert.equal((await bar.locator(".chip").first().textContent()), "✅ Got it");
+  assert.equal((await dbGet(`rooms/${code}/meta`)).qr, "✅ Got it\n🐢 Too fast\n🔁 Say that again?\n🔊 Can't hear");
+  await bar.locator(".chip.host", { hasText: "Too fast" }).click();
+  await bubble(alice, "🐢 Too fast").waitFor();
+  // a host who clears the list takes it out of everyone's row
+  await menuPick(alice, "roomquick");
+  for (let n = await sheet(alice).locator(".qrow").count(); n > 0; n--) await sheet(alice).locator(".qrow button").last().click();
+  await press(alice, "yes");
+  await bar.locator(".chip.host").first().waitFor({ state: "detached" });
+  assert.equal((await dbGet(`rooms/${code}/meta`)).qr, undefined);
+  noErrors();
+});
+
 test("private salon: only ciphertext on the server, the link is needed, private messages are sealed", async () => {
   const alice = await person("a"), bob = await person("b"), carol = await person("c");
   const { code, url } = await createRoom(alice, "Alice", { priv: true, title: "Secret" });
@@ -180,10 +336,18 @@ test("private salon: only ciphertext on the server, the link is needed, private 
 
   await joinByLink(bob, url, "Bob");
   await titleIs(bob, "Secret");
+  assert.match(await bob.locator("#text").getAttribute("placeholder"), /^Speak as \S+ Bob…$/, "a sealed name too");
   await setDesc(alice, "Salon rules");
   await bob.locator("#desc .dtext", { hasText: "Salon rules" }).waitFor();
   const sealed = await dbGet(`rooms/${code}/meta`);
   assert.ok(sealed.xd && !sealed.desc, "the description is only kept sealed");
+  // so are the room's quick replies
+  await menuPick(alice, "roomquick");
+  await press(alice, "quicksample");
+  await press(alice, "yes");
+  await bob.locator("#quickBar .chip.host", { hasText: "Too fast" }).waitFor();
+  const sealedQ = await dbGet(`rooms/${code}/meta`);
+  assert.ok(sealedQ.xr && !sealedQ.qr, "the room's quick replies are only kept sealed");
   await say(alice, "top secret words");
   await bubble(bob, "top secret words").waitFor();
   const msgs = Object.values(await dbGet(`rooms/${code}/msgs`));
@@ -193,21 +357,29 @@ test("private salon: only ciphertext on the server, the link is needed, private 
 
   // the code alone asks for the full link
   await carol.locator("#joinCode").fill(code);
-  await carol.locator("#joinForm button").click();
+  await carol.locator("#joinForm [type=submit]").click();
   await carol.locator("#joinLink").waitFor();
   await carol.locator("#joinLink").fill(url);
   await press(carol, "yes");
   await pickName(carol, "Carol");
   await bubble(carol, "top secret words").waitFor();
 
+  // Carol leaves: a line says so, under her sealed name
+  await menuPick(carol, "leave");
+  await press(carol, "yes");
+  await carol.locator("#home").waitFor();
+  await bob.locator("#list .sysline", { hasText: "Carol left the room" }).waitFor();
+  const line = Object.values(await dbGet(`rooms/${code}/msgs`)).find((m) => m.ev === "l");
+  assert.ok(line.x && !line.name, "the line's name is stored sealed");
+
   // a private message between Bob and Alice
   await bob.locator("#peopleBtn").click();
-  await sheet(bob).locator(".plist li", { hasText: "Alice" }).locator("[data-dm]").click();
+  await sheet(bob).locator(".st-mrow", { hasText: "Alice" }).locator("[data-dm]").click();
   await bob.locator("#dmBar").waitFor();
   await say(bob, "just for you");
   await alice.locator("#peopleBtn .dot").waitFor();
   await alice.locator("#peopleBtn").click();
-  await sheet(alice).locator(".plist li", { hasText: "Bob" }).locator("[data-dm]").click();
+  await sheet(alice).locator(".st-mrow", { hasText: "Bob" }).locator("[data-dm]").click();
   await bubble(alice, "just for you").waitFor();
   const dms = await dbGet(`rooms/${code}/dm`);
   const dm = Object.values(Object.values(dms)[0])[0];
@@ -234,6 +406,12 @@ test("lecture Q&A: ask anonymously, upvote, answer, projector screen", async () 
   await alice.locator("#ansText").fill("A covered walkway.");
   await press(alice, "yes");
   await bob.locator(".qcard .qans", { hasText: "A covered walkway." }).waitFor({ state: "attached" }); // answered: folded under "answered"
+  // the host's ⋯ on an answered question: two steps, one under the other, not pushed to either side
+  await alice.locator("details.qdone summary").click();
+  await alice.locator(".qdone .qcard .qtools .more").click();
+  const [undo, remove] = await Promise.all(["done", "remove"].map((a) => sheet(alice).locator(`[data-a=${a}]`).boundingBox()));
+  assert.ok(remove.y >= undo.y + undo.height && Math.abs(undo.width - remove.width) < 2, "the two buttons are stacked, full width");
+  await alice.keyboard.press("Escape");
 
   // a poll too, which the projector shows beside the questions
   await alice.locator("#tabs [data-a=all]").click();
@@ -297,6 +475,59 @@ test("polls and draws", async () => {
   noErrors();
 });
 
+for (const priv of [false, true]) test(`anonymous and hidden polls${priv ? " (encrypted)" : ""}`, async () => {
+  const alice = await person("a"), bob = await person("b"), carol = await person("c");
+  const { code, url } = await createRoom(alice, "Alice", { priv });
+  await joinByLink(bob, url, "Bob"); await joinByLink(carol, url, "Carol");
+  const newPoll = async (q, { anon = false, hide = false } = {}) => {
+    await alice.locator("#composer [data-a=more]").click();
+    await alice.locator("#picker .morebtn").nth(1).click();
+    await alice.locator("#pollQ").fill(q);
+    const opts = sheet(alice).locator(".pollopts input");
+    await opts.nth(0).fill("Tea"); await opts.nth(1).fill("Coffee");
+    if (anon) await alice.locator("#pollAnon").check();
+    if (hide) { await alice.locator("#pollHide").check(); await alice.locator("#pollWhen").selectOption("60"); }
+    await press(alice, "yes");
+  };
+  const box = (page, q) => page.locator("#list .pollbox", { hasText: q });
+  const counts = (page, q) => box(page, q).locator(".oc").allTextContents();
+
+  // anonymous and hidden: each sees only their own vote until it's revealed
+  await newPoll("Lunch?", { anon: true, hide: true });
+  await box(bob, "Lunch?").locator(".opt").nth(1).click();
+  await box(bob, "Lunch?").locator(".opt.on", { hasText: "Coffee" }).waitFor();
+  await box(carol, "Lunch?").locator(".opt").nth(0).click();
+  await box(carol, "Lunch?").locator(".opt.on", { hasText: "Tea" }).waitFor();
+  await box(bob, "Lunch?").locator(".pf", { hasText: "Results at" }).waitFor();
+  assert.deepEqual(await counts(bob, "Lunch?"), [], "no counts before it's revealed");
+  assert.equal(await box(alice, "Lunch?").locator(".opt.on").count(), 0);
+  const msgs = await dbGet(`rooms/${code}/msgs`), [id] = Object.keys(msgs).filter((k) => msgs[k].an);
+  assert.ok(msgs[id].rv > Date.now() + 50 * 60000 && !msgs[id].votes, "marked, and no votes on the message");
+  const keys = await dbGet(`rooms/${code}/av/${id}`), ballots = await dbGet(`rooms/${code}/ab/${id}`);
+  assert.equal(Object.keys(ballots).length, 2);
+  assert.ok(!Object.keys(ballots).some((k) => k.startsWith("emu")), "ballots aren't under anyone's id");
+  assert.deepEqual(Object.keys(keys).length, 2);
+  // Alice reveals it early: everyone sees the counts, nobody can vote, and nobody sees who voted how
+  await box(alice, "Lunch?").locator("xpath=ancestor::*[contains(@class,'msg')][1]").locator(".more").click();
+  assert.equal(await sheet(alice).locator('[data-a="voters"]').count(), 0, "no list of voters");
+  await press(alice, "close"); await press(alice, "yes");
+  for (const page of [alice, bob, carol]) await box(page, "Lunch?").locator(".ph small", { hasText: "Results out" }).waitFor();
+  await until(async () => (await counts(carol, "Lunch?")).join() === "1,1");
+  assert.ok(await box(bob, "Lunch?").locator(".opt").nth(0).isDisabled());
+
+  // hidden only, revealed when its time comes: then votes are locked, and who voted is shown
+  await newPoll("Dinner?", { hide: true });
+  await box(bob, "Dinner?").locator(".opt").nth(0).click();
+  await box(bob, "Dinner?").locator(".opt.on", { hasText: "Tea" }).waitFor();
+  assert.deepEqual(await counts(carol, "Dinner?"), []);
+  const m2 = await dbGet(`rooms/${code}/msgs`), [id2] = Object.keys(m2).filter((k) => m2[k].rv && !m2[k].an);
+  await fetch(dbUrl(`rooms/${code}/msgs/${id2}/rv`), { method: "PUT", headers: asOwner, body: JSON.stringify(Date.now() + 2000) });
+  await until(async () => (await counts(carol, "Dinner?")).join() === "1,0");
+  await box(carol, "Dinner?").locator(".ph small", { hasText: "Results out" }).waitFor();
+  assert.ok(await box(carol, "Dinner?").locator(".opt").nth(1).isDisabled(), "locked once revealed");
+  noErrors();
+});
+
 test("export to a file, import it back read-only, and end the room", async () => {
   const alice = await person("a"), bob = await person("b");
   const { code, url } = await createRoom(alice, "Alice", { title: "Keep me" });
@@ -337,7 +568,8 @@ test("owner tools: co-host, remove someone, lock; a member leaves", async () => 
 
   const memberMenu = async (name, a) => {
     await alice.locator("#peopleBtn").click();
-    await sheet(alice).locator(".plist li", { hasText: name }).locator("[data-pm]").click();
+    await sheet(alice).locator(".st-mrow", { hasText: name }).locator("[data-pm]").click();
+    if (a === "kick") await sheet(alice).locator(".st-agrp .st-arow.danger[data-a=kick]").waitFor(); // the destructive group, in red
     await press(alice, a);
   };
   await memberMenu("Bob", "mod");
@@ -348,6 +580,9 @@ test("owner tools: co-host, remove someone, lock; a member leaves", async () => 
   await press(alice, "yes");
   await sheet(carol).locator("[data-a=home]").waitFor();
   assert.equal(Object.keys(await dbGet(`rooms/${code}/banned`)).length, 1);
+  // everyone still in the room sees a line saying so
+  await alice.locator("#list .sysline", { hasText: "Carol was removed from the room" }).waitFor();
+  await bob.locator("#list .sysline", { hasText: "Carol was removed from the room" }).waitFor();
 
   await menuPick(alice, "lock");
   await alice.locator("#codeBtn", { hasText: "·" }).waitFor();
@@ -356,6 +591,7 @@ test("owner tools: co-host, remove someone, lock; a member leaves", async () => 
   await press(bob, "yes");
   await bob.locator("#home").waitFor();
   await alice.locator("#peopleBtn .n", { hasText: "1" }).waitFor();
+  await alice.locator("#list .sysline", { hasText: "Bob left the room" }).waitFor();
   noErrors();
 });
 
@@ -537,7 +773,7 @@ test("theme, and a code that doesn't exist", async () => {
   await alice.waitForFunction(() => document.documentElement.dataset.theme === "dark");
   await alice.keyboard.press("Escape");
   await alice.locator("#joinCode").fill("ZZZZ");
-  await alice.locator("#joinForm button").click();
+  await alice.locator("#joinForm [type=submit]").click();
   await alice.locator(".toast").first().waitFor();
   assert.equal(await alice.locator("#home").isVisible(), true);
   noErrors();
@@ -602,7 +838,26 @@ test("reports reach StoaTalk's operator, who takes the message down and bans the
   noErrors();
 });
 
-test("Web Push: a message is announced to a member whose page is closed, once in a while", async () => {
+test("a hidden page counts as offline (a phone stops running it), and online again when it's shown", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  const bobId = Object.entries(await dbGet(`rooms/${code}/members`)).find(([, m]) => m.name === "Bob")[0];
+  const show = (hidden) => bob.evaluate((h) => {
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => h });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, hidden);
+  await until(async () => (await dbGet(`rooms/${code}/members/${bobId}/online`)) === true);
+  await show(true);
+  await until(async () => (await dbGet(`rooms/${code}/members/${bobId}/online`)) === false);
+  await new Promise((ok) => setTimeout(ok, 1000)); // and it stays that way: no "I'm still connected" back to online
+  assert.equal(await dbGet(`rooms/${code}/members/${bobId}/online`), false);
+  await show(false);
+  await until(async () => (await dbGet(`rooms/${code}/members/${bobId}/online`)) === true);
+  noErrors();
+});
+
+test("Web Push: a message is announced to a member whose page is closed, a quick next one when the quiet time is over", async () => {
   const alice = await person("a"), bob = await person("b");
   const { code, url } = await createRoom(alice, "Alice");
   await joinByLink(bob, url, "Bob");
@@ -614,7 +869,7 @@ test("Web Push: a message is announced to a member whose page is closed, once in
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url"), t = Math.floor(Date.now() / 1000);
   const token = b64({ alg: "none" }) + "." + b64({ sub: bobId, aud: NS, iss: "https://securetoken.google.com/" + NS, iat: t, exp: t + 3600, auth_time: t }) + ".";
   const { sealed } = await (await fetch("http://127.0.0.1:8787/push/seal", { method: "POST", body: JSON.stringify(sub), headers: { Authorization: "Bearer " + token } })).json();
-  await fetch(dbUrl(`rooms/${code}/push/${bobId}`), { method: "PUT", headers: asOwner, body: JSON.stringify(sealed) });
+  await fetch(dbUrl(`rooms/${code}/push/${bobId}/devBobPhone1`), { method: "PUT", headers: asOwner, body: JSON.stringify(sealed) });
   await bob.context().close();
   await until(async () => (await dbGet(`rooms/${code}/members/${bobId}/online`)) === false);
   photos.pushed.length = 0;
@@ -623,11 +878,1157 @@ test("Web Push: a message is announced to a member whose page is closed, once in
   assert.equal(photos.pushed[0].url, sub.endpoint);
   assert.equal(photos.pushed[0].init.headers.Topic, code);
   assert.ok((await dbGet(`rooms/${code}/meta/pa`)) > 0);
-  // the next one, moments later, isn't announced again
+  // the next ones, moments later, aren't announced right away, but the newest is once the 20 seconds are over
   await say(alice, "bring the book");
-  await bubble(alice, "bring the book").waitFor();
+  await say(alice, "and the snacks");
+  await bubble(alice, "and the snacks").waitFor();
   await new Promise((ok) => setTimeout(ok, 1500));
   assert.equal(photos.pushed.length, 1);
+  await until(() => photos.pushed.length === 2, 30000);
+  await new Promise((ok) => setTimeout(ok, 1500));
+  assert.equal(photos.pushed.length, 2);
+  noErrors();
+});
+
+test("a quiet room: a warning in its 24th hour, then read-only with the hours left, on the chat and the home list", async () => {
+  const alice = await person("a"), bob = await person("b"), carol = await person("c");
+  const { code, url } = await createRoom(alice, "Alice", { title: "Book club" });
+  await joinByLink(bob, url, "Bob");
+  await say(alice, "see you tomorrow");
+  await bubble(bob, "see you tomorrow").waitFor();
+  const quiet = (h) => fetch(dbUrl(`rooms/${code}/meta/last`), { method: "PUT", headers: asOwner, body: String(Date.now() - h * 3600000) });
+  // nobody spoke for 23½ hours: everyone in the room is told; ✕ hides it, and speaking keeps the room going
+  await quiet(23.5);
+  await bob.locator("#ageBar", { hasText: "turns read-only in about 30 min" }).waitFor();
+  // joining isn't speaking: someone coming in leaves the clock where it was
+  const last = await dbGet(`rooms/${code}/meta/last`);
+  await joinByLink(await person("d"), url, "Dave");
+  assert.equal(await dbGet(`rooms/${code}/meta/last`), last);
+  await alice.locator("#ageBar .x").click();
+  await alice.locator("#ageBar").waitFor({ state: "hidden" });
+  assert.ok(await bob.locator("#roBox").isHidden());
+  await say(bob, "still here");
+  await bubble(alice, "still here").waitFor();
+  await bob.locator("#ageBar").waitFor({ state: "hidden" });
+  // 30 hours: read-only, deleted in 18 hours; where the message box was, it says so and offers to save it
+  await quiet(30);
+  await alice.locator("#roBox", { hasText: "Read-only" }).waitFor();
+  await alice.locator("#roBox", { hasText: "deleted in 18 h" }).waitFor();
+  assert.ok(await alice.locator("#composer").isHidden());
+  assert.ok(await alice.locator("#ageBar").isHidden());
+  await alice.locator("#roBox .btn").click();
+  await press(alice, "save");
+  await alice.locator(".toast", { hasText: "Saved" }).first().waitFor();
+  // the home list marks it, with the hours left
+  await bob.locator("#chat .bar [data-a=home]").click();
+  const row = bob.locator("#resume .roomrow", { hasText: "Book club" });
+  await row.locator(".tag.warn", { hasText: "Read-only" }).waitFor();
+  await row.locator(".left", { hasText: "deleted in 18 h" }).waitFor();
+  // a member still gets back in to read it; nobody new joins
+  await row.click();
+  await bubble(bob, "still here").waitFor();
+  // at once, not on the half-minute look at the clock
+  assert.ok(await bob.locator("#composer").isHidden(), "coming back from the home list, the message box stays away");
+  assert.ok(await bob.locator("#roBox", { hasText: "Read-only" }).isVisible());
+  await carol.locator("#joinCode").fill(code);
+  await carol.locator("#joinForm [type=submit]").click();
+  await carol.locator(".toast", { hasText: "read-only" }).waitFor();
+  assert.ok(await dbGet(`rooms/${code}/meta`), "still there until its 24 read-only hours are up");
+  noErrors();
+});
+
+test("the home list counts each room's new messages, and 99+ from 100", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { title: "Book club" });
+  await joinByLink(bob, url, "Bob");
+  await say(alice, "welcome");
+  await bubble(bob, "welcome").waitFor();
+  await bob.locator("#chat .bar [data-a=home]").click();
+  const row = bob.locator("#resume .roomrow", { hasText: "Book club" });
+  await row.waitFor();
+  assert.equal(await row.locator(".unread").count(), 0, "read up to the newest: no count");
+  await say(alice, "one"); await say(alice, "two"); await say(alice, "three");
+  await bubble(alice, "three").waitFor();
+  await bob.reload();
+  await row.locator(".unread", { hasText: /^3/ }).waitFor();
+  await shot(bob, "unread-3");
+  // read: the count goes, at once
+  await row.click();
+  await bubble(bob, "three").waitFor();
+  await bob.locator("#chat .bar [data-a=home]").click();
+  await row.waitFor();
+  assert.equal(await row.locator(".unread").count(), 0);
+  // 100 or more say 99+
+  const at = Date.now(), msgs = {};
+  for (let i = 0; i < 120; i++) msgs["zz" + String(i).padStart(3, "0")] = { by: "someone", name: "Zed", avatar: "🦊", text: "m" + i, at: at + i };
+  await fetch(dbUrl(`rooms/${code}/msgs`), { method: "PATCH", headers: asOwner, body: JSON.stringify(msgs) });
+  await fetch(dbUrl(`rooms/${code}/meta/last`), { method: "PUT", headers: asOwner, body: String(at + 119) }); // as every message does
+  await bob.reload();
+  await row.locator(".unread", { hasText: /^99\+/ }).waitFor();
+  await shot(bob, "unread-99-light");
+  await bob.emulateMedia({ colorScheme: "dark" });
+  await shot(bob, "unread-99-dark");
+  noErrors();
+});
+
+// mini-games: the puzzles are made the same way here as in the page, so the test knows the answers
+const SHOTS = process.env.SHOTS; // a folder to save screenshots in, when set
+const shot = (page, name) => (SHOTS ? page.screenshot({ path: `${SHOTS}/${name}.png` }) : null);
+async function openGames(page) {
+  await page.locator("#composer [data-a=more]").click();
+  await page.locator("#picker .morebtn", { hasText: "Games" }).click();
+  return sheet(page).locator(".games");
+}
+// starts game g from the games sheet, past the rules shown the first time
+async function startGame(page, g) {
+  await (await openGames(page)).locator(`.gmrow[data-g=${g}]`).click();
+  await page.locator(".gameov").waitFor();
+  await press(page, "ok");
+}
+async function crack(page, guesses) {
+  for (const guess of guesses) {
+    for (const k of guess) await page.locator(`.mmkey[data-k="${k}"]`).click();
+    await page.locator(".mmkeys [data-a=ok]").click();
+  }
+}
+const gameDone = (page, score) => page.locator(".gmend .gscore b", { hasText: new RegExp(`^${score}$`) }).waitFor();
+const closeGame = (page) => page.locator(".gmend .btn", { hasText: /^Close$/ }).click();
+
+test("mini-games: today's puzzle once each, a shared result, the room's leaderboard, and the owner turning games off", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  const day = P.dayOf(Date.now()), seed = (g) => P.seedOf(code, day, g);
+
+  // Code Lock: one wrong try, then the code
+  const secret = P.mmSecret(seed("mm")), wrong = secret === "0000" ? "1111" : "0000";
+  const games = await openGames(alice);
+  await games.locator(".lbbox", { hasText: "Nobody has played yet" }).waitFor();
+  await shot(alice, "games-sheet-empty");
+  await alice.keyboard.press("Escape");
+  await startGame(alice, "mm");
+  await crack(alice, [wrong]);
+  await alice.locator(".gmstat", { hasText: "7 tries left" }).waitFor();
+  await shot(alice, "mm-playing");
+  await crack(alice, [secret]);
+  await gameDone(alice, 88);
+  await shot(alice, "mm-done");
+  const mm = Object.values(await dbGet(`rooms/${code}/games/${day}/mm`));
+  assert.deepEqual(mm.map((r) => [r.s, r.l]), [[88, `${wrong},${secret}`]]);
+  // shared to the room, where Bob plays the same puzzle from the card
+  await alice.locator(".gmend .btn", { hasText: "Share to the room" }).click();
+  const card = bob.locator(".gamebub", { hasText: "Code Lock" });
+  await card.locator(".gscore b", { hasText: "88" }).waitFor();
+  await card.locator(".gmmarks span").nth(1).waitFor();
+  await shot(bob, "mm-card");
+  await card.locator(".gmjoin").click();
+  await bob.locator(".gameov").waitFor();
+  await press(bob, "ok");
+  await crack(bob, [secret]);
+  await gameDone(bob, 100);
+  await closeGame(bob);
+  // played once a day: opening it again shows the score
+  await (await openGames(bob)).locator(".gmrow[data-g=mm] .gmst.done", { hasText: "100" }).waitFor();
+  await bob.locator(".gmrow[data-g=mm]").click();
+  await sheet(bob).locator(".gmresult .gscore b", { hasText: "100" }).waitFor();
+  await bob.keyboard.press("Escape");
+
+  // Crowns: one clashing crown (a mistake) and a hint, then the rest
+  const qn = P.qnPuzzle(seed("qn")), n = qn.n;
+  await startGame(bob, "qn");
+  const cell = (i) => bob.locator(`.qncell[data-i="${i}"]`);
+  await cell(qn.cols[0]).click(); await cell(qn.cols[0]).click();
+  const bad = n + qn.cols[0] + (qn.cols[0] < n - 1 ? 1 : -1); // corner to corner with row one's crown: always a clash
+  await cell(bad).click(); await cell(bad).click();
+  await bob.locator(".qncell.bad").first().waitFor();
+  await shot(bob, "qn-playing");
+  await cell(bad).click(); // a third tap clears it
+  await bob.locator(".gmhead [aria-label=Hint]").click();
+  await press(bob, "yes");
+  for (let r = 0; r < n; r++) {
+    if (await cell(r * n + qn.cols[r]).evaluate((b) => b.classList.contains("on"))) continue;
+    await cell(r * n + qn.cols[r]).click(); await cell(r * n + qn.cols[r]).click();
+  }
+  await gameDone(bob, 75); // 100 − 20 for the hint − 5 for the mistake
+  await closeGame(bob);
+
+  // One Line, drawn in one drag
+  const zp = P.zpPuzzle(seed("zp"));
+  await startGame(alice, "zp");
+  const box = await alice.locator(".zpgrid").boundingBox(), size = box.width / zp.n;
+  const at = (i) => [box.x + ((i % zp.n) + 0.5) * size, box.y + (Math.floor(i / zp.n) + 0.5) * size];
+  await alice.mouse.move(...at(zp.line[0])); await alice.mouse.down();
+  for (const i of zp.line.slice(1, 20)) await alice.mouse.move(...at(i), { steps: 2 });
+  await alice.mouse.up();
+  await shot(alice, "zp-playing");
+  await alice.mouse.move(...at(zp.line[19])); await alice.mouse.down();
+  for (const i of zp.line.slice(20)) await alice.mouse.move(...at(i), { steps: 2 });
+  await alice.mouse.up();
+  await gameDone(alice, 100);
+  await shot(alice, "zp-done");
+  await closeGame(alice);
+
+  // the leaderboard: today, all games (Bob 175, Alice 188), and one game with its time
+  const lb = (await openGames(bob)).locator(".lb li");
+  await lb.nth(1).waitFor();
+  const who = await lb.locator(".who").allTextContents();
+  assert.match(who[0], /Alice$/); assert.match(who[1], /Bob$/);
+  assert.deepEqual(await lb.locator(".pts").allTextContents(), ["188", "175"]);
+  await sheet(bob).locator(".lbseg [data-v=mm]").click();
+  assert.deepEqual(await lb.locator(".pts").allTextContents(), ["100", "88"]);
+  await sheet(bob).locator(".lbseg [data-v=week]").click();
+  await shot(bob, "leaderboard");
+  await bob.keyboard.press("Escape");
+
+  // the owner turns games off: no games in the ＋ panel, and no new scores
+  await menuPick(alice, "gamesoff");
+  await until(async () => (await dbGet(`rooms/${code}/meta`)).ng === true);
+  await bob.locator("#composer [data-a=more]").click();
+  await until(async () => (await bob.locator("#picker .morebtn").count()) === 3);
+  noErrors();
+});
+
+test("mini-games in a Private Salon: scores are sealed, and still make the leaderboard", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  const day = P.dayOf(Date.now()), secret = P.mmSecret(P.seedOf(code, day, "mm"));
+  await startGame(alice, "mm");
+  await crack(alice, [secret]);
+  await gameDone(alice, 100);
+  const [rec] = Object.values(await dbGet(`rooms/${code}/games/${day}/mm`));
+  assert.ok(rec.x && rec.s === undefined && rec.l === undefined, "only sealed");
+  await alice.locator(".gmend .btn", { hasText: "Share to the room" }).click();
+  await bob.locator(".gamebub .gscore b", { hasText: "100" }).waitFor();
+  const lb = (await openGames(bob)).locator(".lb li");
+  await lb.first().locator(".pts", { hasText: "100" }).waitFor();
+  noErrors();
+});
+
+// opens the ＋ panel's long-post page and writes one; publish: send it, or leave it as a draft
+async function writePost(page, title, body, { publish = true } = {}) {
+  await page.locator("#composer [data-a=more]").click();
+  await page.locator("#picker .morebtn", { hasText: "Long post" }).click();
+  // the page puts the cursor in the title a moment after it opens; typing before then can land in the wrong field
+  await page.locator(".writer .ptitlein:focus").waitFor();
+  await page.locator(".writer .ptitlein").fill(title);
+  await page.locator(".writer .pbody").fill(body);
+  if (publish) { await page.locator(".writer .bar .btn.primary").click(); await page.locator(".writer").waitFor({ state: "detached" }); }
+}
+
+test("long posts: hosts write one on its own page, the chat shows a card, the text opens whole; owners open it up to members", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  // members don't get the tile until the owner allows it
+  await bob.locator("#composer [data-a=more]").click();
+  await bob.locator("#picker .morebtn", { hasText: "Poll" }).waitFor();
+  assert.equal(await bob.locator("#picker .morebtn", { hasText: "Long post" }).count(), 0);
+  await bob.locator("#composer [data-a=more]").click();
+
+  // what's being written stays on the device when the page is closed, and comes back
+  await writePost(alice, "Weekly notes", "draft only", { publish: false });
+  await alice.locator(".writer .bar [data-a=back]").click();
+  await alice.locator(".writer").waitFor({ state: "detached" });
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn", { hasText: "Long post" }).click();
+  assert.equal(await alice.locator(".writer .ptitlein").inputValue(), "Weekly notes");
+  assert.equal(await alice.locator(".writer .pbody").inputValue(), "draft only");
+  const text = "# Plan\n**Ship** it this week\n- one\n- two\n\n> a quote\nsee https://example.com";
+  await alice.locator(".writer .pbody").fill(text);
+  await alice.locator(".writer .bar .btn.primary").click();
+  await alice.locator(".writer").waitFor({ state: "detached" });
+
+  // the chat holds the card; the text sits apart
+  const card = bob.locator("#list .postbub", { hasText: "Weekly notes" });
+  await card.waitFor();
+  assert.match(await card.locator(".ps").textContent(), /^Plan Ship it this week one two a quote see https:\/\/example\.com$/);
+  const msgs = await dbGet(`rooms/${code}/msgs`), [id] = Object.keys(msgs);
+  assert.equal(msgs[id].pt, true);
+  assert.equal(msgs[id].post.t, "Weekly notes");
+  assert.equal(JSON.stringify(msgs[id]).includes("**Ship**"), false);
+  assert.equal((await dbGet(`rooms/${code}/posts/${id}`)).b, text);
+
+  // reading it whole: headings, bold, lists, quotes and links, and reacting as to any message
+  await card.click();
+  const reader = bob.locator(".reader");
+  await reader.locator(".md h3", { hasText: "Plan" }).waitFor();
+  assert.equal(await reader.locator(".md b").textContent(), "Ship");
+  assert.equal(await reader.locator(".md li").count(), 2);
+  await reader.locator(".md blockquote", { hasText: "a quote" }).waitFor();
+  await reader.locator(".md a[href='https://example.com']").waitFor();
+  await reader.locator(".re.big .chip").first().click();
+  await alice.locator("#list .re .chip", { hasText: "👍 1" }).waitFor();
+
+  // the author edits it; the open page follows
+  await alice.locator("#list .msg.mine .more").first().click();
+  await press(alice, "editpost");
+  await alice.locator(".writer .pbody").fill("# Plan B\nnew words");
+  await alice.locator(".writer .bar .btn.primary").click();
+  await reader.locator(".md h3", { hasText: "Plan B" }).waitFor();
+  await bob.locator("#list .msg .edited").waitFor();
+  await reader.locator(".bar [data-a=back]").click();
+  await reader.waitFor({ state: "detached" });
+
+  // the owner lets everyone write them; the owner can take one down, its text with it
+  await menuPick(alice, "postsopen");
+  await until(async () => (await dbGet(`rooms/${code}/meta/po`)) === true);
+  await writePost(bob, "", "no title needed");
+  await alice.locator("#list .postbub .ps.lead", { hasText: "no title needed" }).waitFor();
+  await alice.locator("#list .postbub", { hasText: "no title needed" }).click();
+  await alice.locator(".reader .md", { hasText: "no title needed" }).waitFor();
+  assert.equal((await alice.locator(".reader .pagebody > div").first().textContent()).includes("null"), false);
+  await alice.locator(".reader .bar [data-a=back]").click();
+  await alice.locator(".reader").waitFor({ state: "detached" });
+  await writePost(bob, "From Bob", "hello from a member");
+  await alice.locator("#list .postbub", { hasText: "From Bob" }).waitFor();
+  const bobs = Object.entries(await dbGet(`rooms/${code}/msgs`)).find(([, v]) => v.by !== msgs[id].by && v.post.t)[0];
+  assert.ok(await dbGet(`rooms/${code}/posts/${bobs}`));
+
+  // an export carries the whole text, not only the card
+  await menuPick(alice, "export");
+  const [file] = await Promise.all([alice.waitForEvent("download"), press(alice, "json")]);
+  const a = JSON.parse(readFileSync(await file.path(), "utf8"));
+  assert.deepEqual(a.messages.map((m) => [m.post.t, m.post.b]), [["Weekly notes", "# Plan B\nnew words"], ["", "no title needed"], ["From Bob", "hello from a member"]]);
+
+  await alice.locator("#list .msg:not(.mine)", { hasText: "From Bob" }).locator(".more").click();
+  await press(alice, "remove");
+  await press(alice, "yes");
+  await until(async () => (await dbGet(`rooms/${code}/posts/${bobs}`)) === null);
+  await bob.locator("#list .postbub", { hasText: "From Bob" }).waitFor({ state: "detached" });
+  noErrors();
+});
+
+test("long posts in a Private Salon: the card and the text are sealed, and members read them", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  await writePost(alice, "Secret plan", "**only** for us");
+  await bob.locator("#list .postbub", { hasText: "Secret plan" }).click();
+  await bob.locator(".reader .md b", { hasText: "only" }).waitFor();
+  const msgs = await dbGet(`rooms/${code}/msgs`), [id] = Object.keys(msgs);
+  assert.equal(msgs[id].pt, true);
+  assert.equal(msgs[id].post, undefined);
+  const body = await dbGet(`rooms/${code}/posts/${id}`);
+  assert.equal(body.b, undefined);
+  assert.ok(body.x && !JSON.stringify(body).includes("only") && !JSON.stringify(msgs).includes("Secret"));
+  noErrors();
+});
+
+// writes a comment on the open post's page
+async function comment(page, text) {
+  await page.locator(".reader .cin").fill(text);
+  await page.locator(".reader .cfoot .btn.primary").click();
+  await page.locator(".reader .cmt .ctext", { hasText: text }).waitFor();
+}
+
+test("comments under a long post: on its page only, counted on the card, the author told; replies, reactions, reports, deleting, exports", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  await writePost(alice, "Ideas", "what do you think?");
+  const card = bob.locator("#list .postbub", { hasText: "Ideas" });
+  await card.click();
+  await bob.locator(".reader .cnone").waitFor();
+  await comment(bob, "love it");
+  // not in the chat; the card counts it, and the post's author hears of it
+  await alice.locator(".toast", { hasText: "Bob commented on your long post" }).waitFor();
+  await alice.locator("#list .postbub .pcc", { hasText: "1" }).waitFor();
+  assert.equal(await alice.locator("#list .bub", { hasText: "love it" }).count(), 0);
+  const [id] = Object.keys(await dbGet(`rooms/${code}/msgs`));
+  const [cid] = Object.keys(await dbGet(`rooms/${code}/pc/${id}`));
+  assert.equal((await dbGet(`rooms/${code}/msgs/${id}/cc`))[cid], true);
+
+  // Bob closes the page; Alice answers him by name, and he's told
+  await bob.locator(".reader .bar [data-a=back]").click();
+  await bob.locator(".reader").waitFor({ state: "detached" });
+  await alice.locator("#list .postbub", { hasText: "Ideas" }).click();
+  await alice.locator(".reader .cmt", { hasText: "love it" }).locator(".icon").click();
+  await press(alice, "reply");
+  await alice.locator(".reader .creply", { hasText: "Bob" }).waitFor();
+  await comment(alice, "thanks @Bob");
+  await bob.locator(".toast", { hasText: "Alice mentioned you" }).waitFor();
+  await alice.locator(".reader .cmt", { hasText: "thanks" }).locator(".cquote", { hasText: "love it" }).waitFor();
+
+  // reactions, as on a message
+  await card.click();
+  await bob.locator(".reader .cmt", { hasText: "thanks" }).locator(".icon").click();
+  await sheet(bob).locator("[data-a=re1]").click();
+  await alice.locator(".reader .cmt", { hasText: "thanks" }).locator(".chip", { hasText: "1" }).waitFor();
+
+  // an export keeps the comments with the post
+  await alice.locator(".reader .bar [data-a=back]").click();
+  await menuPick(alice, "export");
+  const [file] = await Promise.all([alice.waitForEvent("download"), press(alice, "json")]);
+  const a = JSON.parse(readFileSync(await file.path(), "utf8"));
+  assert.deepEqual(a.messages[0].post.c.map((c) => [c.n, c.t]), [["Bob", "love it"], ["Alice", "thanks @Bob"]]);
+
+  // Bob reports Alice's comment... to Alice, the owner, who sees it among the reports; then Bob deletes his own
+  await bob.locator(".reader .cmt", { hasText: "thanks" }).locator(".icon").click();
+  await press(bob, "report");
+  await press(bob, "r1");
+  await alice.locator("#chat .bar [data-a=menu] .dot").waitFor();
+  await menuPick(alice, "reports");
+  await sheet(alice).locator(".replist li", { hasText: "thanks @Bob" }).waitFor();
+  await alice.keyboard.press("Escape");
+  await bob.locator(".reader .cmt.mine").locator(".icon").click();
+  await press(bob, "del");
+  await press(bob, "yes");
+  await bob.locator(".reader .cmt", { hasText: "love it" }).waitFor({ state: "detached" });
+  await until(async () => !(await dbGet(`rooms/${code}/msgs/${id}/cc/${cid}`)));
+  await bob.locator(".reader .chead", { hasText: "Comments · 1" }).waitFor();
+
+  // the post goes with its comments
+  await bob.locator(".reader .bar [data-a=back]").click();
+  await alice.locator("#list .msg.mine .more").first().click();
+  await press(alice, "del");
+  await press(alice, "yes");
+  await until(async () => (await dbGet(`rooms/${code}/pc/${id}`)) === null);
+  noErrors();
+});
+
+test("comments in a Private Salon are sealed", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  await writePost(alice, "Secret plan", "for us");
+  await bob.locator("#list .postbub", { hasText: "Secret plan" }).click();
+  await comment(bob, "count me in");
+  await alice.locator("#list .postbub", { hasText: "Secret plan" }).click();
+  await alice.locator(".reader .cmt .ctext", { hasText: "count me in" }).waitFor();
+  const [id] = Object.keys(await dbGet(`rooms/${code}/msgs`));
+  const pc = await dbGet(`rooms/${code}/pc/${id}`);
+  const [c] = Object.values(pc);
+  assert.ok(c.x && c.text === undefined && !JSON.stringify(pc).includes("count me") && !JSON.stringify(pc).includes("Bob"));
+  noErrors();
+});
+
+test("on iPhone the keyboard doesn't cover a sheet being typed in", async () => {
+  // iOS keeps the page its full height under the keyboard and only the visible part (visualViewport) shrinks,
+  // so the phone's keyboard is played by a visualViewport that loses KB pixels at the bottom
+  const KB = 340;
+  const ctx = await browser.newContext({ locale: "en-US", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(() => {
+    const vv = new EventTarget();
+    Object.assign(vv, { offsetTop: 0, offsetLeft: 0, scale: 1 });
+    Object.defineProperty(vv, "height", { get: () => innerHeight - (window.kbUp || 0) });
+    Object.defineProperty(window, "visualViewport", { value: vv });
+    window.keyboard = (h) => { window.kbUp = h; vv.dispatchEvent(new Event("resize")); };
+  });
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => errors.push(`k: ${e.message}`));
+  await page.goto(`${base}/?emu&as=k`);
+  await page.locator("#createBtn").waitFor();
+  const shown = 844 - KB;
+  const above = async (field) => {
+    await page.locator(field).focus();
+    await page.evaluate((h) => window.keyboard(h), KB);
+    await until(async () => (await sheet(page).locator(".sheet").boundingBox()).y + (await sheet(page).locator(".sheet").boundingBox()).height <= shown + 1);
+    const f = await page.locator(field).boundingBox();
+    assert.ok(f.y >= 0 && f.y + f.height <= shown + 1, `${field} shows above the keyboard`);
+    await page.evaluate(() => window.keyboard(0));
+  };
+  // the new-room sheet is taller than what's left, so the nickname at its foot is scrolled into view
+  await page.locator("#createBtn").click();
+  await above("#meName");
+  await page.locator("#meName").fill("Host");
+  await press(page, "yes");
+  await sheet(page).locator(".share").waitFor();
+  await page.keyboard.press("Escape");
+  await page.locator("#chat").waitFor();
+  await menuPick(page, "desc");
+  await above("#roomDesc");
+  await page.locator("#roomDesc").fill("Welcome");
+  await press(page, "yes");
+  // the keyboard down again: the sheet is back at the foot of the screen
+  await menuPick(page, "qaon");
+  await page.locator("#askBar").waitFor();
+  await say(page, "Why?");
+  await page.locator(".qcard .qtools .btn.primary").click();
+  await above("#ansText");
+  const box = await sheet(page).locator(".sheet").boundingBox();
+  assert.ok(Math.abs(box.y + box.height - 844) < 2, "the sheet sits at the bottom once the keyboard is gone");
+  // and the room's header stays at the top while typing in the box
+  await page.keyboard.press("Escape");
+  await page.locator("#text").focus();
+  await page.evaluate((h) => window.keyboard(h), KB);
+  await until(async () => (await page.locator("#composer").boundingBox()).y + (await page.locator("#composer").boundingBox()).height <= shown + 1);
+  assert.ok((await page.locator("#chat .bar").boundingBox()).y >= 0);
+  await ctx.close();
+  noErrors();
+});
+
+test("on a phone's browser the room scrolls the page, so the browser's bars can fold away", async () => {
+  const ctx = await browser.newContext({ locale: "en-US", viewport: { width: 390, height: 700 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => errors.push(`f: ${e.message}`));
+  await page.goto(`${base}/?emu&as=f`);
+  await page.locator("#createBtn").waitFor();
+  await createRoom(page, "Flo");
+  for (let i = 1; i <= 25; i++) await say(page, `line ${i}`);
+  await bubble(page, "line 25").waitFor();
+  await page.locator("#text").blur();
+  const flow = () => page.evaluate(() => document.documentElement.classList.contains("flow"));
+  await until(flow);
+  // the newest message is on screen, the page itself is what scrolled, and the bars and the box stay in view
+  await until(() => page.evaluate(() => scrollY > 0));
+  const box = async (s) => page.locator(s).boundingBox();
+  assert.ok((await box("#chat .bar")).y >= 0 && Math.abs((await box("#composer")).y + (await box("#composer")).height - 700) < 2);
+  assert.ok((await box("#composer")).y > (await bubble(page, "line 25").boundingBox()).y);
+  // scrolled back to the start: the header is still at the top and the ↓ button shows
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.locator("#jumpBtn").waitFor();
+  assert.ok(Math.abs((await box("#chat .bar")).y) < 1);
+  await page.locator("#jumpBtn").click();
+  await until(() => page.evaluate(() => document.scrollingElement.scrollHeight - scrollY - innerHeight < 2));
+  // typing puts the chat back in its own frame (the keyboard is handled as before), still at the newest message
+  await page.locator("#text").focus();
+  assert.equal(await flow(), false);
+  assert.equal(await page.evaluate(() => scrollY), 0);
+  await until(() => page.evaluate(() => { const l = document.getElementById("list"); return l.scrollHeight - l.scrollTop - l.clientHeight < 2; }));
+  await page.locator("#text").blur();
+  await until(flow);
+  assert.ok(await page.evaluate(() => document.scrollingElement.scrollHeight - scrollY - innerHeight < 2));
+  await ctx.close();
+  noErrors();
+});
+
+// quizzes: the host writes a set on its own page; questions are filled in by number (0 the first)
+async function writeQuiz(page, title, questions) {
+  await page.locator("#composer [data-a=more]").click();
+  await page.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await press(page, "new");
+  const ed = page.locator(".qzedit");
+  await ed.locator(".qzetitle:focus").waitFor();
+  await ed.locator(".qzetitle").fill(title);
+  for (const [n, q] of questions.entries()) {
+    if (n) await ed.locator(".qzeadd").click();
+    const card = ed.locator(".qzeq").nth(n);
+    await card.locator("textarea").fill(q.t);
+    for (const [k, o] of q.o.entries()) await card.locator(".qzeo input").nth(k).fill(o);
+    if (q.right !== 0) { await card.locator(".qzeright").nth(0).click(); await card.locator(".qzeright").nth(q.right).click(); }
+    await card.locator("select").first().selectOption(String(q.d || 5));
+  }
+  return ed;
+}
+const quizPage = (page) => page.locator(".quizov");
+const quizBtn = (page, text) => quizPage(page).locator(".actions .btn", { hasText: text });
+
+test("quiz: the host writes a set and runs it; players join from the card, answer against the clock, and see the scores", async () => {
+  const alice = await person("a"), bob = await person("b"), carol = await person("c");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  await joinByLink(carol, url, "Carol");
+  // members don't get the quiz in the ＋ panel; the host does
+  await bob.locator("#composer [data-a=more]").click();
+  await bob.locator("#picker .morebtn").first().waitFor();
+  assert.equal(await bob.locator("#picker .morebtn", { hasText: "Quiz" }).count(), 0);
+  await bob.locator("#composer [data-a=more]").click();
+
+  const ed = await writeQuiz(alice, "Maths", [{ t: "2 + 2 = ?", o: ["3", "4", "5"], right: 1 }, { t: "Which is even?", o: ["7", "8"], right: 1 }]);
+  await ed.locator(".pfoot", { hasText: "Saved on this device" }).waitFor();
+  assert.deepEqual(await ed.locator(".qzeq").first().locator(".qzeo input").evaluateAll((l) => l.map((i) => i.placeholder)),
+    ["Option 1", "Option 2", "Option 3 (optional)", "Option 4 (optional)"], "two options are enough");
+  await shot(alice, "quiz-editor");
+  await ed.locator(".bar .btn.primary").click();   // Start quiz
+  await quizPage(alice).locator(".qzplayers, .muted", { hasText: "Nobody has joined yet" }).first().waitFor();
+  const [z] = Object.keys(await dbGet(`rooms/${code}/qz`));
+  const quiz = await dbGet(`rooms/${code}/qz/${z}`);
+  assert.equal(quiz.live.ph, "lobby");
+  assert.equal(JSON.parse(quiz.src).q[0].c[0], 1, "the whole set, answers and all, sits where only the hosts read it");
+  assert.equal(quiz.q, undefined, "no question is out yet");
+
+  // players come in from the card in the chat
+  const card = bob.locator(".quizbub", { hasText: "Maths" });
+  await card.locator(".btn", { hasText: "Play" }).click();
+  await quizPage(bob).locator(".qzjoin .btn", { hasText: "Play as" }).click();
+  await quizPage(bob).locator(".qzwait", { hasText: "You're in" }).waitFor();
+  await carol.locator(".quizbub .btn", { hasText: "Play" }).click();
+  await quizPage(carol).locator(".qzjoin .btn").click();
+  await quizPage(alice).locator(".qzplayers .chip").nth(1).waitFor();
+  await shot(alice, "quiz-lobby-host");
+  await shot(bob, "quiz-lobby-player");
+
+  // question 1: out first, answering a few seconds on; nobody else's answer can be seen while it's open
+  await quizBtn(alice, "Start").click();
+  await quizPage(bob).locator(".qzcount").waitFor();
+  await shot(bob, "quiz-get-ready");
+  const four = quizPage(bob).locator("button.qzopt", { hasText: "4" });
+  await bob.locator("button.qzopt:not([disabled])").first().waitFor({ timeout: 8000 });
+  await shot(bob, "quiz-answering");
+  await four.click();
+  await quizPage(bob).locator(".qzwait", { hasText: "Waiting for the others" }).waitFor();
+  assert.equal((await dbGet(`rooms/${code}/qz/${z}/k`)), null, "the right answer isn't out while answering");
+  await quizPage(carol).locator("button.qzopt", { hasText: "5" }).click();
+  // everyone has answered: the host's device closes it and works out the points
+  await quizPage(bob).locator(".qzme.ok", { hasText: "Right!" }).waitFor();
+  await quizPage(carol).locator(".qzme.no", { hasText: "Wrong" }).waitFor();
+  await quizPage(alice).locator(".lb li").nth(1).waitFor();
+  await shot(bob, "quiz-right");
+  await shot(alice, "quiz-reveal-host");
+  const s0 = JSON.parse(await dbGet(`rooms/${code}/qz/${z}/s/00`));
+  assert.deepEqual(s0.n, [0, 1, 1]);
+  assert.ok(s0.g[Object.keys(s0.g).find((uid) => s0.g[uid] > 0)] > 500, "a fast right answer gets more than half");
+
+  // question 2: Carol is right, Bob lets the time run out
+  await quizBtn(alice, "Next question").click();
+  await carol.locator("button.qzopt:not([disabled])").first().waitFor({ timeout: 8000 });
+  await quizPage(carol).locator("button.qzopt", { hasText: "8" }).click();
+  await quizPage(bob).locator(".qzme.no", { hasText: "No answer" }).waitFor({ timeout: 12000 });
+  // the end: the podium, in the quiz and on the card
+  await quizBtn(alice, "Final results").click();
+  await quizPage(bob).locator(".qzpodium li").nth(1).waitFor();
+  await shot(bob, "quiz-results");
+  await quizPage(bob).locator(".gmhead [aria-label=Close]").click();
+  await card.locator(".qzpodium li").nth(1).waitFor();
+  assert.match(await card.locator(".qzpodium li").first().textContent(), /Bob|Carol/);
+  await shot(bob, "quiz-card-done");
+  assert.equal((await dbGet(`rooms/${code}/qz/${z}/live`)).ph, "end");
+  // the host saves the scores and keeps the set
+  const [csv] = await Promise.all([alice.waitForEvent("download"), quizBtn(alice, "Export scores").click()]);
+  assert.match(csv.suggestedFilename(), /^quiz-.*\.csv$/);
+  noErrors();
+});
+
+test("quiz: a set goes out as a file and comes back in; in a Private Salon everything is sealed", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  const ed = await writeQuiz(alice, "Salon quiz", [{ t: "Capital of France?", o: ["Paris", "Rome"], right: 0, d: 10 }]);
+  await ed.locator(".pfoot", { hasText: "Saved on this device" }).waitFor();
+  await alice.keyboard.press("Escape");
+  await ed.waitFor({ state: "detached" });
+  // export, delete, import
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(alice).locator(".gmrow", { hasText: "Salon quiz" }).click();
+  const [file] = await Promise.all([alice.waitForEvent("download"), press(alice, "export")]);
+  assert.match(file.suggestedFilename(), /\.stoaquiz$/);
+  const path = await file.path();
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(alice).locator(".gmrow", { hasText: "Salon quiz" }).click();
+  await press(alice, "drop");
+  await press(alice, "yes");
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(alice).locator(".lbnone").waitFor();
+  await sheet(alice).locator("input[type=file]").setInputFiles(path);
+  await sheet(alice).locator(".gmrow", { hasText: "Salon quiz" }).click();
+  await press(alice, "start");
+  await quizPage(alice).waitFor();
+  // in the Salon: the card, the set, the players, the question, the answer, the key and the scores are sealed
+  await bob.locator(".quizbub .btn", { hasText: "Play" }).click();
+  await quizPage(bob).locator(".qzjoin .btn").click();
+  await quizPage(alice).locator(".qzplayers .chip").waitFor();
+  await quizBtn(alice, "Start").click();
+  await bob.locator("button.qzopt:not([disabled])").first().waitFor({ timeout: 8000 });
+  await quizPage(bob).locator("button.qzopt", { hasText: "Paris" }).click();
+  await quizPage(bob).locator(".qzme.ok", { hasText: "Right!" }).waitFor();
+  const [z] = Object.keys(await dbGet(`rooms/${code}/qz`));
+  const q = await dbGet(`rooms/${code}/qz/${z}`), m = await dbGet(`rooms/${code}/msgs/${z}`);
+  assert.ok(m.x && m.qm === true && !m.quiz, "the card is sealed");
+  for (const v of [q.src, q.q["00"], q.k["00"], q.s["00"], ...Object.values(q.p).map((p) => p.x), ...Object.values(q.a["00"]).map((a) => a.x)]) {
+    assert.match(v, /^[A-Za-z0-9_-]+$/);
+    assert.ok(!/Paris|France|Bob/.test(v));
+  }
+  await quizBtn(alice, "Final results").click();
+  await bob.locator(".quizbub .qzpodium li", { hasText: "Bob" }).waitFor();
+  noErrors();
+});
+
+for (const priv of [false, true]) test(`quiz pictures go to R2 with the quiz (${priv ? "sealed" : "as JPEG"}), show on the phones and the projector, and go with the card`, async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv });
+  await joinByLink(bob, url, "Bob");
+  const ed = await writeQuiz(alice, "Pictures", [{ t: "What colour is it?", o: ["Red", "Black"], right: 1, d: 10 }]);
+  await ed.locator(".qzeq .qzeimg input[type=file]").setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: PNG });
+  await ed.locator(".qzeq .qzeimg img[src^='data:image/jpeg']").waitFor();
+  await ed.locator(".bar .btn.primary").click();
+  await quizPage(alice).locator(".qzplayers, .muted", { hasText: "Nobody has joined yet" }).first().waitFor();
+  // the picture is in R2 under an id that starts with the quiz's; the room's copy of the set only says where
+  const [z] = Object.keys(await dbGet(`rooms/${code}/qz`));
+  const keys = [...photos.bucket.objects.keys()];
+  assert.equal(keys.length, 1);
+  assert.match(keys[0], new RegExp(`^${code}/emu[a-z0-9]+/${z.replace(/[-]/g, "\\-")}[A-Za-z0-9]{10}\\.${priv ? "bin" : "jpg"}$`));
+  const body = photos.bucket.objects.get(keys[0]).body;
+  assert.equal(body[0] === 0xff && body[1] === 0xd8, !priv, "sealed in a Salon");
+  if (!priv) {
+    const src = JSON.parse((await dbGet(`rooms/${code}/qz/${z}/src`)));
+    assert.ok(src.q[0].im && !src.q[0].img, "the set in the room points at the picture");
+  }
+  // the projector screen, from the quiz's page
+  const [show] = await Promise.all([alice.context().waitForEvent("page"), quizPage(alice).locator(".gmhead [aria-label='Show on the projector screen']").click()]);
+  await show.setViewportSize({ width: 1280, height: 720 });
+  await show.locator("#show .sqz.lobby").waitFor();
+  await bob.locator(".quizbub .btn", { hasText: "Play" }).click();
+  await quizPage(bob).locator(".qzjoin .btn").click();
+  await show.locator("#show .sqz.lobby .chip", { hasText: "Bob" }).waitFor();
+  await shot(show, "quiz-projector-lobby");
+  await quizBtn(alice, "Start").click();
+  // the picture comes with the question, on the phone and the projector, before answering opens
+  await quizPage(bob).locator(".qzpre img.qzimg[src^='blob:']").waitFor();
+  await show.locator("#show.quizon .sqz.pre img.qzimg[src^='blob:']").waitFor();
+  await bob.locator("button.qzopt:not([disabled])").first().waitFor({ timeout: 8000 });
+  await quizPage(bob).locator(".qzlive img.qzimg[src^='blob:']").waitFor();
+  await show.locator("#show .sqz.q .qzopt", { hasText: "Black" }).waitFor();
+  await show.locator("#show .sqz.q .sqzn", { hasText: "Answered 0 of 1" }).waitFor();
+  await shot(show, "quiz-projector-question");
+  await shot(bob, "quiz-picture");
+  await quizPage(bob).locator("button.qzopt", { hasText: "Black" }).click();
+  await show.locator("#show .sqz.rev .qzopt.right", { hasText: "Black" }).waitFor();
+  await show.locator("#show .sqz.rev .lb li", { hasText: "Bob" }).waitFor();
+  await shot(show, "quiz-projector-reveal");
+  await quizBtn(alice, "Final results").click();
+  await show.locator("#show .sqz.end .qzpodium li", { hasText: "Bob" }).waitFor();
+  await shot(show, "quiz-projector-results");
+  await show.close();
+  // the host keeps the set, picture and all, from the room
+  await quizBtn(alice, "Save to my sets").click();
+  await alice.locator(".toast", { hasText: "Saved to your question sets" }).waitFor();
+  const kept = await alice.evaluate(() => new Promise((ok) => {
+    const req = indexedDB.open("stoatalk");
+    req.onsuccess = () => { const all = req.result.transaction("quizzes").objectStore("quizzes").getAll(); all.onsuccess = () => ok(all.result.map((s) => !!s.q[0].img)); };
+  }));
+  assert.deepEqual(kept.sort(), [true, true]);
+  // the card goes, and the picture with it
+  await quizPage(alice).locator(".gmhead [aria-label=Close]").click();
+  await alice.locator("#list .msg.mine .more").first().click();
+  await press(alice, "del");
+  await press(alice, "yes");
+  await waitUntil(() => photos.bucket.objects.size === 0);
+  noErrors();
+});
+
+// the camera plays a canvas showing a QR Code of window.qrText (none until it's set); deny: the camera is refused
+async function withCamera(as, { deny = false } = {}) {
+  const ctx = await browser.newContext({ locale: "en-US" });
+  await ctx.addInitScript((deny) => {
+    navigator.mediaDevices.getUserMedia = async () => {
+      if (deny) throw new DOMException("no", "NotAllowedError");
+      const c = Object.assign(document.createElement("canvas"), { width: 480, height: 480 }), g = c.getContext("2d");
+      // painted afresh every frame, as a camera keeps sending them
+      setInterval(() => {
+        const drawn = window.qrText;
+        g.fillStyle = "#fff"; g.fillRect(0, 0, 480, 480);
+        if (drawn) { const q = qrcode(0, "M"); q.addData(drawn); q.make(); const n = q.getModuleCount(), s = Math.floor(360 / n);
+          g.fillStyle = "#000"; for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) g.fillRect(60 + k * s, 60 + r * s, s, s); }
+      }, 50);
+      return c.captureStream(10);
+    };
+  }, deny);
+  const page = await ctx.newPage();
+  page.on("pageerror", (e) => errors.push(`${as}: ${e.message}`));
+  await page.goto(`${base}/?emu&as=${as}`);
+  await page.locator("#createBtn").waitFor();
+  return page;
+}
+
+test("joining by the room's QR Code: the camera reads it (only a StoaTalk link counts), or a photo of it when the camera is refused", async () => {
+  const alice = await person("a");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  assert.match(url, /#k=/);
+
+  const bob = await withCamera("b");
+  await bob.locator("#scanBtn").click();
+  await sheet(bob).locator(".scanview video").waitFor();
+  await bob.evaluate(() => (window.qrText = "https://example.com/?room=ABCD"));
+  await bob.locator(".toast", { hasText: "isn't a StoaTalk room" }).waitFor();
+  assert.ok(await sheet(bob).locator(".scan").isVisible(), "the camera keeps looking");
+  await bob.evaluate((u) => (window.qrText = u), url);
+  await pickName(bob, "Bob");
+  await bob.locator("#chat").waitFor();
+  assert.match(new URL(bob.url()).search, new RegExp(`room=${code}`));
+  assert.equal(await bob.locator(".scan").count(), 0, "the scanner is gone, and its camera with it");
+  await say(bob, "scanned in");
+  await bubble(alice, "scanned in").waitFor();
+
+  const carol = await withCamera("c", { deny: true });
+  await carol.locator("#scanBtn").click();
+  await sheet(carol).locator(".scannote", { hasText: "isn't allowed" }).waitFor();
+  assert.ok(await sheet(carol).locator(".scanview").isHidden());
+  // a photo of the QR Code, chosen from the device
+  await carol.evaluate(async (u) => {
+    const q = qrcode(0, "M"); q.addData(u); q.make();
+    const img = new Image(); img.src = q.createDataURL(8, 16); await img.decode();
+    const c = Object.assign(document.createElement("canvas"), { width: img.width, height: img.height });
+    c.getContext("2d").drawImage(img, 0, 0);
+    const blob = await new Promise((ok) => c.toBlob(ok, "image/png")), dt = new DataTransfer();
+    dt.items.add(new File([blob], "qr.png", { type: "image/png" }));
+    const input = document.querySelector(".scan input[type=file]"); input.files = dt.files;
+    input.dispatchEvent(new Event("change"));
+  }, url);
+  await pickName(carol, "Carol");
+  await carol.locator("#chat").waitFor();
+  await bubble(carol, "scanned in").waitFor();
+  noErrors();
+});
+
+// sticky-note boards
+const boardPage = (page) => page.locator(".sbov");
+const boardNote = (page, text) => boardPage(page).locator(".sbnote", { hasText: text });
+async function openNewBoard(page, title, tpl) {
+  await page.locator("#composer [data-a=more]").click();
+  await page.locator("#picker .morebtn", { hasText: "Sticky notes" }).click();
+  await page.locator("#sbTitle").fill(title);
+  if (tpl) await sheet(page).locator(".sbtpls .chip", { hasText: tpl }).click();
+}
+async function putNote(page, col, text, colour = 0) {
+  await boardPage(page).locator(`.sbcol[data-k="${col}"] .sbadd`).click();
+  await sheet(page).locator(".sbta").fill(text);
+  await sheet(page).locator(`.sbsw.sn${colour}`).click();
+  await press(page, "yes");
+  await boardNote(page, text).waitFor();
+}
+async function boardMenu(page, a) {
+  await boardPage(page).locator(".gmhead [aria-label='Board menu']").click();
+  await press(page, a);
+}
+
+test("sticky notes: the host opens a board, everyone puts notes up, the host moves them and calls the vote, the result comes out", async () => {
+  const alice = await person("a"), bob = await person("b"), carol = await person("c");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  await joinByLink(carol, url, "Carol");
+  // only the hosts open one
+  await bob.locator("#composer [data-a=more]").click();
+  await bob.locator("#picker .morebtn").first().waitFor();
+  assert.equal(await bob.locator("#picker .morebtn", { hasText: "Sticky notes" }).count(), 0);
+  await bob.locator("#composer [data-a=more]").click();
+
+  await openNewBoard(alice, "Next term", "Pros / Cons");
+  await shot(alice, "sticky-new");
+  await press(alice, "yes");
+  await boardPage(alice).locator(".sbcol").nth(1).waitFor();
+  const [b] = Object.keys(await dbGet(`rooms/${code}/sb`));
+  const board = await dbGet(`rooms/${code}/sb/${b}`);
+  assert.deepEqual(board.live, { ph: "add", v: 3, lim: 10, an: true, lock: false });
+  assert.deepEqual(JSON.parse(board.cols), [{ k: "0", n: "Pros" }, { k: "1", n: "Cons" }]);
+
+  // people come in from the card and put notes up, anonymously
+  await bob.locator(".sbbub .btn", { hasText: "Open board" }).click();
+  await putNote(bob, "0", "Book swap", 2);
+  await carol.locator(".sbbub .btn", { hasText: "Open board" }).click();
+  await putNote(carol, "1", "Too early in the morning", 1);
+  await putNote(carol, "0", "Guest speakers", 3);
+  await boardNote(bob, "Too early").waitFor();
+  await boardNote(alice, "Guest speakers").waitFor();
+  assert.match(await boardNote(bob, "Book swap").textContent(), /Yours/);
+  assert.doesNotMatch(await boardNote(bob, "Too early").textContent(), /Yours/);
+  const notes = await dbGet(`rooms/${code}/sb/${b}/n`);
+  assert.equal(Object.keys(notes).length, 3);
+  assert.ok(Object.values(notes).every((n) => !n.nm && n.t), "anonymous notes carry no name");
+  await shot(carol, "sticky-board");
+  // a member can't move someone else's note; the host moves any (with "move to", or by dragging)
+  await boardNote(bob, "Too early").click();
+  assert.equal(await sheet(bob).locator("[data-a=move]").count(), 0);
+  await bob.keyboard.press("Escape");
+  await boardNote(alice, "Too early").click();
+  await press(alice, "move");
+  await sheet(alice).locator("button[data-k='0']").click();
+  await until(async () => Object.values(await dbGet(`rooms/${code}/sb/${b}/n`)).find((n) => n.t.startsWith("Too early")).k === "0");
+  const from = await boardNote(alice, "Book swap").boundingBox(), to = await boardPage(alice).locator(".sbcol[data-k='1']").boundingBox();
+  await alice.mouse.move(from.x + 20, from.y + 20);
+  await alice.mouse.down();
+  await alice.mouse.move(from.x + 60, from.y + 40, { steps: 4 });
+  await alice.mouse.move(to.x + to.width / 2, to.y + to.height - 20, { steps: 8 });
+  await alice.mouse.up();
+  await until(async () => Object.values(await dbGet(`rooms/${code}/sb/${b}/n`)).find((n) => n.t === "Book swap").k === "1");
+  await boardPage(bob).locator(".sbcol[data-k='1'] .sbnote", { hasText: "Book swap" }).waitFor();
+
+  // the vote: three each, more than one on a note if you like, nobody else's seen
+  await boardMenu(alice, "vote");
+  await boardPage(bob).locator(".sbbar", { hasText: "Votes left: 3 of 3" }).waitFor();
+  assert.equal(await boardPage(bob).locator(".sbadd").count(), 0, "no new notes while votes go in");
+  await boardNote(bob, "Too early").locator(".sbvbtn.plus").click();
+  await boardNote(bob, "Too early").locator(".sbvbtn.plus").click();
+  await boardNote(bob, "Book swap").locator(".sbvbtn.plus").click();
+  await boardPage(bob).locator(".sbbar", { hasText: "Votes left: 0 of 3" }).waitFor();
+  assert.ok(await boardNote(bob, "Guest speakers").locator(".sbvbtn.plus").isDisabled());
+  await boardNote(bob, "Book swap").locator(".sbvbtn:not(.plus)").click();   // one back
+  await boardPage(bob).locator(".sbbar", { hasText: "Votes left: 1 of 3" }).waitFor();
+  await boardNote(carol, "Too early").locator(".sbvbtn.plus").click();
+  await boardNote(carol, "Guest speakers").locator(".sbvbtn.plus").click();
+  await until(async () => Object.keys((await dbGet(`rooms/${code}/sb/${b}/v`)) || {}).length === 2);
+  await shot(bob, "sticky-vote");
+  // closing it: each column in order of votes, the top three on the card
+  await boardMenu(alice, "done");
+  await press(alice, "yes");
+  await boardNote(bob, "Too early").locator(".sbv", { hasText: "3" }).waitFor();
+  await shot(bob, "sticky-results");
+  await boardPage(bob).locator(".gmhead [aria-label=Close]").click();
+  const card = bob.locator(".sbbub");
+  await card.locator(".sbtop li").nth(1).waitFor();
+  assert.match(await card.locator(".sbtop li").first().textContent(), /Too early.*3/);
+  await shot(bob, "sticky-card");
+  // anyone saves it as a file
+  await card.locator(".btn", { hasText: "See results" }).click();
+  await boardPage(bob).locator(".sbbar .btn", { hasText: "Save as a file" }).click();
+  const [csv] = await Promise.all([bob.waitForEvent("download"), press(bob, "csv")]);
+  assert.match(csv.suggestedFilename(), /^notes-.*\.csv$/);
+  const text = readFileSync(await csv.path(), "utf8");
+  assert.match(text, /Pros,Too early in the morning,3/);
+  assert.match(text, /Cons,Book swap,0/);
+  noErrors();
+});
+
+test("sticky notes, hidden until the host reveals them; a note reported and taken down; the board on the projector", async () => {
+  const alice = await person("a"), bob = await person("b"), carol = await person("c");
+  const { code, url } = await createRoom(alice, "Alice");
+  await joinByLink(bob, url, "Bob");
+  await joinByLink(carol, url, "Carol");
+  await openNewBoard(alice, "Ideas");
+  await sheet(alice).locator(".seg [data-v=yes]").click();
+  await press(alice, "yes");
+  await boardPage(alice).locator(".sbcol").waitFor();
+  const [b] = Object.keys(await dbGet(`rooms/${code}/sb`));
+  assert.equal((await dbGet(`rooms/${code}/sb/${b}/live`)).hd, true);
+  // the projector screen shows the board, face down
+  const [show] = await Promise.all([alice.context().waitForEvent("page"), boardMenu(alice, "show")]);
+  await show.locator("#show .ssb").waitFor();
+
+  // each sees only their own words; the others lie face down, for the host too
+  await bob.locator(".sbbub .btn", { hasText: "Open board" }).click();
+  await putNote(bob, "0", "Secret idea");
+  await carol.locator(".sbbub .btn", { hasText: "Open board" }).click();
+  await putNote(carol, "0", "Carol idea");
+  await boardPage(bob).locator(".sbnote.facedown").waitFor();
+  await until(async () => (await boardPage(alice).locator(".sbnote.facedown").count()) === 2);
+  assert.equal(await boardPage(bob).locator(".sbnote", { hasText: "Carol idea" }).count(), 0);
+  await until(async () => (await show.locator("#show .ssbnote.facedown").count()) === 2);
+  const notes = await dbGet(`rooms/${code}/sb/${b}/n`);
+  assert.ok(Object.values(notes).every((n) => !n.t), "the words aren't in the notes");
+  assert.equal(Object.keys(await dbGet(`rooms/${code}/sb/${b}/w`)).length, 2);
+  await shot(bob, "sticky-hidden");
+
+  // the host reveals them
+  await boardPage(alice).locator(".sbbar .btn.primary").click();
+  await press(alice, "yes");
+  await boardNote(bob, "Carol idea").waitFor();
+  await boardNote(alice, "Secret idea").waitFor();
+  await show.locator("#show .ssbnote", { hasText: "Secret idea" }).waitFor();
+  assert.equal(await boardPage(bob).locator(".sbnote.facedown").count(), 0);
+  await shot(show, "sticky-projector");
+
+  // Carol reports Bob's note; the owner takes it down from the list
+  await boardNote(carol, "Secret idea").click();
+  await press(carol, "report");
+  await press(carol, "r1");
+  await until(async () => await dbGet("ops/reports"));
+  const op = Object.values(await dbGet("ops/reports"))[0];
+  assert.equal(op.b, b); assert.equal(op.t, "Secret idea"); assert.equal(op.who, undefined, "the author goes unnamed");
+  await boardNote(bob, "Secret idea").click();
+  assert.equal(await sheet(bob).locator("[data-a=report]").count(), 0, "not one's own");
+  await bob.keyboard.press("Escape");
+  await alice.locator(".gmhead [aria-label='Close']").first().click();
+  await menuPick(alice, "reports");
+  await sheet(alice).locator(".replist li", { hasText: "Secret idea" }).waitFor();
+  await sheet(alice).locator(".replist [data-rm]").click();
+  await until(async () => (await boardPage(bob).locator(".sbnote", { hasText: "Secret idea" }).count()) === 0);
+  assert.equal(await dbGet(`rooms/${code}/reports`), null);
+  assert.equal(Object.keys(await dbGet(`rooms/${code}/sb/${b}/w`)).length, 1);
+  noErrors();
+});
+
+test("sticky notes in a Private Salon: columns, notes and votes are sealed; a named board shows who wrote each note", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code, url } = await createRoom(alice, "Alice", { priv: true });
+  await joinByLink(bob, url, "Bob");
+  await openNewBoard(alice, "Retro");
+  await sheet(alice).locator(".seg [data-v=named]").click();
+  await press(alice, "yes");
+  await boardPage(alice).locator(".sbcol").waitFor();
+  await bob.locator(".sbbub .btn", { hasText: "Open board" }).click();
+  await putNote(bob, "0", "Shorter meetings");
+  await boardNote(alice, "Shorter meetings").locator(".who", { hasText: "Bob" }).waitFor();
+  const [b] = Object.keys(await dbGet(`rooms/${code}/sb`));
+  const board = await dbGet(`rooms/${code}/sb/${b}`);
+  assert.throws(() => JSON.parse(board.cols), "the columns are sealed");
+  const [note] = Object.values(board.n);
+  assert.ok(note.x && !note.t && !note.nm, "the words and the name are sealed");
+  assert.equal((await dbGet(`rooms/${code}/msgs/${b}`)).board, undefined, "so is the card");
+  await boardMenu(alice, "vote");
+  await boardNote(bob, "Shorter meetings").locator(".sbvbtn.plus").click();
+  await until(async () => Object.keys((await dbGet(`rooms/${code}/sb/${b}/v`)) || {}).length === 1);
+  const [ballot] = Object.values(await dbGet(`rooms/${code}/sb/${b}/v`));
+  assert.ok(!ballot.includes(Object.keys(board.n)[0]), "the vote is sealed");
+  await boardMenu(alice, "done");
+  await press(alice, "yes");
+  await boardNote(bob, "Shorter meetings").locator(".sbv", { hasText: "1" }).waitFor();
+  noErrors();
+});
+
+/* ---------- signing in with Google (account.js; the emulator stands in for Google) ---------- */
+const emuUid = (page, as) => page.evaluate((as) => localStorage.getItem("chat-emu-uid" + as), as);
+async function accountSheet(page) {
+  await page.locator("#meBtn").click();
+  await sheet(page).locator(".merow[data-a=account]").click();
+  await sheet(page).locator(".acct").waitFor();
+}
+// signs in with the made-up Google account email; a page already used under that account asks to switch first
+async function signInGoogle(page, email, { switching = false } = {}) {
+  await page.evaluate((e) => localStorage.setItem("chat-emu-pick", e), email);
+  await accountSheet(page);
+  const load = page.waitForEvent("load");
+  await sheet(page).locator("[data-signin]").click();
+  if (switching) await press(page, "yes");
+  await load;
+  await page.locator("#createBtn").waitFor();
+}
+
+test("Google account: the same person on two devices, rooms follow, private messages stay with the first device until the second is paired; signing out and deleting", async () => {
+  const alice = await person("a"), bob = await person("b");
+  const { code: salon } = await createRoom(alice, "Alice", { priv: true, title: "Secret" });
+  await alice.goto(`${base}/?emu&as=a`); await alice.locator("#createBtn").waitFor();
+  const { code, url } = await createRoom(alice, "Alice", { title: "Workshop" });
+  await joinByLink(bob, url, "Bob");
+  const aId = await emuUid(alice, "a");
+  // signing in keeps this device's id: the room carries on, and the account keeps it and the key pair's public half
+  await alice.goto(`${base}/?emu&as=a`); await alice.locator("#createBtn").waitFor();
+  await signInGoogle(alice, "alice@example.com");
+  assert.equal(await emuUid(alice, "a"), aId);
+  await alice.locator(`#resume .roomrow[data-code="${code}"]`).waitFor();
+  await until(async () => (await dbGet(`users/${aId}/rooms`))?.[code] > 0);
+  const pk = (await dbGet(`rooms/${code}/members/${aId}`)).pk;
+  assert.equal(await dbGet(`users/${aId}/dh`), pk);
+  await alice.locator("#meBtn").click();
+  await sheet(alice).locator(".merow[data-a=account]", { hasText: "alice@example.com" }).waitFor();
+  await alice.keyboard.press("Escape");
+
+  // her tablet had an anonymous id of its own; signing in there takes the account's, and the room shows up
+  const tablet = await person("t");
+  await signInGoogle(tablet, "alice@example.com", { switching: true });
+  assert.equal(await emuUid(tablet, "t"), aId);
+  await tablet.locator(`#resume .roomrow[data-code="${code}"]`).click();
+  await tablet.locator("#chat").waitFor();
+  await titleIs(tablet, "Workshop");
+  await tablet.locator("#chat .bar [data-a=menu]").click();
+  await sheet(tablet).locator("[data-a=end]").waitFor();   // still the owner
+  await tablet.keyboard.press("Escape");
+  await say(tablet, "from the tablet");
+  await bubble(bob, "from the tablet").waitFor();
+  // the tablet doesn't put its own key on her member record: private messages are still sealed to the first device's
+  await new Promise((ok) => setTimeout(ok, 1000));
+  assert.equal((await dbGet(`rooms/${code}/members/${aId}`)).pk, pk);
+  await bob.locator("#peopleBtn").click();
+  await sheet(bob).locator(".st-mrow", { hasText: "Alice" }).locator("[data-dm]").click();
+  await bob.locator("#dmBar").waitFor();
+  await say(bob, "only for alice");
+  await alice.locator(`#resume .roomrow[data-code="${code}"]`).click();
+  await alice.locator("#peopleBtn").click();
+  await sheet(alice).locator(".st-mrow", { hasText: "Bob" }).locator("[data-dm]").click();
+  await bubble(alice, "only for alice").waitFor();
+  await tablet.locator("#peopleBtn").click();
+  await sheet(tablet).locator(".st-mrow", { hasText: "Bob" }).locator("[data-dm]").click();
+  await tablet.locator("#list .msg .bub", { hasText: "isn't paired yet" }).waitFor();
+  await tablet.locator("#text").fill("can't send this");
+  await tablet.locator("#composer .send").click();
+  await tablet.locator(".toast", { hasText: "isn't paired yet" }).waitFor();
+
+  // pairing the tablet: it shows a code; her first device opens it (as its camera would) and sends the keys over
+  await tablet.goto(`${base}/?emu&as=t`); await tablet.locator("#createBtn").waitFor();
+  await accountSheet(tablet);
+  await sheet(tablet).locator(".note", { hasText: "isn't paired yet" }).waitFor();
+  await press(tablet, "pair");
+  const link = await sheet(tablet).locator(".pairqr").getAttribute("data-pair");
+  const pairing = new URL(link).searchParams.get("pair");
+  const [pid] = pairing.split(".");
+  assert.equal((await dbGet(`users/${aId}/pair/${pid}`)).pk, pairing.split(".")[1]);
+  await alice.goto(`${base}/?emu&as=a&pair=${pairing}`);
+  await alice.locator(".overlay", { hasText: "1 Private Salons" }).waitFor();
+  await press(alice, "yes");
+  await alice.locator(".toast", { hasText: "The other device is paired" }).waitFor();
+  const paired = tablet.waitForEvent("load");
+  await tablet.locator(".toast", { hasText: "Paired" }).waitFor();
+  await paired; await tablet.locator("#createBtn").waitFor();
+  assert.equal(await dbGet(`users/${aId}/pair/${pid}`), null);   // nothing left on the server
+  assert.equal(await tablet.evaluate(() => JSON.parse(localStorage.getItem("chat-dh")).pub), pk);
+  assert.equal(await tablet.evaluate((c) => localStorage.getItem("chat-key:" + c), salon), await alice.evaluate((c) => localStorage.getItem("chat-key:" + c), salon));
+  // now the tablet reads her private messages, and opens the Salon she joined on her phone
+  await tablet.locator(`#resume .roomrow[data-code="${code}"]`).click();
+  await tablet.locator("#peopleBtn").click();
+  await sheet(tablet).locator(".st-mrow", { hasText: "Bob" }).locator("[data-dm]").click();
+  await bubble(tablet, "only for alice").waitFor();
+  await tablet.goto(`${base}/?emu&as=t&room=${salon}`);
+  await titleIs(tablet, "Secret");
+
+  // signing out on the tablet: a new anonymous id there, and nothing of the account's left on it
+  await tablet.goto(`${base}/?emu&as=t`); await tablet.locator("#createBtn").waitFor();
+  await accountSheet(tablet);
+  const out = tablet.waitForEvent("load");
+  await press(tablet, "out"); await press(tablet, "yes");
+  await out; await tablet.locator("#createBtn").waitFor();
+  assert.notEqual(await emuUid(tablet, "t"), aId);
+  assert.equal(await tablet.locator("#resume").isHidden(), true);
+  assert.equal(await tablet.evaluate(() => localStorage.getItem("chat-rooms") || localStorage.getItem("chat-dh") || localStorage.getItem("chat-account")), null);
+
+  // deleting the account on her phone: what it kept goes at once, and the phone starts over too
+  await alice.goto(`${base}/?emu&as=a`); await alice.locator("#createBtn").waitFor();
+  await accountSheet(alice);
+  const del = alice.waitForEvent("load");
+  await press(alice, "del"); await press(alice, "yes");
+  await del; await alice.locator("#createBtn").waitFor();
+  assert.equal(await dbGet(`users/${aId}`), null);
+  assert.equal(await dbGet("emu-accounts/alice@example_com"), null);
+  assert.notEqual(await emuUid(alice, "a"), aId);
+  noErrors();
+});
+
+test("Google account: the quiz library follows the host to another device, pictures and all, and a set deleted there goes here too", async () => {
+  const alice = await person("a");
+  await signInGoogle(alice, "alice@example.com");
+  const aId = await emuUid(alice, "a");
+  const { code } = await createRoom(alice, "Alice");
+  const ed = await writeQuiz(alice, "Synced", [{ t: "What colour is it?", o: ["Red", "Black"], right: 1, d: 10 }]);
+  await ed.locator(".qzeq .qzeimg input[type=file]").setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: PNG });
+  await ed.locator(".qzeq .qzeimg img[src^='data:image/jpeg']").waitFor();
+  await alice.keyboard.press("Escape");
+  await ed.waitFor({ state: "detached" });
+  // a moment later the set is in the account, its picture in R2 under the account's own folder
+  let id;
+  await until(async () => { const qz = await dbGet(`users/${aId}/qz`); id = Object.keys(qz || {})[0]; return qz?.[id]?.t === "Synced"; });
+  const kept = JSON.parse(await dbGet(`users/${aId}/qzs/${id}`));
+  assert.match(kept.q[0].img.f, /^[A-Za-z0-9_-]{22}$/);
+  assert.ok(!kept.q[0].img.d, "the picture's bytes aren't in the database");
+  assert.ok(photos.bucket.objects.has(`u/${aId}/${kept.q[0].img.f}.jpg`));
+
+  // her tablet: signed in, the set is in the library there, with its picture
+  const tablet = await person("t");
+  await signInGoogle(tablet, "alice@example.com", { switching: true });
+  await tablet.locator(`#resume .roomrow[data-code="${code}"]`).click();
+  await tablet.locator("#chat").waitFor();
+  await tablet.locator("#composer [data-a=more]").click();
+  await tablet.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(tablet).locator(".games p", { hasText: "kept in your Google account" }).waitFor();
+  await sheet(tablet).locator(".gmrow", { hasText: "Synced" }).click();
+  await press(tablet, "edit");
+  const ted = tablet.locator(".qzedit");
+  await ted.locator(".qzeq .qzeimg img[src^='data:image/jpeg']").waitFor();
+  assert.equal(await ted.locator(".qzeq textarea").inputValue(), "What colour is it?");
+  await tablet.keyboard.press("Escape");
+  await ted.waitFor({ state: "detached" });
+  // deleted on the tablet: a mark in the account, and gone from her first device's library when it next opens
+  await tablet.locator("#composer [data-a=more]").click();
+  await tablet.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(tablet).locator(".gmrow", { hasText: "Synced" }).click();
+  await press(tablet, "drop");
+  await press(tablet, "yes");
+  await until(async () => (await dbGet(`users/${aId}/qz/${id}`))?.gone === true);
+  assert.equal(await dbGet(`users/${aId}/qzs/${id}`), null);
+  await alice.locator("#composer [data-a=more]").click();
+  await alice.locator("#picker .morebtn", { hasText: "Quiz" }).click();
+  await sheet(alice).locator(".lbnone").waitFor();
+
+  // signing out on the tablet takes the library off it too
+  await tablet.goto(`${base}/?emu&as=t`); await tablet.locator("#createBtn").waitFor();
+  const before = await tablet.evaluate(() => new Promise((ok) => { const r = indexedDB.open("stoatalk", 1); r.onupgradeneeded = () => r.result.createObjectStore("quizzes", { keyPath: "id" }); r.onsuccess = () => { const tx = r.result.transaction("quizzes", "readwrite"); tx.objectStore("quizzes").put({ id: "zzzzzzzz1", at: 1, t: "left here", q: [] }); tx.oncomplete = () => { r.result.close(); ok(true); }; }; }));
+  assert.ok(before);
+  await accountSheet(tablet);
+  const out = tablet.waitForEvent("load");
+  await press(tablet, "out"); await press(tablet, "yes");
+  await out; await tablet.locator("#createBtn").waitFor();
+  const left = await tablet.evaluate(() => new Promise((ok) => { const r = indexedDB.open("stoatalk", 1); r.onsuccess = () => { const q = r.result.transaction("quizzes").objectStore("quizzes").count(); q.onsuccess = () => ok(q.result); }; }));
+  assert.equal(left, 0);
   noErrors();
 });
 

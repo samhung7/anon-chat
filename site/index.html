@@ -19,7 +19,7 @@
 <meta property="og:description" content="開房拿 4 碼，分享就能聊。不用註冊、不用加好友，聊完即刪。">
 <meta property="og:site_name" content="StoaTalk">
 <!-- link previews (LINE, Messenger, iMessage) need an absolute image URL; change it with the domain -->
-<meta property="og:image" content="https://stoatalk.app/icons/stoa2-share.png?v=dev">
+<meta property="og:image" content="https://stoatalk.app/icons/stoa4-share.png?v=dev">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
@@ -42,13 +42,15 @@
   {"@type": "WebApplication", "name": "StoaTalk", "url": "https://stoatalk.app/",
    "description": "免費線上匿名討論室：開房拿 4 碼，分享就能聊。不用註冊、不用加好友。適合講座問答、讀書會、工作坊。",
    "applicationCategory": "CommunicationApplication", "operatingSystem": "Any", "browserRequirements": "Requires JavaScript",
-   "inLanguage": ["zh-TW", "zh-CN", "en", "ja", "ko", "es", "fr", "de", "pt"], "image": "https://stoatalk.app/icons/stoa2-share.png",
+   "inLanguage": ["zh-TW", "zh-CN", "en", "ja", "ko", "es", "fr", "de", "pt"], "image": "https://stoatalk.app/icons/stoa4-share.png",
    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}
 ]}
 </script>
 <link rel="manifest" href="manifest.webmanifest?v=dev">
-<link rel="icon" href="icons/stoa2-192.png?v=dev">
-<link rel="apple-touch-icon" href="icons/stoa2-touch-180.png?v=dev">
+<link rel="icon" href="icons/favicon.svg?v=dev" type="image/svg+xml">
+<link rel="icon" href="icons/stoa3-32.png?v=dev" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/stoa3-touch-180.png?v=dev">
+<link rel="preload" href="fonts/cormorant-garamond-700.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/app.css?v=dev">
 <!-- the app's modules and the database SDK, fetched all at once instead of one import at a time, and the database's
      address (js/config.js) and sign-in reached early: together they are most of the wait before a room's link opens -->
@@ -60,6 +62,7 @@
 <link rel="modulepreload" href="js/app/archive.js?v=dev">
 <link rel="modulepreload" href="js/app/backend.js?v=dev">
 <link rel="modulepreload" href="js/app/blocking.js?v=dev">
+<link rel="modulepreload" href="js/app/boards.js?v=dev">
 <link rel="modulepreload" href="js/app/chat.js?v=dev">
 <link rel="modulepreload" href="js/app/clean.js?v=dev">
 <link rel="modulepreload" href="js/app/composer.js?v=dev">
@@ -67,7 +70,10 @@
 <link rel="modulepreload" href="js/app/crypto.js?v=dev">
 <link rel="modulepreload" href="js/app/dom.js?v=dev">
 <link rel="modulepreload" href="js/app/draws.js?v=dev">
+<link rel="modulepreload" href="js/app/emoji.js?v=dev">
 <link rel="modulepreload" href="js/app/expiry.js?v=dev">
+<link rel="modulepreload" href="js/app/games.js?v=dev">
+<link rel="modulepreload" href="js/app/account.js?v=dev">
 <link rel="modulepreload" href="js/app/home.js?v=dev">
 <link rel="modulepreload" href="js/app/identity.js?v=dev">
 <link rel="modulepreload" href="js/app/kinds.js?v=dev">
@@ -78,14 +84,26 @@
 <link rel="modulepreload" href="js/app/people.js?v=dev">
 <link rel="modulepreload" href="js/app/photos.js?v=dev">
 <link rel="modulepreload" href="js/app/push.js?v=dev">
+<link rel="modulepreload" href="js/app/puzzles.js?v=dev">
 <link rel="modulepreload" href="js/app/pickers.js?v=dev">
 <link rel="modulepreload" href="js/app/polls.js?v=dev">
+<link rel="modulepreload" href="js/app/posts.js?v=dev">
+<link rel="modulepreload" href="js/app/comments.js?v=dev">
 <link rel="modulepreload" href="js/app/qa.js?v=dev">
+<link rel="modulepreload" href="js/app/quick.js?v=dev">
+<link rel="modulepreload" href="js/app/quiz.js?v=dev">
+<link rel="modulepreload" href="js/app/quizedit.js?v=dev">
+<link rel="modulepreload" href="js/app/quizlib.js?v=dev">
+<link rel="modulepreload" href="js/app/pairing.js?v=dev">
+<link rel="modulepreload" href="js/app/quizset.js?v=dev">
 <link rel="modulepreload" href="js/app/records.js?v=dev">
 <link rel="modulepreload" href="js/app/richtext.js?v=dev">
 <link rel="modulepreload" href="js/app/room.js?v=dev">
+<link rel="modulepreload" href="js/app/scan.js?v=dev">
 <link rel="modulepreload" href="js/app/session.js?v=dev">
 <link rel="modulepreload" href="js/app/show.js?v=dev">
+<link rel="modulepreload" href="js/app/sticky.js?v=dev">
+<link rel="modulepreload" href="js/app/stickyset.js?v=dev">
 <link rel="modulepreload" href="js/app/storage.js?v=dev">
 <link rel="modulepreload" href="js/app/text.js?v=dev">
 <link rel="modulepreload" href="js/vendor/firebase.js">
@@ -95,7 +113,7 @@
 <body>
 <!-- while the page gets ready (a room's link connecting, a translation loading) this shows instead of a blank page -->
 <div id="splash" class="splash" aria-hidden="true">
-  <img src="icons/mark.svg" alt="">
+  <svg class="mark" viewBox="0 0 68 64" aria-hidden="true"><path class="top" d="M3 0H65A3 3 0 0 1 68 3V8A3 3 0 0 1 65 11H3A3 3 0 0 1 0 8V3A3 3 0 0 1 3 0Z"/><path d="M8 17H16A2 2 0 0 1 18 19V49A2 2 0 0 1 16 51H8A2 2 0 0 1 6 49V19A2 2 0 0 1 8 17ZM30 17H38A2 2 0 0 1 40 19V49A2 2 0 0 1 38 51H30A2 2 0 0 1 28 49V19A2 2 0 0 1 30 17ZM52 17H60A2 2 0 0 1 62 19V49A2 2 0 0 1 60 51H52A2 2 0 0 1 50 49V19A2 2 0 0 1 52 17ZM3 56H65A3 3 0 0 1 68 59V61A3 3 0 0 1 65 64H3A3 3 0 0 1 0 61V59A3 3 0 0 1 3 56Z"/></svg>
   <b>StoaTalk</b>
   <i class="spin"></i>
   <p data-i18n="connecting">連線中…</p>
@@ -104,103 +122,117 @@
 <!-- ---------- home ---------- -->
 <main id="home" class="home">
   <header class="brand">
-    <button id="logoBtn" class="logo" type="button" aria-label="開新聊天室" title="開新聊天室" data-i18n-attr="aria-label:newRoom;title:newRoom"><img src="icons/mark.svg" alt=""></button>
-    <div>
+    <div class="row">
+      <button id="logoBtn" class="logo" type="button" aria-label="開新聊天室" title="開新聊天室" data-i18n-attr="aria-label:newRoom;title:newRoom"><svg class="mark" viewBox="0 0 68 64" aria-hidden="true"><path class="top" d="M3 0H65A3 3 0 0 1 68 3V8A3 3 0 0 1 65 11H3A3 3 0 0 1 0 8V3A3 3 0 0 1 3 0Z"/><path d="M8 17H16A2 2 0 0 1 18 19V49A2 2 0 0 1 16 51H8A2 2 0 0 1 6 49V19A2 2 0 0 1 8 17ZM30 17H38A2 2 0 0 1 40 19V49A2 2 0 0 1 38 51H30A2 2 0 0 1 28 49V19A2 2 0 0 1 30 17ZM52 17H60A2 2 0 0 1 62 19V49A2 2 0 0 1 60 51H52A2 2 0 0 1 50 49V19A2 2 0 0 1 52 17ZM3 56H65A3 3 0 0 1 68 59V61A3 3 0 0 1 65 64H3A3 3 0 0 1 0 61V59A3 3 0 0 1 3 56Z"/></svg></button>
       <h1>StoaTalk</h1>
-      <p class="tag" data-i18n="tagline">不用加好友，開了就聊，聊完就刪</p>
+      <button id="meBtn" class="me" type="button" aria-label="選單：身分、聊天記錄和語言" data-i18n-attr="aria-label:menuAria"><span class="av"></span><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-menu"></use></svg></button>
     </div>
-    <button id="meBtn" class="me" type="button" aria-label="選單：身分、聊天記錄和語言" data-i18n-attr="aria-label:menuAria"><span class="av"></span><span class="burger" aria-hidden="true">☰</span></button>
   </header>
+  <p class="tag" data-i18n="tagline">不用加好友，開了就聊，聊完就刪</p>
 
   <p id="setupNote" class="note warn" hidden data-i18n="setupNote">這個網站還沒有連上資料庫，請在 js/config.js 填入 Firebase 設定。</p>
+
+  <!-- joining and opening a room: one card, two sections; opening is the screen's one primary button -->
+  <section class="card split">
+    <div class="sec">
+      <h2 data-i18n="joinRoom">加入聊天室</h2>
+      <form id="joinForm" class="joinrow" autocomplete="off">
+        <div class="codebox">
+          <input id="joinCode" class="codein" maxlength="4" placeholder="輸入 4 碼" aria-label="聊天室代碼" data-i18n-attr="placeholder:codePh;aria-label:codeAria" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+          <button id="scanBtn" class="scanin" type="button" aria-label="掃描 QR Code" title="掃描 QR Code" data-i18n-attr="aria-label:scanAria;title:scanAria"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-qr"></use></svg></button>
+        </div>
+        <button class="btn" type="submit" data-i18n="join">加入</button>
+      </form>
+    </div>
+    <div class="sec">
+      <h2 data-i18n="newRoomH">開一個新聊天室</h2>
+      <p class="hint" data-i18n="newRoomHint">開好之後把 4 碼或連結傳給大家就可以開始聊。</p>
+      <button id="createBtn" class="btn primary wide" type="button" data-i18n="newRoom">開新聊天室</button>
+    </div>
+  </section>
 
   <section id="resume" class="card resume" hidden>
     <h2 data-i18n="stillIn">你還在聊天室</h2>
     <ul class="roomlist"></ul>
     <div class="pager" hidden>
-      <button class="btn small" type="button" data-a="prev" data-i18n="prevPage">‹ 上一頁</button>
+      <button class="btn small" type="button" data-a="prev"><svg class="st-i sm" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-back"></use></svg><span data-i18n="prevPage">上一頁</span></button>
       <span class="pg"></span>
-      <button class="btn small" type="button" data-a="next" data-i18n="nextPage">下一頁 ›</button>
+      <button class="btn small" type="button" data-a="next"><span data-i18n="nextPage">下一頁</span><svg class="st-i sm" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-forward"></use></svg></button>
     </div>
-  </section>
-
-  <section class="card">
-    <h2 data-i18n="joinRoom">加入聊天室</h2>
-    <form id="joinForm" class="joinrow" autocomplete="off">
-      <input id="joinCode" class="codein" maxlength="4" placeholder="輸入 4 碼" aria-label="聊天室代碼" data-i18n-attr="placeholder:codePh;aria-label:codeAria" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
-      <button class="btn primary" type="submit" data-i18n="join">加入</button>
-    </form>
-  </section>
-
-  <section class="card">
-    <h2 data-i18n="newRoomH">開一個新聊天室</h2>
-    <p class="muted" data-i18n="newRoomHint">開好之後把 4 碼或連結傳給大家就可以開始聊。</p>
-    <button id="createBtn" class="btn primary wide" type="button" data-i18n="newRoom">開新聊天室</button>
   </section>
 
   <input id="importFile" type="file" accept=".json,.html,.htm,application/json,text/html" hidden>
 
-  <section class="features">
-    <div><b data-i18n="f1t">🙈 不用註冊</b><span data-i18n="f1">取個暱稱、選個動物就好，不需要 LINE、FB 或 IG。</span></div>
-    <div><b data-i18n="f2t">🔢 4 碼加入</b><span data-i18n="f2">代碼或連結都能進，也能投影 QR Code。</span></div>
-    <div><b data-i18n="f3t">🗑️ 聊完即刪</b><span data-i18n="f3">房主結束就刪光；沒人說話 24 小時轉為唯讀，再過 24 小時自動刪除。</span></div>
-    <div><b data-i18n="f4t">💾 可以匯出</b><span data-i18n="f4">想留的人自己下載成文字檔或網頁檔。</span></div>
-    <div class="wide"><b data-i18n="f5t">🔐 端對端加密</b><span data-i18n="f5">私訊一律加密；私人沙龍連伺服器都看不到聊天內容。</span></div>
-  </section>
-  <p class="muted small center" data-i18n="useFor">適合講座問答、讀書會、工作坊和團隊專案。</p>
-  <p class="legal small center"><a href="legal.html#terms" data-i18n="terms">服務條款</a> · <a href="legal.html#privacy" data-i18n="privacy">隱私權政策</a> · <a href="mailto:hello@stoatalk.app" data-i18n="contact">聯絡我們</a></p>
+  <ul class="features">
+    <li><span class="fi"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-anonymous"></use></svg></span><span class="ft"><b data-i18n="f1t">不用註冊</b><span data-i18n="f1">取個暱稱、選個動物就好，不需要 LINE、FB 或 IG。</span></span></li>
+    <li><span class="fi"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-code"></use></svg></span><span class="ft"><b data-i18n="f2t">4 碼加入</b><span data-i18n="f2">代碼或連結都能進，也能投影 QR Code。</span></span></li>
+    <li><span class="fi"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-delete"></use></svg></span><span class="ft"><b data-i18n="f3t">聊完即刪</b><span data-i18n="f3">房主結束就刪光；沒人說話 24 小時轉為唯讀，再過 24 小時自動刪除。</span></span></li>
+    <li><span class="fi"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-download"></use></svg></span><span class="ft"><b data-i18n="f4t">可以匯出</b><span data-i18n="f4">想留的人自己下載成文字檔或網頁檔。</span></span></li>
+    <li class="enc"><span class="fi"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-salon"></use></svg></span><span class="ft"><b data-i18n="f5t">端對端加密</b><span data-i18n="f5">私訊一律加密；私人沙龍連伺服器都看不到聊天內容。</span></span></li>
+  </ul>
+  <footer class="foot">
+    <p data-i18n="useFor">適合講座問答、讀書會、工作坊和團隊專案。</p>
+    <nav class="legal"><a href="legal.html#terms" data-i18n="terms">服務條款</a><span aria-hidden="true">·</span><a href="legal.html#privacy" data-i18n="privacy">隱私權政策</a><span aria-hidden="true">·</span><a href="mailto:hello@stoatalk.app" data-i18n="contact">聯絡我們</a></nav>
+  </footer>
 </main>
 
 <!-- ---------- chat ---------- -->
 <main id="chat" class="chat" hidden>
+  <div class="chattop">
   <header class="bar">
-    <button class="icon" type="button" data-a="home" aria-label="回首頁" data-i18n-attr="aria-label:backHome">‹</button>
+    <button class="icon" type="button" data-a="home" aria-label="回首頁" data-i18n-attr="aria-label:backHome"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-back"></use></svg></button>
     <div class="ttl">
       <b id="roomTitle"></b>
-      <button id="codeBtn" class="codechip" type="button" aria-label="分享聊天室" data-i18n-attr="aria-label:shareRoom"></button>
+      <span class="row"><button id="codeBtn" class="codechip" type="button" aria-label="分享聊天室" data-i18n-attr="aria-label:shareRoom"></button><span class="enc" hidden><svg class="st-i sm" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-secure"></use></svg><span data-i18n="e2ee">端對端加密</span></span></span>
     </div>
-    <button id="peopleBtn" class="icon people" type="button" aria-label="成員" data-i18n-attr="aria-label:members"><span>👥</span><span class="n"></span><i class="dot" hidden></i></button>
-    <button class="icon" type="button" data-a="menu" aria-label="更多" data-i18n-attr="aria-label:more">⋯<i class="dot" hidden></i></button>
+    <button id="peopleBtn" class="icon people" type="button" aria-label="成員" data-i18n-attr="aria-label:members"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-people"></use></svg><span class="n"></span><i class="dot" hidden></i></button>
+    <button class="icon" type="button" data-a="menu" aria-label="更多" data-i18n-attr="aria-label:more"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-more"></use></svg><i class="dot" hidden></i></button>
   </header>
   <div id="desc" class="desc" hidden></div>
   <div id="ageBar" class="agebar" role="status" hidden></div>
   <div id="tabs" class="tabs qtabs" role="tablist" hidden>
-    <button class="tab" type="button" role="tab" data-a="all" data-i18n="chatTab">💬 聊天</button>
-    <button class="tab" type="button" role="tab" data-a="qa"><span data-i18n="qaTabIcon">❓ 提問</span><span class="n"></span><i class="dot" hidden></i></button>
+    <button class="tab" type="button" role="tab" data-a="all"><svg class="st-i sm" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-chat"></use></svg><span data-i18n="chatTab">聊天</span></button>
+    <button class="tab" type="button" role="tab" data-a="qa"><svg class="st-i sm" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-qa"></use></svg><span data-i18n="qaTabIcon">提問</span><span class="n"></span><i class="dot" hidden></i></button>
   </div>
   <div id="dmBar" class="dmbar" hidden>
-    <button class="link" type="button" data-a="all" data-i18n="backAll">‹ 回到大家</button>
+    <button class="link" type="button" data-a="all"><svg class="st-i sm" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-back"></use></svg><span data-i18n="backAll">回到大家</span></button>
     <span class="dmwho"></span>
   </div>
   <div id="pins" class="pins" hidden></div>
   <div id="notifyBar" class="dmbar" hidden>
-    <span data-i18n="notifyAsk">🔔 有新訊息時要通知你嗎？之後可以在「⋯」裡關掉。</span>
+    <svg class="st-i sm" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-bell"></use></svg><span data-i18n="notifyAsk">有新訊息時要通知你嗎？之後可以在「⋯」裡關掉。</span>
     <button class="link" type="button" data-a="notifyYes" data-i18n="notifyYes">開啟通知</button>
     <button class="link" type="button" data-a="notifyNo" data-i18n="notifyNo">不用</button>
   </div>
+  </div>
   <div class="listwrap">
     <div id="list" class="list" aria-live="polite"></div>
-    <div id="typingBar" class="typingbar" hidden></div>
-    <button id="jumpBtn" class="jump" type="button" aria-label="回到最新的訊息" data-i18n-attr="aria-label:jumpAria" hidden>↓</button>
   </div>
+  <div class="chatfoot">
+  <div id="typingBar" class="typingbar" hidden></div>
+  <button id="jumpBtn" class="jump" type="button" aria-label="回到最新的訊息" data-i18n-attr="aria-label:jumpAria" hidden><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-jump"></use></svg><span class="jn"></span></button>
   <div id="replyBar" class="replybar" hidden>
     <span class="rtxt"></span>
-    <button class="icon small" type="button" data-a="noreply" aria-label="取消回覆" data-i18n-attr="aria-label:cancelReply">✕</button>
+    <button class="icon small" type="button" data-a="noreply" aria-label="取消回覆" data-i18n-attr="aria-label:cancelReply"><svg class="st-i sm" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-close"></use></svg></button>
   </div>
   <div id="mentionBar" class="mentionbar" hidden></div>
+  <div id="quickBar" class="mentionbar quickbar" role="toolbar" aria-label="快速回覆" data-i18n-attr="aria-label:quickAria" hidden></div>
   <div id="askBar" class="askbar" hidden>
-    <label><input type="checkbox" id="askAnon" checked> <span data-i18n="askAnon">匿名提問</span></label>
+    <label><input type="checkbox" id="askAnon" checked><span data-i18n="askAnon">匿名提問</span></label>
     <small data-i18n="askAnonHint">不顯示暱稱，主持人也看不到是誰問的</small>
   </div>
   <div id="picker" class="picker" hidden></div>
   <form id="composer" class="composer" autocomplete="off">
-    <button class="tool" type="button" data-a="more" aria-label="照片、投票、抽籤" data-i18n-attr="aria-label:moreAria" aria-pressed="false">＋</button>
-    <textarea id="text" rows="1" maxlength="1000" placeholder="說點什麼…" aria-label="訊息" data-i18n-attr="placeholder:textPh;aria-label:msgAria"></textarea>
-    <button class="tool" type="button" data-a="emoji" aria-label="表情符號" data-i18n-attr="aria-label:emojiAria" aria-pressed="false">😊</button>
-    <button class="tool giftool" type="button" data-a="gif" aria-label="GIF" aria-pressed="false">GIF</button>
-    <button class="send" type="submit" aria-label="送出" data-i18n-attr="aria-label:sendAria">➤</button>
+    <button class="tool" type="button" data-a="more" aria-label="照片、投票、抽籤、小遊戲" data-i18n-attr="aria-label:moreAria" aria-pressed="false"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-plus"></use></svg></button>
+    <div class="textbox">
+      <textarea id="text" rows="1" maxlength="1000" placeholder="說點什麼…" aria-label="訊息" data-i18n-attr="placeholder:textPh;aria-label:msgAria"></textarea>
+      <button class="tool inbox" type="button" data-a="emoji" aria-label="表情符號" data-i18n-attr="aria-label:emojiAria" aria-pressed="false"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-emoji"></use></svg></button>
+    </div>
+    <button class="tool" type="button" data-a="gif" aria-label="GIF" aria-pressed="false"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-gif"></use></svg></button>
+    <button class="send" type="submit" aria-label="送出" data-i18n-attr="aria-label:sendAria"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-send"></use></svg></button>
   </form>
   <div id="roBox" class="robox" role="status" hidden></div>
+  </div>
   <input id="photoFile" type="file" accept="image/*" multiple hidden>
 </main>
 
@@ -216,19 +248,19 @@
     <p class="sppl"></p>
     <div class="spoll"></div>
   </aside>
-  <button class="icon sexit" type="button" data-a="exitShow" aria-label="離開投影畫面" data-i18n-attr="aria-label:showExit">✕</button>
+  <button class="icon sexit" type="button" data-a="exitShow" aria-label="離開投影畫面" data-i18n-attr="aria-label:showExit"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-close"></use></svg></button>
 </main>
 
 <!-- ---------- a saved record, read-only ---------- -->
 <main id="record" class="chat" hidden>
   <header class="bar">
-    <button class="icon" type="button" data-a="home" aria-label="回首頁" data-i18n-attr="aria-label:backHome">‹</button>
+    <button class="icon" type="button" data-a="home" aria-label="回首頁" data-i18n-attr="aria-label:backHome"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-back"></use></svg></button>
     <div class="ttl"><b id="recTitle"></b><small id="recSub" class="muted"></small></div>
-    <button class="icon" type="button" data-a="menu" aria-label="更多" data-i18n-attr="aria-label:more">⋯</button>
+    <button class="icon" type="button" data-a="menu" aria-label="更多" data-i18n-attr="aria-label:more"><svg class="st-i" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-more"></use></svg></button>
   </header>
   <div id="recTabs" class="tabs" role="tablist"></div>
   <div id="recList" class="list"></div>
-  <p class="rofoot" data-i18n="roFoot">📁 這是保存下來的聊天記錄，只能閱讀</p>
+  <p class="rofoot"><svg class="st-i sm" aria-hidden="true"><use href="icons/icons.svg?v=dev#i-records"></use></svg><span data-i18n="roFoot">這是保存下來的聊天記錄，只能閱讀</span></p>
 </main>
 
 <div id="toasts" class="toasts" aria-live="polite"></div>

@@ -7,10 +7,11 @@
 <title>StoaTalk｜服務條款與隱私權政策 Terms and Privacy</title>
 <meta name="description" content="StoaTalk 服務條款與隱私權政策。Terms of service and privacy policy of StoaTalk.">
 <link rel="canonical" href="https://stoatalk.app/legal.html">
-<link rel="icon" href="icons/stoa2-192.png">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
 <!-- Traditional Chinese and English; other interface languages read the English. Shown by the language chosen in
      the app (localStorage chat-lang) or the device's, and both without JavaScript. -->
 <style>
+@font-face { font-family: "Cormorant Garamond"; font-weight: 700; font-display: swap; src: url(/fonts/cormorant-garamond-700.woff2) format("woff2"); }
 :root { --bg: #f4efe6; --surface: #fbfaf8; --line: #e4dccc; --text: #3a3128; --muted: #857a6b; --accent: #d9cdb6; --ink: #7d6b52; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1b1916; --surface: #25221e; --line: #3e3a33; --text: #f4efe6; --muted: #b3aa9b; --accent: #e7decd; --ink: #e7decd; } }
 :root[data-theme="dark"] { --bg: #1b1916; --surface: #25221e; --line: #3e3a33; --text: #f4efe6; --muted: #b3aa9b; --accent: #e7decd; --ink: #e7decd; }
@@ -18,7 +19,7 @@
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.7 system-ui, -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; }
 main { max-width: 720px; margin: 0 auto; padding: 20px 16px 48px; }
 header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-header a.home { color: var(--ink); font-weight: 700; text-decoration: none; font-size: 18px; }
+header a.home { color: var(--ink); text-decoration: none; font: 700 24px/1.2 "Cormorant Garamond", Garamond, serif; }
 nav.langs { margin-left: auto; display: flex; gap: 6px; }
 nav.langs button { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 14px; cursor: pointer; }
 nav.langs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #3a3128; }
@@ -45,15 +46,17 @@ a { color: var(--ink); }
 
   <article lang="zh-Hant" data-lang="zh">
     <h1>服務條款與隱私權政策</h1>
-    <p class="muted">最後更新：2026 年 10 月 18 日</p>
-    <p class="toc"><a href="#terms">服務條款</a> · <a href="#privacy">隱私權政策</a> · <a href="#contact">聯絡我們</a></p>
+    <p class="muted">最後更新：2026 年 10 月 23 日</p>
+    <p class="toc"><a href="#terms">服務條款</a> · <a href="#privacy">隱私權政策</a> · <a href="#account">Google 帳號</a> · <a href="#contact">聯絡我們</a></p>
 
     <h2 id="terms">服務條款</h2>
     <h3>1. StoaTalk 是什麼</h3>
-    <p>StoaTalk（stoatalk.app）是免註冊的線上討論室。任何人都可以開一個聊天室，把 4 碼或連結分享給其他人一起討論。聊天室結束後內容會刪除。使用本服務即表示你同意這份條款。</p>
+    <p>StoaTalk（stoatalk.app）是免註冊的線上討論室：參加的人不需要任何帳號。任何人都可以開一個聊天室，把 4 碼或連結分享給其他人一起討論。聊天室結束後內容會刪除。主持人或想在不同裝置使用同一個身分的人，可以選擇用 Google 帳號登入。使用本服務即表示你同意這份條款。</p>
     <h3>2. 誰可以使用</h3>
     <p>你必須年滿 13 歲，或達到你所在地區使用線上服務的法定年齡。未成年人請在家長或監護人同意下使用。</p>
-    <h3>3. 你不能做的事</h3>
+    <h3>3. Google 帳號（選用）</h3>
+    <p>登入只是讓你在電腦、平板、手機上使用同一個匿名身分，不登入也能使用所有功能。你要自己保管 Google 帳號的安全，用你的帳號在 StoaTalk 做的事由你負責。帳號被停權時，所有登入這個帳號的裝置都一樣被停權。你可以隨時登出或刪除帳號。我們怎麼處理帳號資料，見隱私權政策的「<a href="#account">Google 帳號（選用）</a>」。</p>
+    <h3>4. 你不能做的事</h3>
     <ul>
       <li>騷擾、霸凌、威脅或恐嚇他人，或散布仇恨言論。</li>
       <li>張貼色情內容，或任何涉及未成年人的性內容。</li>
@@ -62,52 +65,63 @@ a { color: var(--ink); }
       <li>侵害他人的著作權、商標、隱私或其他權利。</li>
       <li>任何違反你所在地或台灣法律的行為。</li>
     </ul>
-    <h3>4. 內容與責任</h3>
+    <h3>5. 內容與責任</h3>
     <p>你對自己傳送的文字、照片、投票和其他內容負責。我們不會事先審查內容。房主和副房主可以移除聊天室裡的訊息和成員，每位使用者也可以在自己的裝置上封鎖別人，或把訊息檢舉給房主。</p>
     <p>私人沙龍和私訊有端對端加密，我們無法讀取內容。公開議廊的內容以一般方式存在伺服器上。</p>
-    <h3>5. 檢舉違法或有害內容</h3>
-    <p>聊天室裡的檢舉會交給房主和副房主，同時也會送給 StoaTalk 營運方。我們會在 24 小時內審查，並依情況刪除訊息、結束聊天室，或停權違規的裝置（被停權的裝置無法開房、加入或發言）。如果遇到違法內容、房主不處理的情況，或任何需要我們介入的問題，請寫信到 <a href="mailto:hello@stoatalk.app">hello@stoatalk.app</a>，附上聊天室代碼和情況說明。我們可能會刪除聊天室，或限制違規者使用本服務；法律要求時，我們也會配合主管機關。</p>
-    <h3>6. 內容什麼時候刪除</h3>
+    <h3>6. 檢舉違法或有害內容</h3>
+    <p>聊天室裡的檢舉會交給房主和副房主，同時也會送給 StoaTalk 營運方。我們會在 24 小時內審查，並依情況刪除訊息、結束聊天室，或停權違規的裝置或 Google 帳號（被停權的無法開房、加入或發言）。如果遇到違法內容、房主不處理的情況，或任何需要我們介入的問題，請寫信到 <a href="mailto:hello@stoatalk.app">hello@stoatalk.app</a>，附上聊天室代碼和情況說明。我們可能會刪除聊天室，或限制違規者使用本服務；法律要求時，我們也會配合主管機關。</p>
+    <h3>7. 內容什麼時候刪除</h3>
     <ul>
       <li>房主按「結束並刪除聊天室」時，所有訊息、照片和私訊立即刪除。照片的網路快取副本最多再保留 1 小時。</li>
       <li>聊天室超過 24 小時沒有新訊息，會轉為唯讀（成員仍可閱讀和存檔，但不能再發言），再過 24 小時自動刪除。</li>
       <li>你匯出或存到裝置上的記錄由你自己保管，我們無法刪除，也不負責。</li>
     </ul>
-    <h3>7. 服務現況與責任限制</h3>
-    <p>本服務依現狀提供，可能因維護、網路或第三方服務的問題而中斷。聊天室內容本來就是暫時的，請不要用 StoaTalk 保存重要資料。在法律允許的範圍內，我們不對使用本服務造成的間接損失負責。</p>
-    <h3>8. 條款的變更</h3>
+    <h3>8. 服務現況與責任限制</h3>
+    <p>本服務依現狀提供，可能因維護、網路或第三方服務的問題而中斷。聊天室內容本來就是暫時的，請不要用 StoaTalk 保存重要資料；用 Google 登入同步的是你的聊天室清單和身分，不會延長聊天室的保存時間。在法律允許的範圍內，我們不對使用本服務造成的間接損失負責。</p>
+    <h3>9. 條款的變更</h3>
     <p>我們可能會更新這份條款，更新後會修改本頁上方的日期。重大變更會在網站上提醒。</p>
 
     <h2 id="privacy">隱私權政策</h2>
-    <h3>1. 我們不需要知道你是誰</h3>
-    <p>StoaTalk 不需要註冊，不會要求你的姓名、電話或 Email。你在聊天室裡只用自己取的暱稱和動物頭像。</p>
+    <h3>1. 不登入時，我們不知道你是誰</h3>
+    <p>StoaTalk 不需要註冊，不會要求你的姓名、電話或 Email。你在聊天室裡只用自己取的暱稱和動物頭像。你也可以選擇用 Google 帳號登入，這時我們會收到少量的帳號資料，見下方「<a href="#account">Google 帳號（選用）</a>」。</p>
     <h3>2. 伺服器上存了什麼</h3>
     <ul>
-      <li>一組匿名的帳號 ID，由 Google Firebase 的匿名登入產生，用來辨認同一台裝置。</li>
+      <li>一組匿名的帳號 ID，由 Google Firebase 的匿名登入產生，用來辨認同一台裝置；用 Google 登入時，用來辨認同一個帳號，並且能對應到你的 Google 帳號。</li>
       <li>你在聊天室裡的暱稱、頭像、加入時間、是否在線上，以及正在輸入的短暫狀態。</li>
       <li>你傳的訊息、照片、投票、抽籤和表情回應。照片在上傳前會在你的裝置上壓縮，並移除拍攝地點等 EXIF 資料。</li>
       <li>檢舉紀錄：被檢舉的訊息、原因和檢舉人的匿名 ID（房主和副房主看不到是誰檢舉的）。檢舉同時會送一份給 StoaTalk 營運方，內容包含被檢舉訊息的文字和發言者的暱稱與匿名 ID；在私人沙龍裡，這份內容是由檢舉人的裝置解密後送出的，只有被檢舉的那一則。</li>
-      <li>停權紀錄：被營運方停權的裝置的匿名 ID、時間和原因。</li>
-      <li>推播訂閱：如果你開啟通知，瀏覽器提供的推播位址會加密後存在你所在的聊天室，只有我們的推播服務能解開，用來在你沒開著頁面時通知你有新訊息。公開議廊的推播會帶發言者暱稱和訊息開頭；私人沙龍和私訊的推播只說「有新訊息」，不含內容。關閉通知、離開聊天室或聊天室刪除時，訂閱也會刪除。</li>
+      <li>停權紀錄：被營運方停權的裝置或帳號的匿名 ID、時間和原因。</li>
+      <li>推播訂閱：如果你開啟通知，瀏覽器提供的推播位址會加密後存在你所在的聊天室（登入 Google 時每台裝置各一筆），只有我們的推播服務能解開，用來在你沒開著頁面時通知你有新訊息。公開議廊的推播會帶發言者暱稱和訊息開頭；私人沙龍和私訊的推播只說「有新訊息」，不含內容。關閉通知、離開聊天室或聊天室刪除時，訂閱也會刪除。</li>
       <li>講座提問：問題內容、按讚的人，以及你選擇具名時的暱稱。提問者的匿名 ID 另外存放，只有提問者自己讀得到，房主和副房主也看不到匿名提問是誰問的。</li>
     </ul>
     <p>私人沙龍的名稱、暱稱、訊息和照片，以及所有私訊，都在你的裝置上加密後才上傳，伺服器只存密文，我們無法讀取。</p>
+    <h3 id="account">Google 帳號（選用）</h3>
+    <p>只有你主動選擇用 Google 登入時，才會有下面這些資料。依個人資料保護法，我們告知你：</p>
+    <ul>
+      <li><b>誰蒐集</b>：StoaTalk 營運方，聯絡方式見本頁最下方。</li>
+      <li><b>目的</b>：讓你在不同裝置用同一個匿名身分登入，以及處理檢舉、停權等維護服務安全的事。</li>
+      <li><b>哪些資料</b>：Google 提供的 Email、名稱、大頭貼和 Google 帳號 ID，存在 Google Firebase Authentication。你的帳號另外保存你所在的聊天室清單（代碼和最後進入的時間）、私訊用的公開金鑰，以及你的競答題目集（題目和圖片；圖片存放在 Cloudflare R2）。</li>
+      <li><b>誰看得到</b>：聊天室裡的其他人，包括房主和副房主，都只看得到你的暱稱和頭像，看不到你的 Google 帳號。只有營運方能把你的匿名 ID 對到 Google 帳號，而且只在處理檢舉、停權或法律要求時這麼做。</li>
+      <li><b>不會上傳的</b>：私人沙龍的金鑰和私訊的私密金鑰不會離開你的裝置，所以登入後我們仍然無法讀取私人沙龍和私訊的內容。配對新裝置時，這些金鑰會先加密成只有那台裝置打得開的密文，經過我們的伺服器傳過去，傳完就刪除。競答題目集不是端對端加密的：只有你的帳號能讀取，但技術上營運方看得到，即使你在私人沙龍裡使用它。</li>
+      <li><b>存多久</b>：存到你刪除帳號為止。刪除帳號時，帳號和上述雲端資料立即刪除（題目集的圖片在一天內清除）；你在聊天室裡傳過的訊息照一般規則，留到聊天室刪除為止。例外：被停權的帳號，我們會從停權起保留 1 年一個無法反推出 Email 或 Google 帳號 ID 的代碼，只用來防止刪除帳號再登入繞過停權；送給營運方的檢舉照下方規則最多保留 90 天。</li>
+      <li><b>你的權利</b>：你可以隨時在選單裡登出或刪除帳號，也可以寫信要求查詢、複製、更正、停止使用或刪除你的資料。不登入不影響你使用 StoaTalk 的任何功能。</li>
+    </ul>
     <h3>3. 存多久</h3>
-    <p>聊天室結束，或閒置 24 小時轉為唯讀、再過 24 小時後，伺服器上的內容會全部刪除，包含聊天室裡的檢舉紀錄、提問和推播訂閱。你刪除自己的訊息時也會立刻刪除。送給營運方的檢舉在處理後刪除，最多保留 90 天；停權紀錄保留到解除停權為止。</p>
+    <p>聊天室結束，或閒置 24 小時轉為唯讀、再過 24 小時後，伺服器上的內容會全部刪除，包含聊天室裡的檢舉紀錄、提問和推播訂閱。你刪除自己的訊息時也會立刻刪除。送給營運方的檢舉在處理後刪除，最多保留 90 天；停權紀錄保留到解除停權為止。Google 帳號的資料見上方「<a href="#account">Google 帳號（選用）</a>」。</p>
     <h3>使用統計</h3>
     <p>為了了解服務的使用情形，我們會記錄每天的總數，例如開了幾間聊天室、送出幾則訊息、提了幾個問題。這些只是每日加總的數字，不包含任何內容、暱稱、帳號 ID 或聊天室代碼，也無法對應到任何人。</p>
     <h3>4. 存在你裝置上的資料</h3>
-    <p>瀏覽器的本機儲存空間會保存：你的暱稱和頭像、你在的聊天室清單、私人沙龍的金鑰、私訊用的金鑰、讀到哪裡、你封鎖的人、語言和外觀設定，以及你存下來的聊天記錄。這些資料不會上傳，清除瀏覽器資料就會刪除。</p>
+    <p>瀏覽器的本機儲存空間會保存：你的暱稱和頭像、你在的聊天室清單、私人沙龍的金鑰、私訊用的金鑰、讀到哪裡、你封鎖的人、語言和外觀設定、競答題目集，以及你存下來的聊天記錄。這些資料不會上傳（登入 Google 時，聊天室清單和競答題目集會同步到你的帳號），清除瀏覽器資料就會刪除。登出或刪除帳號時，這台裝置上屬於帳號的資料（聊天室清單、金鑰、讀到哪裡、封鎖名單、競答題目集）會一併清除，存下來的聊天記錄則保留。</p>
     <h3>5. 我們使用的第三方服務</h3>
     <ul>
-      <li><b>Google Firebase</b>：資料庫和匿名登入。</li>
-      <li><b>Cloudflare</b>：網站由 Cloudflare Pages 託管，照片存放在 Cloudflare R2，並透過 Cloudflare 的網路傳送；網域和電子郵件轉寄也由 Cloudflare 處理。Cloudflare 可能會留下一般的連線紀錄（例如 IP 位址）。私人沙龍的照片在 Cloudflare 上只是密文。</li>
+      <li><b>Google Firebase</b>：資料庫、匿名登入，以及你選擇時的 Google 帳號登入。</li>
+      <li><b>Cloudflare</b>：網站由 Cloudflare Pages 託管，照片和競答題目集的圖片存放在 Cloudflare R2，並透過 Cloudflare 的網路傳送；網域和電子郵件轉寄也由 Cloudflare 處理。Cloudflare 可能會留下一般的連線紀錄（例如 IP 位址）。私人沙龍的照片在 Cloudflare 上只是密文。</li>
       <li><b>KLIPY</b>：只有在你搜尋 GIF 時，搜尋字和你的連線資訊才會傳給 KLIPY。</li>
       <li><b>瀏覽器的推播服務</b>（例如 Google、Apple、Mozilla）：開啟通知後，推播會經過你瀏覽器廠商的推播服務送達。推播內容在送出前已加密，只有你的瀏覽器能讀。</li>
     </ul>
     <p>我們沒有使用廣告追蹤或分析 Cookie，也不會販售任何資料。</p>
     <h3>6. 你可以做的事</h3>
-    <p>你可以隨時刪除自己的訊息、離開聊天室，或清除瀏覽器資料。如果有任何關於個人資料的請求，請寫信給我們。</p>
+    <p>你可以隨時刪除自己的訊息、離開聊天室、登出或刪除 Google 帳號，或清除瀏覽器資料。如果有任何關於個人資料的請求（查詢、複製、更正、停止使用、刪除），請寫信給我們。</p>
 
     <h2 id="contact">聯絡我們</h2>
     <p>任何問題、檢舉或個人資料請求：<a href="mailto:hello@stoatalk.app">hello@stoatalk.app</a></p>
@@ -115,15 +129,17 @@ a { color: var(--ink); }
 
   <article lang="en" data-lang="en">
     <h1>Terms of Service and Privacy Policy</h1>
-    <p class="muted">Last updated: October 18, 2026</p>
-    <p class="toc"><a href="#terms-en">Terms of service</a> · <a href="#privacy-en">Privacy policy</a> · <a href="#contact-en">Contact</a></p>
+    <p class="muted">Last updated: October 23, 2026</p>
+    <p class="toc"><a href="#terms-en">Terms of service</a> · <a href="#privacy-en">Privacy policy</a> · <a href="#account-en">Google account</a> · <a href="#contact-en">Contact</a></p>
 
     <h2 id="terms-en">Terms of service</h2>
     <h3>1. What StoaTalk is</h3>
-    <p>StoaTalk (stoatalk.app) is an online discussion room that needs no sign-up. Anyone can open a room and share its 4-character code or link with others. When a room ends, its content is deleted. By using the service you agree to these terms.</p>
+    <p>StoaTalk (stoatalk.app) is an online discussion room that needs no sign-up: people taking part need no account. Anyone can open a room and share its 4-character code or link with others. When a room ends, its content is deleted. Hosts, and anyone who wants to be the same person on several devices, may choose to sign in with a Google account. By using the service you agree to these terms.</p>
     <h3>2. Who can use it</h3>
     <p>You must be at least 13, or the minimum age for online services where you live. Minors should use it with a parent's or guardian's consent.</p>
-    <h3>3. What you may not do</h3>
+    <h3>3. Google account (optional)</h3>
+    <p>Signing in only lets you be the same anonymous person on your computer, tablet and phone; every feature works without it. Keeping your Google account secure is up to you, and you're responsible for what's done on StoaTalk with it. A suspended account is suspended on every device signed in with it. You can sign out or delete the account at any time. How we handle account data is in the privacy policy under "<a href="#account-en">Google account (optional)</a>".</p>
+    <h3>4. What you may not do</h3>
     <ul>
       <li>Harass, bully, threaten or intimidate others, or spread hate speech.</li>
       <li>Post pornography, or any sexual content involving minors.</li>
@@ -132,52 +148,63 @@ a { color: var(--ink); }
       <li>Infringe others' copyright, trademarks, privacy or other rights.</li>
       <li>Break the law where you live or the law of Taiwan.</li>
     </ul>
-    <h3>4. Content and responsibility</h3>
+    <h3>5. Content and responsibility</h3>
     <p>You are responsible for the text, photos, polls and other content you send. We don't review content in advance. A room's owner and co-hosts can remove messages and people, everyone can block others on their own device, and anyone can report a message to the owner.</p>
     <p>Private Salons and private messages are end-to-end encrypted, so we can't read them. Content in Open Stoa rooms is stored on the server in the ordinary way.</p>
-    <h3>5. Reporting illegal or harmful content</h3>
-    <p>Reports made in a room go to its owner and co-hosts, and also to the StoaTalk team. We review them within 24 hours and, depending on what we find, delete the message, end the room, or suspend the device that broke these terms (a suspended device can't open, join or post in rooms). For illegal content, an owner who doesn't act, or anything else that needs us, write to <a href="mailto:hello@stoatalk.app">hello@stoatalk.app</a> with the room code and what happened. We may delete the room or restrict whoever broke these terms, and we cooperate with the authorities where the law requires it.</p>
-    <h3>6. When content is deleted</h3>
+    <h3>6. Reporting illegal or harmful content</h3>
+    <p>Reports made in a room go to its owner and co-hosts, and also to the StoaTalk team. We review them within 24 hours and, depending on what we find, delete the message, end the room, or suspend the device or Google account that broke these terms (whatever is suspended can't open, join or post in rooms). For illegal content, an owner who doesn't act, or anything else that needs us, write to <a href="mailto:hello@stoatalk.app">hello@stoatalk.app</a> with the room code and what happened. We may delete the room or restrict whoever broke these terms, and we cooperate with the authorities where the law requires it.</p>
+    <h3>7. When content is deleted</h3>
     <ul>
       <li>When the owner ends the room, every message, photo and private message is deleted at once. Cached copies of photos on the network may last up to one more hour.</li>
       <li>A room with no new message for 24 hours turns read-only (its members can still read and save it, but not post), and is deleted automatically 24 hours later.</li>
       <li>Records you export or save on your device are yours to keep; we can't delete them and aren't responsible for them.</li>
     </ul>
-    <h3>7. Availability and liability</h3>
-    <p>The service is provided as is and may be interrupted by maintenance, network problems or third-party services. Rooms are temporary by design, so don't rely on StoaTalk to keep anything important. To the extent the law allows, we aren't liable for indirect losses from using the service.</p>
-    <h3>8. Changes</h3>
+    <h3>8. Availability and liability</h3>
+    <p>The service is provided as is and may be interrupted by maintenance, network problems or third-party services. Rooms are temporary by design, so don't rely on StoaTalk to keep anything important; signing in with Google keeps your room list and who you are in them across devices, not the rooms themselves any longer. To the extent the law allows, we aren't liable for indirect losses from using the service.</p>
+    <h3>9. Changes</h3>
     <p>We may update these terms and will change the date at the top of this page when we do. Significant changes will be announced on the site.</p>
 
     <h2 id="privacy-en">Privacy policy</h2>
-    <h3>1. We don't need to know who you are</h3>
-    <p>StoaTalk has no sign-up and never asks for your name, phone number or email. In a room you're only the nickname and animal you pick.</p>
+    <h3>1. Without signing in, we don't know who you are</h3>
+    <p>StoaTalk has no sign-up and never asks for your name, phone number or email. In a room you're only the nickname and animal you pick. You may choose to sign in with a Google account; we then receive a little account data, described below under "<a href="#account-en">Google account (optional)</a>".</p>
     <h3>2. What the server stores</h3>
     <ul>
-      <li>An anonymous account ID from Google Firebase's anonymous sign-in, which recognizes the same device.</li>
+      <li>An anonymous account ID from Google Firebase's anonymous sign-in, which recognizes the same device; signed in with Google, it recognizes the same account, and can be tied to your Google account.</li>
       <li>Your nickname and avatar in each room, when you joined, whether you're online, and a short-lived "typing" status.</li>
       <li>The messages, photos, polls, draws and reactions you send. Photos are compressed on your device before upload, which also removes EXIF data such as where they were taken.</li>
       <li>Reports: the reported message, the reason and the reporter's anonymous ID (owners and co-hosts can't see who reported). A copy goes to the StoaTalk team with the reported message's text and its sender's nickname and anonymous ID; in a Private Salon the reporter's device decrypts that one message and sends it.</li>
-      <li>Suspensions: the anonymous ID of a device the StoaTalk team suspended, when, and why.</li>
-      <li>Push subscriptions: if you turn on notifications, the push address your browser gives us is encrypted and kept in the rooms you're in, where only our push service can open it, to tell you about new messages while the page is closed. Pushes from an Open Stoa room carry the sender's nickname and the start of the message; from a Private Salon or a private message they only say there's something new. Turning notifications off, leaving the room, or the room being deleted removes the subscription.</li>
+      <li>Suspensions: the anonymous ID of a device or account the StoaTalk team suspended, when, and why.</li>
+      <li>Push subscriptions: if you turn on notifications, the push address your browser gives us is encrypted and kept in the rooms you're in (one for each of your devices when you're signed in with Google), where only our push service can open it, to tell you about new messages while the page is closed. Pushes from an Open Stoa room carry the sender's nickname and the start of the message; from a Private Salon or a private message they only say there's something new. Turning notifications off, leaving the room, or the room being deleted removes the subscription.</li>
       <li>Lecture questions: the question, who upvoted it, and your nickname if you chose to ask by name. The asker's anonymous ID is kept apart where only the asker can read it, so not even the owner or co-hosts can see who asked an anonymous question.</li>
     </ul>
     <p>In a Private Salon the room name, nicknames, messages and photos, and every private message anywhere, are encrypted on your device before upload. The server only holds ciphertext, and we can't read it.</p>
+    <h3 id="account-en">Google account (optional)</h3>
+    <p>None of this exists unless you choose to sign in with Google. As Taiwan's Personal Data Protection Act asks, here is what we collect and why:</p>
+    <ul>
+      <li><b>Who collects it</b>: the StoaTalk team; contact details are at the bottom of this page.</li>
+      <li><b>Why</b>: to sign you in as the same anonymous person on different devices, and to keep the service safe, such as handling reports and suspensions.</li>
+      <li><b>What</b>: the email address, name, profile picture and Google account ID that Google provides, kept in Google Firebase Authentication. Your account also keeps the list of rooms you're in (their codes and when you last entered), the public key for your private messages, and your quiz question sets (questions and pictures; the pictures are stored in Cloudflare R2).</li>
+      <li><b>Who can see it</b>: other people in a room, owners and co-hosts included, see only your nickname and picture, never your Google account. Only the StoaTalk team can tie your anonymous ID to your Google account, and does so only to handle a report or a suspension, or when the law requires it.</li>
+      <li><b>What is never uploaded</b>: Private Salon keys and your private-message private key never leave your devices, so even signed in, we still can't read Private Salons or private messages. When you pair a new device, these keys pass through our server sealed so that only that device can open them, and are deleted once it has them. Quiz question sets are not end-to-end encrypted: only your account can read them, but the StoaTalk team technically could, even if you use one in a Private Salon.</li>
+      <li><b>How long</b>: until you delete the account. Deleting it deletes the account and the data above at once (question-set pictures within a day); messages you sent in rooms follow the usual rules and stay until their room is deleted. One exception: for an account we suspended, we keep for one year from the suspension a code that can't be turned back into the email or the Google account ID, only so that deleting the account and signing in again doesn't get round the suspension. Reports sent to the StoaTalk team are kept 90 days at most, as below.</li>
+      <li><b>Your rights</b>: sign out or delete the account from the menu at any time, or write to us to see, copy, correct, stop the use of, or delete your data. Not signing in takes nothing away from what you can do on StoaTalk.</li>
+    </ul>
     <h3>3. How long it's kept</h3>
-    <p>When a room ends, or 24 hours after it turned read-only for being idle for 24 hours, everything about it is deleted from the server, including the room's reports, questions and push subscriptions. A message you delete is deleted at once. Reports sent to the StoaTalk team are deleted once handled, and kept 90 days at most; a suspension is kept until it's lifted.</p>
+    <p>When a room ends, or 24 hours after it turned read-only for being idle for 24 hours, everything about it is deleted from the server, including the room's reports, questions and push subscriptions. A message you delete is deleted at once. Reports sent to the StoaTalk team are deleted once handled, and kept 90 days at most; a suspension is kept until it's lifted. For Google account data, see "<a href="#account-en">Google account (optional)</a>" above.</p>
     <h3>Usage statistics</h3>
     <p>To understand how the service is used, we count daily totals, such as how many rooms were opened, messages sent and questions asked. These are only numbers added up per day. They hold no content, nicknames, account IDs or room codes, and can't be traced to anyone.</p>
     <h3>4. What stays on your device</h3>
-    <p>Your browser's local storage keeps your nickname and avatar, the rooms you're in, Private Salon keys, your private-message key, where you stopped reading, who you've blocked, your language and appearance settings, and records you saved. None of this is uploaded, and clearing your browser data deletes it.</p>
+    <p>Your browser's local storage keeps your nickname and avatar, the rooms you're in, Private Salon keys, your private-message key, where you stopped reading, who you've blocked, your language and appearance settings, quiz question sets, and records you saved. None of this is uploaded (signed in with Google, the room list and quiz question sets also go to your account), and clearing your browser data deletes it. Signing out or deleting the account clears what belongs to the account from that device (the room list, keys, where you stopped reading, who you've blocked, quiz question sets); records you saved stay.</p>
     <h3>5. Third-party services</h3>
     <ul>
-      <li><b>Google Firebase</b>: the database and anonymous sign-in.</li>
-      <li><b>Cloudflare</b>: hosts the site on Cloudflare Pages, stores photos in Cloudflare R2 and delivers them over its network, and handles the domain and email forwarding. It may keep ordinary access logs, such as IP addresses. Private Salon photos are only ciphertext there.</li>
+      <li><b>Google Firebase</b>: the database, anonymous sign-in, and Google sign-in when you choose it.</li>
+      <li><b>Cloudflare</b>: hosts the site on Cloudflare Pages, stores photos and quiz question-set pictures in Cloudflare R2 and delivers them over its network, and handles the domain and email forwarding. It may keep ordinary access logs, such as IP addresses. Private Salon photos are only ciphertext there.</li>
       <li><b>KLIPY</b>: only when you search for a GIF are your search words and connection details sent to KLIPY.</li>
       <li><b>Your browser's push service</b> (such as Google, Apple or Mozilla): with notifications on, pushes reach you through it. They're encrypted before they're sent, so only your browser can read them.</li>
     </ul>
     <p>We use no advertising trackers or analytics cookies, and we never sell any data.</p>
     <h3>6. Your choices</h3>
-    <p>You can delete your messages, leave a room, or clear your browser data at any time. For any request about personal data, write to us.</p>
+    <p>You can delete your messages, leave a room, sign out of or delete your Google account, or clear your browser data at any time. For any request about personal data (to see, copy, correct, stop the use of, or delete it), write to us.</p>
 
     <h2 id="contact-en">Contact</h2>
     <p>Questions, reports and data requests: <a href="mailto:hello@stoatalk.app">hello@stoatalk.app</a></p>

@@ -1,8 +1,8 @@
-/* How a room winds down once nobody writes in it (meta/last, stamped by every message and join): an hour before
-   24 quiet hours it warns, at 24 hours it turns read-only (still open to its members, who can save or export it),
-   and 24 hours after that the hourly cleanup (tools/cleanup) deletes it, so up to an hour late. Speaking during the
-   warning keeps the room going; nothing reopens a read-only room. tools/rules.py enforces the same times, and the
-   cleanup imports this file for its warnings. */
+/* How a room winds down once nobody writes in it (meta/last, stamped by every message, private message and Q&A
+   question; joining doesn't count): an hour before 24 quiet hours it warns, at 24 hours it turns read-only (still open
+   to its members, who can save or export it), and 24 hours after that the hourly cleanup (tools/cleanup) deletes it,
+   so up to an hour late. Speaking during the warning keeps the room going; nothing reopens a read-only room.
+   tools/rules.py enforces the same times, and the cleanup imports this file for its warnings. */
 export const HOUR = 36e5;
 export const READ_ONLY_AFTER = 24 * HOUR;
 export const GONE_AFTER = 48 * HOUR;

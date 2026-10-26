@@ -2,7 +2,7 @@
    announcements, and what happens when the room goes away. The Room tells this what changed; this draws it. */
 import { APP, GROUP_MS, FRESH_MS, KLIPY_KEY, LIMITS, REACTS } from "./constants.js?v=dev";
 import { t, tEl, fmtTime } from "./text.js?v=dev";
-import { $, el, toast, sheet, orToast } from "./dom.js?v=dev";
+import { $, el, toast, sheet, orToast, icon, avatar, bare } from "./dom.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room, setRoom } from "./session.js?v=dev";
@@ -15,14 +15,35 @@ import { msgActions } from "./actions.js?v=dev";
 import { closePicker } from "./pickers.js?v=dev";
 import { renderQa, refreshWait, watchQa } from "./qa.js?v=dev";
 import { watchShow, SHOW } from "./show.js?v=dev";
+import { watchQuiz } from "./quiz.js?v=dev";
+import { watchBoards } from "./sticky.js?v=dev";
 import { noteNew, offerNotify, hiddenUnread, notifyOn } from "./notify.js?v=dev";
+import { noteComments } from "./comments.js?v=dev";
 import { syncPush } from "./push.js?v=dev";
 import { rememberRoom, forgetRoom, roomPath, showChat, home } from "./home.js?v=dev";
 import { archive, saveRecord, openRecord, exportSheet } from "./records.js?v=dev";
 import { editDesc } from "./menu.js?v=dev";
+import { renderQuick } from "./quick.js?v=dev";
 import { phase, hoursLeft, minutesLeft } from "./expiry.js?v=dev";
 
 export const LIST = () => $("#list");
+// on a phone's browser the messages scroll the page itself (html.flow, so the browser's bars fold away); otherwise,
+// in the home-screen app and while typing, they scroll inside the list. Either way the list's top is at 0 and its
+// end where nothing is left below the box
+const flowOk = () => matchMedia("(pointer: coarse)").matches && !matchMedia("(display-mode: standalone)").matches && !navigator.standalone;
+const flowing = () => document.documentElement.classList.contains("flow");
+export const SCROLLER = () => (flowing() ? document.scrollingElement : LIST());
+export const fromEnd = () => { const s = SCROLLER(); return s.scrollHeight - s.scrollTop - (flowing() ? innerHeight : s.clientHeight); };
+export const toEnd = (behavior) => { const s = SCROLLER(); s.scrollTo({ top: s.scrollHeight, behavior }); };
+// switch between the two, keeping the messages where they were on the screen; true when it switched
+export function setFlow(on) {
+  on = on && flowOk();
+  if (on === flowing()) return false;
+  const top = SCROLLER().scrollTop, stick = fromEnd() < 80;
+  document.documentElement.classList.toggle("flow", on);
+  if (stick) toEnd(); else SCROLLER().scrollTop = top;
+  return true;
+}
 
 /* ---------- entering and leaving ---------- */
 // stop following a room (typing goes too)
@@ -36,7 +57,7 @@ export function enter(code, cipher) {
   roomPath(code);
   LIST().replaceChildren(); $("#ageBar").hidden = true; $("#roBox").hidden = true; $("#composer").hidden = false;
   showChat(); offerNotify();
-  watchChat(r); watchQa(r); watchShow(r);
+  watchChat(r); watchQa(r); watchShow(r); watchQuiz(r); watchBoards(r);
   r.start();
 }
 function watchChat(r) {
@@ -44,7 +65,7 @@ function watchChat(r) {
   // the room's age is a matter of time, not only of what the database says: look again every half minute
   const tick = setInterval(() => { if (r.current && !r.gone) renderAge(); }, 30000);
   r.off.push(() => clearInterval(tick));
-  r.on("meta", () => { renderHeader(); renderDesc(); renderPins(); refreshNames(); renderAge(); })
+  r.on("meta", () => { renderHeader(); renderDesc(); renderPins(); refreshNames(); renderAge(); renderQuick(); })
     .on("ended", () => gone("ended"))
     .on("lost", checkGone)
     .on("arrivals", ({ joined, left }) => {
@@ -52,12 +73,12 @@ function watchChat(r) {
       left.forEach((m) => toast(t("leftToast", { who: `${m.avatar} ${m.name}` })));
     })
     .on("members", () => {
-      renderHeader(); refreshNames();
+      renderHeader(); refreshNames(); textPlaceholder();
       // once I'm in: this room's push subscription, if this device wants to hear from it while the page is closed
       if (!r.pushSynced && r.members[backend.uid]) { r.pushSynced = true; if (notifyOn(r.code)) syncPush(r.code, true); }
     })
-    .on("msg", (id, v) => { if (inRoomView()) addMsg(id, v); if (pinIds().includes(id)) renderPins(); noteNew(v, null); })
-    .on("msg-changed", (id, v, old) => { if (inRoomView()) updateMsg(id, v, old); })
+    .on("msg", (id, v) => { if (inRoomView()) addMsg(id, v); if (pinIds().includes(id)) renderPins(); if (!kindOf(v).line) noteNew(v, null); })
+    .on("msg-changed", (id, v, old) => { if (inRoomView()) updateMsg(id, v, old); noteComments(id, v, old); })
     .on("msg-removed", (id) => { if (inRoomView()) document.getElementById("m-" + id)?.remove(); renderPins(); })
     .on("typing", renderTyping)
     .on("qs", renderHeader)
@@ -88,7 +109,7 @@ export async function gone(why) {
   leaveDevice(room.code);
   if (why === "self") return home();
   const text = t({ ended: "goneEnded", kicked: "goneKicked", left: "goneLeft" }[why]);
-  $("#composer").classList.add("off");
+  $("#composer").classList.add("off"); renderQuick();
   for (;;) {
     const a = await sheet(t("goneTitle"), el("p", { class: "muted", text: text + t("goneKeep") }), [["save", t("saveHere"), "primary"], ["export", t("downloadFile")], ["home", t("backHome")]]);
     if (a === "save") { const id = saveRecord(archive()); if (id) return openRecord(null, id); continue; }
@@ -103,14 +124,18 @@ export function renderHeader() {
   if (!room) return;
   const meta = room.meta || {}, ui = room.ui;
   $("#roomTitle").textContent = meta.title || t("room");
-  $("#codeBtn").textContent = (meta.enc ? "🔐 " : "") + room.code + (meta.locked ? " · " + t("lockedTag") : "");
+  // a Private Salon: the slate bar, a lock on the code and the words 端對端加密, so colour is never the only cue
+  $("#chat").classList.toggle("salon", !!meta.enc);
+  $("#codeBtn").replaceChildren(...[meta.enc ? icon("salon") : null, room.code + (meta.locked ? " · " + t("lockedTag") : "")].filter(Boolean));
+  $("#codeBtn").classList.toggle("salon", !!meta.enc);
+  $("#chat .bar .enc").hidden = !meta.enc;
   $("#peopleBtn .n").textContent = Object.values(room.members || {}).filter((m) => m.online !== false).length;
   $("#peopleBtn .dot").hidden = !Object.values(ui.unread).some((n) => n > 0);
   $("#chat .bar [data-a=menu] .dot").hidden = !room.reportCount();
   $("#composer").classList.toggle("off", room.gone || room.readOnly);
   const tabs = $("#tabs");
   tabs.hidden = !(meta.qa || room.qs.size) || ui.isDm;
-  $("[data-a=qa] .n", tabs).textContent = room.qs.size ? " " + room.qs.size : "";
+  $("[data-a=qa] .n", tabs).textContent = room.qs.size || "";
   $("[data-a=qa] .dot", tabs).hidden = !(room.isStaff() && room.qq.size);
   tabs.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.a === ui.view)));
   if (ui.isDm) $("#dmBar .dmwho").replaceChildren(...tEl("dmBar", { name: el("b", { text: room.nameOf(ui.view) }) }));
@@ -121,33 +146,37 @@ function refreshNames() {
   document.querySelectorAll("#list .msg").forEach((node) => {
     const p = room.who(node.dataset.by); if (!p) return;
     const av = $(".who .av", node), nm = $(".who .nm", node); if (!nm) return;
-    av.textContent = p.avatar; nm.textContent = p.name + room.badge(node.dataset.by);
+    if (av.dataset.a !== p.avatar) { av.dataset.a = p.avatar; av.replaceChildren(avatar(p.avatar)); }
+    nm.textContent = p.name + room.badge(node.dataset.by);
   });
 }
 
 /* ---------- messages ---------- */
 // prev: the node it follows (the list's last one by default); show: unfold a blocked person's message
 function bubble(id, v, dm, { prev = LIST().lastElementChild, show = false } = {}) {
+  if (kindOf(v).line) return el("div", { class: "sysline", id: "m-" + id, "data-at": v.at, "data-id": id }, el("span", { text: snippet(v) }));
   const mine = v.by === backend.uid;
   const cont = prev && prev.dataset.by === v.by && v.at - Number(prev.dataset.at) < GROUP_MS;
   const attrs = { id: (dm ? "d-" : "m-") + id, "data-by": v.by, "data-at": v.at, "data-id": id };
   if (!mine && !show && isBlocked(v.by)) {
     const folded = el("div", { class: "msg folded", ...attrs },
-      el("button", { type: "button", class: "foldbtn", onclick: () => folded.replaceWith(bubble(id, v, dm, { prev: folded.previousElementSibling, show: true })) }, t("blockedMsg")));
+      el("button", { type: "button", class: "foldbtn", onclick: () => folded.replaceWith(bubble(id, v, dm, { prev: folded.previousElementSibling, show: true })) }, icon("block", "sm"), bare(t("blockedMsg"))));
     return folded;
   }
   const atMe = !mine && !dm && mentionsMe(v.text), who = room.author(v, dm);
+  const more = el("button", { type: "button", class: "more", "aria-label": t("msgMenu"), onclick: () => msgActions(id, (dm ? null : room.msgs.get(id)) || v, dm) }, icon("more"));
   const node = el("div", { class: "msg" + (mine ? " mine" : "") + (cont ? " cont" : "") + (atMe ? " atme" : ""), ...attrs },
-    cont ? null : el("div", { class: "who" },
-      el("span", { class: "av", text: who.avatar }),
+    cont || mine ? null : el("div", { class: "who" },
+      el("span", { class: "av", "data-a": who.avatar }, avatar(who.avatar)),
       el("span", { class: "nm", text: who.name + room.badge(v.by) }),
       el("time", { text: fmtTime(v.at) })),
     v.rp ? replyQuote(v.rp, dm) : null,
     // the ⋯ beside the bubble opens what can be done with a message; the bubble itself is for reading
-    // (and selecting text), a photo opens full size, a poll's options vote
+    // (and selecting text), a photo opens full size, a poll's options vote. My own messages carry their time
+    // beside the bubble, under the ⋯, rather than on a line of its own above it
     el("div", { class: "brow" },
       kindOf(v).bubble(id, v, dm),
-      el("button", { type: "button", class: "more", "aria-label": t("msgMenu"), text: "⋯", onclick: () => msgActions(id, (dm ? null : room.msgs.get(id)) || v, dm) })),
+      mine && !cont ? el("div", { class: "side" }, more, el("time", { text: fmtTime(v.at) })) : more),
     v.ed ? el("small", { class: "edited", text: t("edited") }) : null,
     dm ? null : el("div", { class: "re" }));
   if (!dm) fillReacts(node, v);
@@ -176,7 +205,7 @@ function fillReacts(node, v) {
 }
 export const react = (id, k, on) => orToast(room.api.react(id, k, on));
 
-const nearEnd = () => { const l = LIST(); return l.scrollHeight - l.scrollTop - l.clientHeight < 80; };
+const nearEnd = () => fromEnd() < 80;
 function addMsg(id, v, dm) {
   const list = LIST(), ui = room.ui;
   const stick = nearEnd() || v.by === backend.uid;
@@ -184,7 +213,7 @@ function addMsg(id, v, dm) {
   if (!dm) newLine(list, v);
   list.append(bubble(id, v, dm));
   if (ui.div?.isConnected && !ui.touched && v.at <= room.t0) ui.div.scrollIntoView({ block: "start" }); // history still loading: start where they left off
-  else if (stick) list.scrollTop = list.scrollHeight;
+  else if (stick) toEnd();
   else if (v.by !== backend.uid && v.at > room.t0) ui.below++;
   showJump(); markSeen();
 }
@@ -208,15 +237,21 @@ export function markSeen() {
 }
 // the ↓ button: back to the newest message, with how many came in while scrolled up
 export function showJump() {
-  const b = $("#jumpBtn"), l = LIST();
-  b.hidden = !room || room.gone || l.scrollHeight - l.scrollTop - l.clientHeight < 300;
-  b.textContent = room?.ui.below ? t("jumpNew", { n: room.ui.below }) : "↓";
+  const b = $("#jumpBtn");
+  b.hidden = !room || room.gone || fromEnd() < 300;
+  $(".jn", b).textContent = room?.ui.below ? t("jumpNew", { n: room.ui.below }) : "";
 }
 // when this device last read each private chat, so a reload doesn't count old messages as new
 const lastRead = (other) => +store.get(KEYS.dmRead(room.code, other)) || 0;
 const markRead = (other, at) => { if (typeof at === "number" && at > lastRead(other)) store.set(KEYS.dmRead(room.code, other), String(at)); };
 
 /* ---------- views: the room, its questions, or a private chat ---------- */
+// in the room the box says whose name I'm writing under here, since each room can have its own nickname
+function textPlaceholder() {
+  if (room.ui.view !== "all") return;
+  const me = room.members[backend.uid];
+  box().placeholder = me ? t("textPhAs", { name: `${me.avatar} ${me.name}` }) : t("textPh");
+}
 export function setView(view) { room.ui.view = view; renderView(); }
 export function renderView() {
   closePicker();
@@ -227,6 +262,7 @@ export function renderView() {
     ta.value = ui.drafts[ui.view] || ""; ta.dispatchEvent(new Event("input"));
     ui.shown = ui.view; cancelReply(); typing.stop();
   }
+  renderQuick();
   renderDesc(); renderPins();
   const list = LIST();
   list.replaceChildren();
@@ -242,7 +278,7 @@ export function renderView() {
     if (!room.msgs.size) list.append(el("p", { class: "empty", text: t("emptyRoom") }));
     ui.readMark = +store.get(KEYS.read(room.code)) || 0; // where this device stopped reading (messages still loading go through addMsg)
     room.msgs.forEach((v, id) => { newLine(list, v); list.append(bubble(id, v)); });
-    ta.placeholder = t("textPh");
+    textPlaceholder();
   } else if (ui.view === "qa") {
     ta.placeholder = t("askPh");
     renderQa(); refreshWait();
@@ -254,8 +290,8 @@ export function renderView() {
     ta.placeholder = t("dmPh", { name: room.nameOf(ui.view) });
   }
   renderHeader(); renderTyping();
-  if (ui.view === "qa") list.scrollTop = 0;
-  else if (ui.div) ui.div.scrollIntoView({ block: "start" }); else list.scrollTop = list.scrollHeight;
+  if (ui.view === "qa") SCROLLER().scrollTop = 0;
+  else if (ui.div) ui.div.scrollIntoView({ block: "start" }); else toEnd();
   ui.below = 0; showJump(); markSeen();
 }
 export function openDm(other) {
@@ -280,9 +316,9 @@ export function renderDesc() {
   const text = el("div", { class: "dtext" }, linkify(desc));
   const more = el("button", { type: "button", class: "link dmore", "aria-expanded": String(open), text: t(open ? "descLess" : "descMore"), onclick: toggle });
   box.classList.toggle("open", open);
-  const hide = el("button", { type: "button", class: "link dhide", text: t("descHide"), onclick: () => { setDescHidden(true); toast(t("descHiddenToast")); } });
-  // closed: the first line, with 更多 and 隱藏 at its end; open: all of it, then 收起 (and 編輯 for the owner and
-  // co-hosts) with 隱藏 at the far right
+  const hide = el("button", { type: "button", class: "icon dhide", "aria-label": t("descHide"), title: t("descHide"), onclick: () => { setDescHidden(true); toast(t("descHiddenToast")); } }, icon("close", "sm"));
+  // closed: the first line, with 更多 and a quiet × (hide) at its end; open: all of it, then 收起 (and 編輯 for the
+  // owner and co-hosts) with the × at the far right
   if (!open) box.replaceChildren(text, more, hide);
   else box.replaceChildren(text, el("div", { class: "drow" }, more,
     room.isStaff() ? el("button", { type: "button", class: "link", text: t("editDesc"), onclick: () => editDesc() }) : null, hide));
@@ -300,19 +336,19 @@ export function renderAge() {
   if (!room?.meta) return;
   const { state, left } = phase(room.meta.last, backend.now()), at = room.code + room.meta.last;
   const ro = state === "ro" || state === "gone";
-  if (ro !== room.readOnly) { room.readOnly = ro; if (ro) { cancelReply(); typing.stop(); closePicker(); } renderHeader(); }
+  if (ro !== room.readOnly) { room.readOnly = ro; if (ro) { cancelReply(); typing.stop(); closePicker(); } renderHeader(); renderQuick(); }
   // read-only: the message box gives way to how long the room has left, and a way to save it
   $("#composer").hidden = ro && !room.gone;
   box.hidden = !ro || room.gone;
   if (box.hidden) box.replaceChildren();
-  else box.replaceChildren(el("span", { text: t("roBar", { h: hoursLeft(left) }) }),
+  else box.replaceChildren(icon("lock"), el("span", { text: bare(t("roBar", { h: hoursLeft(left) })) }),
     el("button", { type: "button", class: "btn small", text: t("roSave"), onclick: () => exportSheet() }));
   // within the hour: a line under the header, until someone speaks or it's dismissed
   bar.hidden = state !== "soon" || room.gone || dismissedAt === at;
   if (bar.hidden) return bar.replaceChildren();
   const text = t("soonBar", { m: minutesLeft(left) });
   bar.replaceChildren(el("span", { text }),
-    el("button", { type: "button", class: "x", "aria-label": t("close"), text: "✕", onclick: () => { dismissedAt = at; renderAge(); } }));
+    el("button", { type: "button", class: "x", "aria-label": t("close"), onclick: () => { dismissedAt = at; renderAge(); } }, icon("close", "sm")));
   if (warnedAt !== at) { warnedAt = at; toast(text); }
 }
 
@@ -331,11 +367,11 @@ export function renderPins() {
   bar.classList.toggle("open", pinsOpen);
   bar.replaceChildren(...[
     el("button", { type: "button", class: "pinhead", "aria-expanded": String(pinsOpen), onclick: () => { pinsOpen = !pinsOpen; renderPins(); } },
-      el("span", { text: "📌" }), el("span", { class: "one", text: pinsOpen ? t("pinsTitle") : line(items[0]) }),
-      el("span", { class: "n", text: ids.length > 1 || pinsOpen ? t("pinsN", { n: ids.length }) : "" }), el("span", { class: "chev", text: "▾" })),
+      icon("pin", "sm"), el("span", { class: "one", text: pinsOpen ? t("pinsTitle") : line(items[0]) }),
+      ids.length > 1 || pinsOpen ? el("span", { class: "n", text: t("pinsN", { n: ids.length }) }) : null, icon("expand", "sm chev")),
     pinsOpen ? el("ul", {}, items.map((it) => el("li", {},
       el("button", { type: "button", class: "go", onclick: () => it.v && jumpTo(it.id) },
-        it.v ? el("small", { text: `${room.author(it.v).avatar} ${room.author(it.v).name} · ${fmtTime(it.v.at)}` }) : null,
+        it.v ? el("small", {}, avatar(room.author(it.v).avatar, "av"), `${room.author(it.v).name} · ${fmtTime(it.v.at)}`) : null,
         (it.v && kindOf(it.v).pinned?.(it.v)) || line(it)),
       room.isOwner() ? el("button", { type: "button", class: "btn small unpin", text: t("unpin"), onclick: () => pin(it.id, false) }) : null))) : null].filter(Boolean));
 }

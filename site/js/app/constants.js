@@ -9,13 +9,17 @@ export const CODE_RE = /^[2-9A-HJKMNP-Z]{4}$/;
 export const REACTS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
 // each animal; its name in the current language (text.js avatars()) is also the default nickname
 export const ANIMALS = ["🐻", "🦊", "🐼", "🐯", "🦁", "🐸", "🐵", "🐧", "🦉", "🐙", "🦄", "🐶", "🐱", "🐰", "🐨", "🐲"];
+// the drawn version of each animal, in avatars/ (any other emoji someone has stays an emoji)
+export const ANIMAL_ART = { "🐻": "bear", "🦊": "fox", "🐼": "panda", "🐯": "tiger", "🦁": "lion", "🐸": "frog", "🐵": "monkey", "🐧": "penguin", "🦉": "owl", "🐙": "octopus", "🦄": "unicorn", "🐶": "dog", "🐱": "cat", "🐰": "rabbit", "🐨": "koala", "🐲": "dragon" };
 
 // longest texts, in characters (the rules check the same)
 export const LIMITS = {
   text: 1000, question: 300, answer: 2000,
-  name: 12, shownName: 24, avatar: 8, roomTitle: 40, roomDesc: 500, recordTitle: 60,
+  name: 20, shownName: 24, avatar: 8, roomTitle: 40, roomDesc: 500, recordTitle: 60,
+  postTitle: 60, postBody: 20000, postEx: 200, postPhotos: 9, comment: 1000,
   pollQ: 200, pollOpt: 80, pollOpts: 10, drawTitle: 60, gifUrl: 500, gifTitle: 120,
   cap: 1000,
+  quick: 40, quicks: 8, roomQuick: 20, roomQuicks: 6,
 };
 export const DAY = 864e5;          // a room nobody wrote in for this long is gone
 export const MAX_LOAD = 2000;      // the most messages loaded on entering a room

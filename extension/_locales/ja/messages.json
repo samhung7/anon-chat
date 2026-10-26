@@ -1,0 +1,17 @@
+{
+  "name": {
+    "message": "StoaTalk"
+  },
+  "description": {
+    "message": "サイドパネルで StoaTalk：4 文字のコードで入れるチャットルーム。タブの StoaTalk と同じ身元のまま使えます。"
+  },
+  "open": {
+    "message": "サイドパネルで StoaTalk を開く"
+  },
+  "loading": {
+    "message": "StoaTalk を開いています…"
+  },
+  "openTab": {
+    "message": "タブで開く"
+  }
+}

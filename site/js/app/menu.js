@@ -2,7 +2,7 @@
    leaving and ending the room. */
 import { APP, LIMITS } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
-import { el, toast, sheet, confirmSheet, qrSvg } from "./dom.js?v=dev";
+import { el, toast, sheet, confirmSheet, qrSvg, icon, bare, grouped } from "./dom.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room, setRoom } from "./session.js?v=dev";
 import { askMe } from "./identity.js?v=dev";
@@ -11,44 +11,57 @@ import { linkify } from "./richtext.js?v=dev";
 import { reportsSheet } from "./actions.js?v=dev";
 import { people, capSheet, ownClaim, countAfterLeaving } from "./people.js?v=dev";
 import { setQa } from "./qa.js?v=dev";
+import { goneNote, withNote } from "./composer.js?v=dev";
 import { openShow } from "./show.js?v=dev";
 import { notifyOn, setNotify } from "./notify.js?v=dev";
 import { exportSheet } from "./records.js?v=dev";
 import { roomUrl, home } from "./home.js?v=dev";
 import { failed } from "./lobby.js?v=dev";
 import { dropRoomPhotos } from "./photos.js?v=dev";
+import { editMine, editRoomQuick } from "./quick.js?v=dev";
 
 const owner = () => room.isOwner(), staff = () => room.isStaff(), always = () => true;
 // a meta setting the owner flips, with what the toast says after
 const flip = (fields, done) => () => room.api.setMeta(fields).then(() => toast(t(done)), () => toast(t("tryAgain")));
-// [action, label, who sees it, what it does, class], in the order they show
+// [action, label, who sees it, what it does, class], in the order they show; { group } starts a group under a
+// small heading (none for a plain gap), shown only when something in it is
 const ENTRIES = [
   ["share", () => t("invite"), always, () => share()],
-  ["title", () => t("renameRoom"), owner, () => renameRoom()],
-  ["desc", () => t("editDesc"), staff, () => editDesc()],
   ["me", () => t("editMe"), always, () => askMe(false)],
   ["mute", () => t("muteRoom"), () => notifyOn(room.code), () => setNotify(false)],
   ["notify", () => t("notifyRoom"), () => !notifyOn(room.code), () => setNotify(true)],
+  ["quick", () => t("quickMine"), always, () => editMine()],
   ["export", () => t("exportChat"), always, () => exportSheet()],
+  { group: "menuHost" },
+  ["title", () => t("renameRoom"), owner, () => renameRoom()],
+  ["desc", () => t("editDesc"), staff, () => editDesc()],
+  ["roomquick", () => t("quickRoom"), staff, () => editRoomQuick()],
   ["qaoff", () => t("qaOff"), () => owner() && room.meta?.qa, () => setQa(false)],
   ["qaon", () => t("qaOn"), () => owner() && !room.meta?.qa, () => setQa(true)],
   ["qmodoff", () => t("qModOff"), () => owner() && room.meta?.qa && room.meta.qmod, flip({ qmod: false }, "qModOffToast")],
   ["qmodon", () => t("qModOn"), () => owner() && room.meta?.qa && !room.meta.qmod, flip({ qmod: true }, "qModOnToast")],
   ["show", () => t("showScreen"), staff, () => openShow()],
+  ["gameson", () => t("gamesOn"), () => owner() && room.meta?.ng, flip({ ng: false }, "gamesOnToast")],
+  ["gamesoff", () => t("gamesOff"), () => owner() && !room.meta?.ng, flip({ ng: true }, "gamesOffToast")],
+  ["postsopen", () => t("postsOpen"), () => owner() && !room.meta?.po, flip({ po: true }, "postsOpenToast")],
+  ["postsclose", () => t("postsClose"), () => owner() && room.meta?.po, flip({ po: false }, "postsCloseToast")],
   ["reports", () => t("reportsMenu", { n: room.reportCount() }), staff, () => reportsSheet()],
+  { group: "menuOwner" },
   ["cap", () => (room.meta?.cap ? t("capMenuN", { n: room.meta.cap }) : t("cap")), owner, () => capSheet()],
   ["transfer", () => t("transfer"), owner, () => people(t("pickOwner"))],
   ["unlock", () => t("unlockRoom"), () => owner() && room.meta?.locked, flip({ locked: false }, "unlockedDone")],
   ["lock", () => t("lockRoom"), () => owner() && !room.meta?.locked, flip({ locked: true }, "lockedDone")],
+  { group: "" },
   ["end", () => t("endRoom"), owner, () => endRoom(), "danger"],
   ["leave", () => t("leaveRoom"), () => !owner(), () => leaveRoom(), "danger"],
 ];
 export async function menu() {
   if (!room) return;
-  const shown = ENTRIES.filter(([, , who]) => who());
-  const a = await sheet(room.meta?.title || t("roomN", { code: room.code }), descBox(), shown.map(([act, label, , , cls]) => [act, label(), cls]), { cols: 3 });
+  const shown = grouped(ENTRIES, ([, , who]) => who());
+  const a = await sheet(room.meta?.title || t("roomN", { code: room.code }), descBox(),
+    shown.map((e) => (Array.isArray(e) ? [e[0], e[1](), e[4]] : { group: e.group && t(e.group) })), { cols: 3 });
   if (a === "showdesc") return setDescHidden(false);
-  shown.find(([act]) => act === a)?.[3]();
+  shown.find((e) => e[0] === a)?.[3]();
 }
 // the room's description at the top of the menu, all of it; one hidden from above the chat can come back from here
 function descBox() {
@@ -64,7 +77,7 @@ export function share() {
   const qrBox = el("div", { class: "qr", "aria-label": "QR Code" }); qrBox.innerHTML = qrSvg(url, 4);
   const body = el("div", { class: "share" },
     el("div", { class: "bigcode", text: room.code }),
-    el("p", { class: "muted", text: t(room.cipher ? "shareEnc" : "shareOpen") }),
+    room.cipher ? el("p", { class: "encnote" }, icon("secure"), el("span", { text: bare(t("shareEnc")) })) : el("p", { class: "muted", text: t("shareOpen") }),
     el("div", { class: "linkrow" }, el("input", { class: "field", readonly: true, value: url, "aria-label": t("linkAriaShort"), onfocus: (e) => e.target.select() })),
     qrBox);
   const btns = [["copy", t("copyLink"), "primary"]];
@@ -110,7 +123,8 @@ async function leaveRoom() {
   if (!(await confirmSheet(t("leaveTitle"), t("leaveBody"), t("leave")))) return;
   const r = room;
   r.gone = true; stopRoom(r);
-  await r.api.leave({ claim: await ownClaim(backend.uid), count: countAfterLeaving() }).catch(() => {}); // same reason as in askMe; a place frees up
+  const opts = { claim: await ownClaim(backend.uid), count: countAfterLeaving() };
+  await withNote((note) => r.api.leave(opts, note), await goneNote(r, "l")).catch(() => {}); // same reason as in askMe; a place frees up
   closeRoom(r);
 }
 async function endRoom() {

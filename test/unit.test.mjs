@@ -31,6 +31,33 @@ test("every language has the same keys, and every t(\"key\") the page uses exist
   }
 });
 
+test("a made-up nickname (a colour on an animal) fits a nickname in every language, and no two are the same", async () => {
+  const { colourNick, COLOURS } = await import(new URL("text.js?v=dev", APP));
+  const { ANIMALS, LIMITS } = await import(new URL("constants.js?v=dev", APP));
+  const t = I18N.t;
+  try {
+    for (const [lang, d] of Object.entries(dicts)) {
+      I18N.t = (k, vars) => d[k].replace(/\{(\w+)\}/g, (m, v) => (vars && v in vars ? vars[v] : m));
+      assert.match(d.avg, new RegExp(`^(|[mfn]{${ANIMALS.length}})$`), lang + " avg");
+      const all = new Set();
+      for (let c = 0; c < COLOURS; c++) {
+        assert.ok(d["col" + c].split("|").length <= 3, `${lang} col${c}`);
+        if (d["col" + c].includes("|")) assert.ok(d.avg, `${lang} col${c} has a form for each gender, but there are no genders`);
+        for (let i = 0; i < ANIMALS.length; i++) {
+          const n = colourNick(c, i);
+          assert.ok(n.length <= LIMITS.name && !/[|{}]/.test(n), `${lang}: ${n}`);
+          all.add(n.toLowerCase());
+        }
+      }
+      assert.equal(all.size, COLOURS * ANIMALS.length, lang);
+    }
+    I18N.t = (k, vars) => dicts.fr[k].replace(/\{(\w+)\}/g, (m, v) => vars[v]);
+    assert.equal(colourNick(3, 5), "Grenouille verte");
+    I18N.t = (k, vars) => dicts.de[k].replace(/\{(\w+)\}/g, (m, v) => vars[v]);
+    assert.deepEqual([colourNick(0, 1), colourNick(0, 8), colourNick(0, 10)], ["Roter Fuchs", "Rote Eule", "Rotes Einhorn"]);
+  } finally { I18N.t = t; }
+});
+
 test("each module is imported with ?v=dev, preloaded by the page and kept by the service worker", () => {
   const sw = readFileSync(new URL("sw.js", SITE), "utf8"), page = readFileSync(new URL("index.html", SITE), "utf8");
   for (const f of MODULES) {
@@ -40,6 +67,28 @@ test("each module is imported with ?v=dev, preloaded by the page and kept by the
     assert.ok(page.includes(`<link rel="modulepreload" href="js/app/${f}?v=dev">`), `index.html preloads js/app/${f}`);
   }
   assert.match(page, /<script type="module" src="js\/app\/main\.js\?v=dev"><\/script>/);
+});
+
+test("the side panel extension frames stoatalk.app, may reach its storage, and only extension pages may frame the site", () => {
+  const EXT = new URL("../extension/", import.meta.url);
+  const manifest = JSON.parse(readFileSync(new URL("manifest.json", EXT), "utf8"));
+  const panel = readFileSync(new URL(manifest.side_panel.default_path, EXT), "utf8");
+  const [, script] = panel.match(/<script src="([^"]+)"><\/script>/);
+  assert.match(readFileSync(new URL(script, EXT), "utf8"), /^const SITE = "https:\/\/stoatalk\.app\/";$/m);
+  // without host permission Chrome may give the frame a storage of its own, and the panel would be someone else
+  assert.deepEqual(manifest.host_permissions, ["https://stoatalk.app/*"]);
+  for (const f of [manifest.background.service_worker, ...Object.values(manifest.icons)]) readFileSync(new URL(f, EXT));
+  const locales = readdirSync(new URL("_locales/", EXT));
+  for (const l of locales) {
+    const m = JSON.parse(readFileSync(new URL(`_locales/${l}/messages.json`, EXT), "utf8"));
+    for (const k of ["name", "description", "open", "loading", "openTab"]) assert.ok(m[k]?.message, `${l} has ${k}`);
+    assert.ok(m.description.message.length <= 132, `${l} description fits the store's 132 characters`);
+  }
+  assert.ok(locales.includes(manifest.default_locale));
+  const headers = readFileSync(new URL("_headers", SITE), "utf8");
+  assert.match(headers, /^\/\*\n(?:  .+\n)*  Content-Security-Policy: frame-ancestors 'self' chrome-extension:\n/m);
+  assert.doesNotMatch(headers, /X-Frame-Options/); // it would refuse the panel too, whatever frame-ancestors says
+  assert.match(headers, /^\/admin\n  Content-Security-Policy: frame-ancestors 'none'$/m);
 });
 
 test("a record read back from a file keeps only what it knows, within the limits", () => {
@@ -131,7 +180,178 @@ test("kinds of message: each message is exactly one, and says itself in a line",
   assert.equal(snippet({ gif: {} }), "GIF");
   // what each kind stores, plain and sealed
   assert.deepEqual(KIND.text.pack("hi"), [{ text: "hi" }, { t: "hi" }]);
-  assert.deepEqual(KIND.poll.pack({ q: "Q" }), [{ poll: { q: "Q" } }, { p: { q: "Q" } }]);
+  assert.deepEqual(KIND.poll.pack({ q: "Q", o: ["a", "b"], m: false }), [{ poll: { q: "Q", o: ["a", "b"], m: false } }, { p: { q: "Q", o: ["a", "b"], m: false } }, {}]);
+  // anonymous and hidden polls are marked beside the poll, and beside its sealed body too
+  assert.deepEqual(KIND.poll.pack({ q: "Q", o: ["a", "b"], m: true, an: true, rv: 5 }),
+    [{ poll: { q: "Q", o: ["a", "b"], m: true }, an: true, rv: 5 }, { p: { q: "Q", o: ["a", "b"], m: true } }, { an: true, rv: 5 }]);
   assert.equal(KIND.poll.unsealed({ p: { q: "Q", o: ["a", "b"] } }, true), null, "no polls in private chats");
   assert.deepEqual(KIND.poll.unsealed({ p: { q: "Q", o: { 0: "a", 1: "b" }, m: "yes" } }, false), { poll: { q: "Q", o: ["a", "b"], m: false } });
+  // a sticky-note board: marked beside its card, sealed or not; shown as one only when marked
+  assert.equal(kindOf({ board: { t: "Ideas" } }), KIND.board);
+  assert.equal(snippet({ board: { t: "Ideas" } }), "🗒️ Ideas");
+  assert.deepEqual(KIND.board.pack({ t: "Ideas" }), [{ board: { t: "Ideas" }, bm: true }, { bd: { t: "Ideas" } }]);
+  assert.deepEqual(KIND.board.plain({ board: { t: "Ideas" } }), { board: null });
+  assert.deepEqual(KIND.board.plain({ board: { t: "x".repeat(70) }, bm: true }), { board: { t: "x".repeat(60) } });
+  assert.equal(KIND.board.unsealed({ bd: { t: "Ideas" } }, true), null, "no boards in private chats");
+  assert.deepEqual(KIND.board.readSaved({ board: { t: "Ideas", r: [{ c: "A", t: "one", v: 2 }, { t: "" }] } }), { board: { t: "Ideas", r: [{ c: "A", t: "one", v: 2 }] } });
+});
+
+test("a message's time gains the month and day from yesterday back, and the year before this year", async () => {
+  const { fmtTime, fmtWhen } = await import(new URL("text.js?v=dev", APP));
+  const now = new Date(2026, 9, 19, 15, 0);
+  assert.equal(fmtTime(new Date(2026, 9, 19, 10, 26), now), "10:26");
+  assert.equal(fmtTime(new Date(2026, 9, 18, 23, 5), now), "10/18, 23:05");
+  assert.equal(fmtTime(new Date(2025, 2, 5, 10, 26), now), "3/5/2025, 10:26");
+  assert.match(fmtWhen(new Date(2026, 9, 18, 23, 5)), /October 18, 2026.*23:05/);
+});
+
+test("quiz library in a Google account: the side that changed a set last wins, and a deletion goes everywhere", async () => {
+  const Q = await import(new URL("quizset.js?v=dev", APP));
+  const index = Q.cleanIndex({
+    aaaaaaaa1: { at: 100, t: "same", n: 3 }, aaaaaaaa2: { at: 200, t: "newer there", n: 1 }, aaaaaaaa3: { at: 50, t: "older there", n: 1 },
+    aaaaaaaa4: { at: 300, gone: true }, aaaaaaaa5: { at: 300, gone: true }, aaaaaaaa6: { at: 10, t: "only there", n: 0 },
+    aaaaaaaa7: { at: 10, gone: true }, "BAD/id": { at: 1, t: "x" }, aaaaaaaa8: { t: "no time" },
+  });
+  assert.deepEqual(Object.keys(index), ["aaaaaaaa1", "aaaaaaaa2", "aaaaaaaa3", "aaaaaaaa4", "aaaaaaaa5", "aaaaaaaa6", "aaaaaaaa7"]);
+  assert.deepEqual(index.aaaaaaaa4, { at: 300, gone: true });
+  const local = [{ id: "aaaaaaaa1", at: 100 }, { id: "aaaaaaaa2", at: 150 }, { id: "aaaaaaaa3", at: 60 }, { id: "aaaaaaaa4", at: 250 },
+    { id: "aaaaaaaa5", at: 400 }, { id: "aaaaaaaa9", at: 5 }];
+  assert.deepEqual(Q.syncPlan(local, index), {
+    up: ["aaaaaaaa3", "aaaaaaaa5", "aaaaaaaa9"],   // changed here last, changed here after it was deleted, only here
+    down: ["aaaaaaaa2", "aaaaaaaa6"],               // changed there last, only there
+    drop: ["aaaaaaaa4"],                            // deleted on another device after it last changed here
+  });
+  assert.deepEqual(Q.syncPlan([], {}), { up: [], down: [], drop: [] });
+});
+
+test("quiz: a set is cleaned, asked without its answers, scored by speed, ranked, and kept in a file", async () => {
+  const Q = await import(new URL("quizset.js?v=dev", APP));
+  const set = Q.cleanSet({ t: " 期中 ", q: [
+    { t: "2+2?", o: ["3", "", "4", "5"], c: [2], d: 20, p: 1 },
+    { t: "雙倍", o: ["a", "b"], c: [0, 1], d: 7, p: 2 },   // 7 isn't a time on offer: 20
+    { t: "", o: ["x"], c: [9] },
+    "not a question",
+  ] });
+  assert.equal(set.t, "期中");
+  assert.equal(set.q.length, 3);
+  assert.deepEqual(set.q[1].o, ["a", "b", "", ""]);
+  assert.equal(set.q[1].d, 20);
+  assert.deepEqual(set.q[2].c, []);
+  assert.deepEqual(Q.setProblem(set), { i: 2, why: "qzNeedQ" });
+  assert.equal(Q.problem({ ...set.q[2], t: "?", o: ["a", "b", "", ""] }), "qzNeedRight");
+  assert.equal(Q.problem({ ...set.q[2], t: "?" }), "qzNeedOpts");
+  assert.deepEqual(Q.setProblem({ t: "", q: set.q }), { i: -1, why: "qzNeedTitle" });
+  // asked: the empty option goes, and the right answer follows it
+  const [pub, key] = Q.asked(set.q[0]);
+  assert.deepEqual(pub, { t: "2+2?", o: ["3", "4", "5"], d: 20, p: 1 });
+  assert.deepEqual(key, [1]);
+  // points: all of them at once, half at the last moment, double on a double question
+  assert.equal(Q.points(pub, 0), 1000);
+  assert.equal(Q.points(pub, 10000), 750);
+  assert.equal(Q.points(pub, 99999), 500);
+  assert.equal(Q.points({ ...pub, p: 2 }, 0), 2000);
+  assert.equal(Q.points({ ...pub, p: 0 }, 0), 0);
+  // scores: only players count; a wrong answer or none gets nothing; totals carry on; ties go to the faster
+  const at = 1e12, players = { a: {}, b: {}, c: {}, d: {} };
+  const s1 = Q.settle(pub, key, { a: { c: 1, at: at + 2000 }, b: { c: 1, at: at + 10000 }, c: { c: 0, at: at + 1000 }, x: { c: 1, at } }, players, null, at);
+  assert.deepEqual(s1.n, [1, 2, 0]);
+  assert.deepEqual(s1.g, { a: 950, b: 750, c: 0, d: 0 });
+  const s2 = Q.settle(pub, key, { b: { c: 1, at: at + 2000 }, c: { c: 1, at } }, players, s1, at);
+  assert.deepEqual(s2.sc, { a: 950, b: 1700, c: 1000, d: 0 });
+  assert.deepEqual(s2.r, { a: 1, b: 2, c: 1, d: 0 });
+  assert.deepEqual(Q.ranking(s2).map((r) => [r.uid, r.rank]), [["b", 1], ["c", 2], ["a", 3], ["d", 4]]);
+  assert.deepEqual(Q.ranking({ sc: { a: 5, b: 5 }, ms: { a: 1, b: 1 }, r: {} }).map((r) => r.rank), [1, 1]);
+  assert.deepEqual(Q.cleanScores(JSON.parse(JSON.stringify(s2))), s2);
+  // read from the room, untrusted
+  assert.equal(Q.cleanAsked({ t: "x", o: ["only one"] }), null);
+  assert.deepEqual(Q.cleanKey([1, 1, 7, "2", -1]), [1]);
+  assert.equal(Q.cleanLive({ ph: "q", i: "3", at: 1 }), null);
+  assert.equal(Q.cleanChoice(4), null);
+  // a file: what goes out comes back; anything else is refused
+  assert.deepEqual(Q.fromFile(Q.toFile(set)), set);
+  assert.equal(Q.fromFile("{}"), null);
+  assert.equal(Q.fromFile("not json"), null);
+  assert.equal(Q.fromFile(JSON.stringify({ kind: "stoatalk-quiz", v: 1, t: "x", q: [] })), null);
+  assert.match(Q.scoresCsv([[1, 'A "b", c', 900, 1]], ["Rank", "Name", "Points", "Right"]), /^﻿Rank,Name,Points,Right\r\n1,"A ""b"", c",900,1\r\n$/);
+  // a picture: kept in a set and a file as the JPEG itself; in the room only where it is, and that goes out with the question
+  const img = { d: "_9j_4AAQ", w: 640, h: 480 }, f = "-Nquiz0000000000000Aabc123XYZ0";
+  const withPic = Q.cleanSet({ t: "p", q: [{ ...set.q[0], img, im: { f, w: 640, h: 480 } }] }).q[0];
+  assert.deepEqual([withPic.img, withPic.im], [img, { f, w: 640, h: 480 }]);
+  assert.equal(Q.cleanQuestion({ ...set.q[0], img: { d: "not base64!", w: 1, h: 1 } }).img, undefined);
+  assert.equal(Q.cleanQuestion({ ...set.q[0], img: { d: "x".repeat(Q.QUIZ.imgChars + 1), w: 1, h: 1 } }).img, undefined);
+  assert.equal(Q.cleanQuestion({ ...set.q[0], img: { ...img, w: 0 } }).img, undefined);
+  assert.equal(Q.cleanQuestion({ ...set.q[0], im: { f: "../x", w: 1, h: 1 } }).im, undefined);
+  assert.deepEqual(Q.asked(withPic)[0].im, { f, w: 640, h: 480 });
+  assert.deepEqual(Q.cleanAsked(Q.asked(withPic)[0]).im, { f, w: 640, h: 480 });
+  const back = Q.fromFile(Q.toFile({ t: "p", q: [withPic] })).q[0];
+  assert.deepEqual([back.img, back.im], [img, undefined]);
+});
+
+test("a scanned QR Code joins only when it's a StoaTalk invite link, and keeps a Private Salon's key", async () => {
+  const { roomLink } = await import(new URL("scan.js?v=dev", APP));
+  const key = "A".repeat(43);
+  assert.equal(roomLink("https://stoatalk.app/?room=K7QM"), "?room=K7QM");
+  assert.equal(roomLink(` https://www.stoatalk.app/?room=k7qm#k=${key}\n`), `?room=k7qm#k=${key}`);
+  assert.equal(roomLink("https://stoatalk.app/index.html?lang=ja&room=K7QM&show=1"), "?room=K7QM");
+  for (const no of ["https://evil.example/?room=K7QM", "http://stoatalk.app/?room=K7QM", "https://stoatalk.app.evil.example/?room=K7QM",
+    "https://stoatalk.app/?room=K7Q", "https://stoatalk.app/", "K7QM", "javascript:alert(1)", "", null]) assert.equal(roomLink(no), null, String(no));
+});
+
+test("sticky notes: a note's place sorts between its neighbours, however often notes move", async () => {
+  const { between, placeAt, byPlace } = await import(new URL("stickyset.js?v=dev", APP));
+  assert.equal(between(), "i");
+  for (const [a, b] of [["", "i"], ["i", null], ["i", "j"], ["i", "i9"], ["", "1"], ["0i", "1"], ["zz", null], ["a", "a1"]]) {
+    const m = between(a, b);
+    assert.ok(m > a && (b == null || m < b), `${a} < ${m} < ${b}`);
+    assert.match(m, /^[0-9a-z]+[1-9a-z]$|^[1-9a-z]$/);
+  }
+  // keep dropping a note at the front, and at the second place, of a column: the order holds and the keys stay short
+  let list = [{ id: "a", o: "i", at: 1 }];
+  for (let n = 0; n < 60; n++) {
+    list.splice(n % 2, 0, { id: "n" + n, o: placeAt(list, n % 2), at: 2 });
+    const sorted = [...list].sort(byPlace).map((x) => x.id);
+    assert.deepEqual(sorted, list.map((x) => x.id));
+  }
+  assert.ok(Math.max(...list.map((x) => x.o.length)) <= 40);
+  // a place that would sort before what comes ahead falls back to after it
+  assert.ok(between("m", "c") > "m");
+});
+
+test("sticky notes: notes and votes are cleaned as they come in, and the result adds up and goes out as a file", async () => {
+  const { cleanNote, cleanCols, cleanLive, cleanPicks, tally, ranked, boardCsv, boardMd } = await import(new URL("stickyset.js?v=dev", APP));
+  assert.equal(cleanLive({ ph: "nope" }), null);
+  assert.deepEqual(cleanLive({ ph: "vote", v: 4, lim: 10, an: false }), { ph: "vote", v: 3, lim: 10, an: false, lock: false });
+  assert.deepEqual(cleanCols([{ k: "0", n: "A" }, { k: "0", n: "B" }, { k: "7", n: "C" }, { k: "1", n: "x".repeat(40) }]), [{ k: "0", n: "A" }, { k: "1", n: "x".repeat(30) }]);
+  assert.equal(cleanNote({ t: "", c: "0", k: "0", o: "i" }), null);
+  assert.deepEqual(cleanNote({ t: "讀書會", c: "9", k: "x", o: "BAD", at: 5 }), { t: "讀書會", c: 0, k: "0", o: "i", at: 5 });
+  assert.deepEqual(cleanNote({ x: "c2VhbGVk", c: "2", k: "1", o: "a", at: 1 }, { t: "密", n: "熊", a: "🐻" }), { t: "密", c: 2, k: "1", o: "a", at: 1, nm: "熊", av: "🐻" });
+  assert.equal(cleanNote({ x: "c2VhbGVk", c: "2", k: "1", o: "a" }, null), null);   // didn't open
+  const A = "A".repeat(20), B = "B".repeat(20), G = "G".repeat(20);
+  assert.deepEqual(cleanPicks(`${A},${A},bad,${B},${B}`, 3), [A, A, B]);
+  const notes = new Map([[A, { t: "甲", c: 0, k: "0", o: "i", at: 1 }], [B, { t: "乙, \"引號\"", c: 1, k: "1", o: "i", at: 2 }]]);
+  // only each person's first votes count, and only on notes still there
+  const counts = tally({ k1: [A, A, B, B], k2: [B, G] }, notes, 3);
+  assert.deepEqual(counts, { [A]: 2, [B]: 2 });
+  const cols = [{ k: "0", n: "優點" }, { k: "1", n: "缺點" }];
+  const rows = ranked(cols, notes, { [A]: 1, [B]: 3 });
+  assert.deepEqual(rows.map((r) => [r.t, r.v]), [["乙, \"引號\"", 3], ["甲", 1]]);
+  assert.equal(boardCsv(cols, rows, ["欄", "內容", "票", "作者"], false), "﻿欄,內容,票\r\n優點,甲,1\r\n缺點,\"乙, \"\"引號\"\"\",3\r\n");
+  assert.equal(boardMd("主題", cols, rows, (n) => `${n} 票`, false), "# 主題\n\n## 優點\n\n- 甲 (1 票)\n\n## 缺點\n\n- 乙, \"引號\" (3 票)\n");
+});
+
+test("Google sign-in's pages at stoatalk.app/__/auth go on to Firebase's, and nowhere else", async () => {
+  const { onRequest, FIREBASE_AUTH } = await import(new URL("../functions/__/[[path]].js", import.meta.url));
+  const fetched = [], realFetch = globalThis.fetch;
+  globalThis.fetch = async (req) => { fetched.push(req); return new Response("ok"); };
+  try {
+    const res = await onRequest({ request: new Request("https://stoatalk.app/__/auth/handler?apiKey=k&providerId=google.com", { headers: { "Accept-Language": "zh-TW" } }) });
+    assert.equal(await res.text(), "ok");
+    assert.equal(fetched[0].url, `https://${FIREBASE_AUTH}/__/auth/handler?apiKey=k&providerId=google.com`);
+    assert.equal(fetched[0].headers.get("Accept-Language"), "zh-TW");
+    await onRequest({ request: new Request("https://stoatalk.app/__/firebase/init.json") });
+    assert.equal(fetched[1].url, `https://${FIREBASE_AUTH}/__/firebase/init.json`);
+    assert.equal((await onRequest({ request: new Request("https://x.stoatalk.pages.dev/__/auth/handler") })).status, 404);
+    assert.equal((await onRequest({ request: new Request("https://stoatalk.app/__/other") })).status, 404);
+    assert.equal(fetched.length, 2);
+  } finally { globalThis.fetch = realFetch; }
 });

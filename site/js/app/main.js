@@ -11,22 +11,27 @@
    This file only connects the page's fixed buttons to the modules beside it:
      session.js   the room on screen          room.js     a Room: its data, kept live; api.js its writes
      crypto.js    end-to-end encryption        backend.js  the Firebase connection
-     kinds.js     text, GIF, photo, poll, draw (photos.js, polls.js, draws.js)
+     kinds.js     text, GIF, photo, poll, draw, game, long post (photos.js, polls.js, draws.js, games.js, posts.js, comments.js)
+     games.js     mini-games and their leaderboard (puzzles.js makes the puzzles, boards.js draws them)
      chat.js      the chat screen              composer.js the message box    actions.js a message's ⋯ menu
      menu.js      the room's ⋯ menu            people.js   members and owner tools
      qa.js        lecture Q&A                  show.js     the projector screen
      lobby.js     opening and joining          home.js     screens and the home page
      records.js   export, import, saved records (archive.js: the record format)
-     identity.js  nickname and animal          notify.js   notifications    pickers.js emoji, GIF, ＋ */
+     identity.js  nickname and animal          notify.js   notifications    pickers.js emoji, GIF, ＋
+     account.js   signing in with Google (optional): the same id on every device (pairing.js brings the keys over)
+     quick.js     quick replies and the double-tap 👍       scan.js     joining by the room's QR Code */
 import { KLIPY_KEY, IDLE_MS, params } from "./constants.js?v=dev";
-import { $ } from "./dom.js?v=dev";
+import { $, toast } from "./dom.js?v=dev";
+import { t } from "./text.js?v=dev";
 import { store, KEYS } from "./storage.js?v=dev";
 import { backend, asParam } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { showMe } from "./identity.js?v=dev";
 import { create, join, cleanCode } from "./lobby.js?v=dev";
-import { LIST, setView, markSeen, showJump } from "./chat.js?v=dev";
+import { LIST, setView, markSeen, showJump, setFlow, fromEnd, toEnd } from "./chat.js?v=dev";
 import { send, cancelReply, typing, renderTyping, mentionBar, box } from "./composer.js?v=dev";
+import { renderQuick, wireQuick, wireDoubleTap, emptySendTap } from "./quick.js?v=dev";
 import { ask } from "./qa.js?v=dev";
 import { sendPhotos } from "./photos.js?v=dev";
 import { menu, share } from "./menu.js?v=dev";
@@ -34,7 +39,9 @@ import { people } from "./people.js?v=dev";
 import { setNotify, watchVisibility } from "./notify.js?v=dev";
 import { openPicker, closePicker, pickerOpen } from "./pickers.js?v=dev";
 import { importFile, recordMenu, showRecordTab } from "./records.js?v=dev";
-import { home, homeMenu, backdrop, adoptOldRoom, turnResumePage } from "./home.js?v=dev";
+import { scanRoom } from "./scan.js?v=dev";
+import { readPair, sendKeys } from "./pairing.js?v=dev";
+import { home, homeMenu, backdrop, adoptOldRoom, turnResumePage, showResume } from "./home.js?v=dev";
 
 I18N.apply();
 adoptOldRoom();
@@ -54,6 +61,8 @@ $("#joinForm").addEventListener("submit", (e) => {
   const code = $("#joinCode").value;
   join(pastedLink && cleanCode(pastedLink) === code ? pastedLink : code);
 });
+// the camera reads the room's QR Code: its link joins, key and all
+$("#scanBtn").addEventListener("click", () => scanRoom().then((link) => link && join(link)));
 $("#joinCode").addEventListener("input", (e) => { if (!e.isComposing) e.target.value = cleanCode(e.target.value).slice(0, 4); });
 // what's pasted is cleaned whole, before the 4-character limit would cut it (a link, or "ab cd")
 $("#joinCode").addEventListener("paste", (e) => {
@@ -68,6 +77,8 @@ $("#resume").addEventListener("click", (e) => {
   if (b.dataset.code) join(b.dataset.code);
   else turnResumePage(b.dataset.a === "next" ? 1 : -1);
 });
+// back on the home page after a while away: the rooms' new-message counts may have grown
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("#home").hidden) showResume(); });
 $("#importFile").addEventListener("change", (e) => { importFile(e.target.files[0]); e.target.value = ""; });
 $("#record").addEventListener("click", (e) => {
   const a = e.target.closest("[data-a]")?.dataset.a, tab = e.target.closest("[data-tab]");
@@ -99,11 +110,16 @@ setInterval(() => room && !room.gone && renderTyping(), 2000);
 const ta = box();
 const grow = () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; };
 ta.addEventListener("input", grow);
-ta.addEventListener("input", () => { typing.ping(); mentionBar(); });
+ta.addEventListener("input", () => { typing.ping(); mentionBar(); renderQuick(); });
+wireQuick(); wireDoubleTap(LIST());
 $("#mentionBar").addEventListener("mousedown", (e) => e.preventDefault()); // keep the keyboard up while picking a name
-LIST().addEventListener("scroll", () => { if (room) { markSeen(); showJump(); } }, { passive: true });
+const scrolled = () => { if (room && !$("#chat").hidden) { markSeen(); showJump(); } };
+LIST().addEventListener("scroll", scrolled, { passive: true });
+addEventListener("scroll", scrolled, { passive: true });
+// the home page's bar stays at the top and gets its hairline once something has scrolled under it
+addEventListener("scroll", () => $("#home").classList.toggle("scrolled", scrollY > 0), { passive: true });
 ["touchstart", "wheel"].forEach((ev) => LIST().addEventListener(ev, () => { if (room) room.ui.touched = true; }, { passive: true }));
-$("#jumpBtn").addEventListener("click", () => { if (room) room.ui.touched = true; const l = LIST(); l.scrollTo({ top: l.scrollHeight, behavior: "smooth" }); });
+$("#jumpBtn").addEventListener("click", () => { if (room) room.ui.touched = true; toEnd("smooth"); });
 // a picture pasted into the box is sent as a photo
 ta.addEventListener("paste", (e) => {
   const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
@@ -112,6 +128,72 @@ ta.addEventListener("paste", (e) => {
 // the keyboard covers the home indicator, so the home-screen app's extra space under the box goes while typing
 ta.addEventListener("focus", () => document.body.classList.add("typing"));
 ta.addEventListener("blur", () => { document.body.classList.remove("typing"); typing.stop(); });
+// on a phone's browser the room scrolls the page (see setFlow), but only while nothing is being typed: a field gaining
+// focus puts the chat back in its fixed frame at once, before the keyboard comes, so the keyboard is handled as below
+const typingIn = () => document.activeElement?.matches("textarea, input:not([type=checkbox], [type=radio], [type=file]), [contenteditable=true]");
+const syncFlow = () => { const chat = $("#chat"); setFlow(!chat.hidden && !chat.style.height && !document.documentElement.classList.contains("kb") && !typingIn()); };
+new MutationObserver(syncFlow).observe($("#chat"), { attributes: true, attributeFilter: ["hidden"] });
+document.addEventListener("focusin", syncFlow);
+document.addEventListener("focusout", () => setTimeout(syncFlow));
+// the bars and the box stay on the screen over the page, so a message brought into view lands between them
+const bars = new ResizeObserver(() => {
+  const s = document.documentElement.style;
+  s.setProperty("--chattop", `${$(".chattop").offsetHeight}px`); s.setProperty("--chatfoot", `${$(".chatfoot").offsetHeight}px`);
+});
+[".chattop", ".chatfoot"].forEach((s) => bars.observe($(s)));
+// iOS doesn't shrink the page for the keyboard: it slides the whole page up behind it, which takes the room's
+// header off the top (and in a private chat can leave only blank space above the box), and leaves a bottom sheet
+// (a description, an answer, a new room…) under the keyboard with only its title showing. While the keyboard is up,
+// the chat and any open sheet are fitted to the part of the screen still showing, so the header stays at the top,
+// the box sits on the keyboard and a sheet rises above it. It only ever shrinks them, never stretches them past the
+// screen; pinch zoom is left alone.
+const vv = window.visualViewport;
+const fit = (box, up) => {
+  const s = box.style;
+  s.top = up ? `${vv.offsetTop}px` : ""; s.height = up ? `${vv.height}px` : ""; s.bottom = up ? "auto" : "";
+};
+const fitScreen = () => {
+  const chat = $("#chat"), sheets = document.querySelectorAll(".overlay");
+  const up = Math.abs(vv.scale - 1) < .01 && innerHeight - vv.height > 1;
+  document.documentElement.classList.toggle("kb", up);
+  syncFlow(); // the keyboard takes the chat out of the page's scroll before it's fitted, and gives it back once it isn't
+  if (!up && !chat.style.height && ![...sheets].some((o) => o.style.height)) return;
+  // the home page scrolls as usual under its own fields; only the chat and sheets need putting back
+  const fitting = !chat.hidden || sheets.length;
+  if (up && !fitting) return;
+  const stick = fromEnd() < 80;
+  // the home-screen app can scroll the page itself rather than the visible part, which leaves a fixed chat behind
+  // at the top, so the page is put back at the top first; the fitted chat then fits with nothing left to scroll
+  if (up && (scrollY || vv.offsetTop)) scrollTo(0, 0);
+  fit(chat, up && !chat.hidden);
+  sheets.forEach((o) => fit(o, up));
+  if (stick) toEnd();
+  syncFlow();
+  // a long sheet (a new room, a poll) scrolls inside itself, so the field being typed in is brought into its view
+  const f = document.activeElement;
+  if (up && f?.closest(".sheet")) f.scrollIntoView({ block: "nearest" });
+};
+// iOS slides the page up in an animation and doesn't always say when it's done, so after a field gains focus, a
+// sheet opens or the screen moves, the screen keeps following it every frame until it has stood still for a moment
+let settling = 0;
+const settle = () => {
+  const go = !settling; settling = performance.now() + 1500;
+  if (!go) return;
+  let last = "";
+  const step = (now) => {
+    const at = `${vv.offsetTop},${vv.height},${vv.scale},${scrollY},${document.querySelectorAll(".overlay").length}`;
+    if (at !== last) { last = at; fitScreen(); settling = Math.max(settling, now + 300); }
+    if (now < settling) requestAnimationFrame(step); else settling = 0;
+  };
+  requestAnimationFrame(step);
+};
+if (vv) {
+  ["resize", "scroll"].forEach((ev) => vv.addEventListener(ev, () => { fitScreen(); settle(); }));
+  ["focusin", "focusout"].forEach((ev) => document.addEventListener(ev, settle));
+  addEventListener("scroll", settle, { passive: true });
+  // a sheet opened while the keyboard is already up (a GIF search from the box) is fitted as it appears
+  new MutationObserver(settle).observe(document.body, { childList: true });
+}
 // Enter sends on a keyboard; on phones Enter is a new line and the button sends. Never while an IME is composing.
 ta.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && matchMedia("(pointer: fine)").matches) { e.preventDefault(); $("#composer").requestSubmit(); }
@@ -120,9 +202,9 @@ ta.addEventListener("keydown", (e) => {
 $("#composer").addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = ta.value;
-  if (!text.trim()) return;
-  ta.value = ""; grow(); mentionBar();
-  if (!(await (room?.ui.view === "qa" ? ask(text) : send(text))) && !ta.value) { ta.value = text; grow(); } // not sent: give the text back
+  if (!text.trim()) { if (e.submitter?.classList.contains("send")) emptySendTap(e.submitter); return; } // quick.js: five in a row fly my animal
+  ta.value = ""; grow(); mentionBar(); renderQuick();
+  if (!(await (room?.ui.view === "qa" ? ask(text) : send(text))) && !ta.value) { ta.value = text; grow(); renderQuick(); } // not sent: give the text back
   else if (pickerOpen() === "emoji") closePicker();
   ta.focus();
 });
@@ -143,3 +225,7 @@ if (start && backend.configured) { // an encrypted room's key rides after the #
   $("#home").hidden = true; // straight into the room, without the home page showing first: the loading screen until then
   join(start + location.hash).finally(() => { if (!room || room.gone) home(); else if ($("#chat").hidden) backdrop(); });
 } else home();
+// a pairing code read with the phone's own camera opens here: this device sends its keys to the one showing it
+// (home() has taken it off the address already)
+const pairing = params.get("pair") && readPair(location.origin + "/?pair=" + encodeURIComponent(params.get("pair")));
+if (pairing && backend.configured) backend.connect().then(() => sendKeys(pairing), () => toast(t("tryAgain")));

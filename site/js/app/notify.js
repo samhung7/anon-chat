@@ -1,6 +1,7 @@
 /* Notifications: a system notification for each new message while the page is in the background. Each room can
    be muted on this device (chat-mute:{code}). It works while the page is open in a tab or an installed app, even
-   hidden; a closed page would need a push server, which this app doesn't have. */
+   hidden. Where Web Push works (push.js) a hidden page leaves it to the push, which also reaches a page the phone has
+   stopped running. */
 import { APP, FRESH_MS } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
 import { $, toast } from "./dom.js?v=dev";
@@ -12,7 +13,8 @@ import { mentionsMe } from "./richtext.js?v=dev";
 import { isBlocked } from "./blocking.js?v=dev";
 import { markSeen } from "./chat.js?v=dev";
 import { roomUrl } from "./home.js?v=dev";
-import { syncPush } from "./push.js?v=dev";
+import { syncPush, pushCovers } from "./push.js?v=dev";
+import { postName } from "./posts.js?v=dev";
 
 const CAN_NOTIFY = "Notification" in window;
 const granted = () => CAN_NOTIFY && Notification.permission === "granted";
@@ -35,15 +37,25 @@ export function noteNew(v, dmWith) {
 // atMe: someone @mentioned me, which notifies even in a room I muted
 async function notify(v, dmWith, atMe) {
   if (!notifyOn(room.code) && !(atMe && granted())) return;
+  if (notifyOn(room.code) && pushCovers()) return; // a hidden page is offline, so a push tells about it instead
   const a = room.author(v, dmWith);
   const title = dmWith ? t("dmToast", { who: a.name }) : atMe ? t("mentionToast", { who: `${a.avatar} ${a.name}` }) : `${a.avatar} ${a.name} | ${room.meta?.title || t("roomN", { code: room.code })}`;
-  const body = dmWith ? t("openToRead") : kindOf(v).notice?.(v) || snippet(v);
-  const opts = { body, tag: "room-" + room.code, renotify: true, icon: "icons/stoa2-192.png", data: { url: roomUrl(room.code) } };
+  show(title, dmWith ? t("openToRead") : kindOf(v).notice?.(v) || snippet(v));
+}
+async function show(title, body) {
+  const opts = { body, tag: "room-" + room.code, renotify: true, icon: "icons/stoa3-192.png", data: { url: roomUrl(room.code) } };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();
     if (reg) return await reg.showNotification(title, opts); // phones only show notifications through the service worker
     const n = new Notification(title, opts); n.onclick = () => { window.focus(); n.close(); };
   } catch (e) { console.warn(e); }
+}
+// a comment on my long post (v), or one that @mentions me: a toast, or a notification while the page is hidden. Comments
+// aren't sent by Web Push, so this is the only word of them
+export function noteComment(v, c, atMe) {
+  const who = room.author(c).name, title = atMe ? t("mentionToast", { who }) : t("commentToast", { who, post: postName(v.post) });
+  if (!document.hidden) return toast(title);
+  if (notifyOn(room.code) || (atMe && granted())) show(title, c.text.slice(0, 120));
 }
 export async function setNotify(on) {
   if (!room) return;

@@ -83,6 +83,32 @@ test("photo service: a photo goes once its marker is gone, a room's once the roo
   assert.equal(await call("OPTIONS", "/photo/ABCD/bob/f1.jpg", null), 204);
 });
 
+test("photo service: a quiz's picture goes once its quiz is gone", async () => {
+  const z = "-Nquiz0000000000000A", f = z + "abc123XYZ0";
+  assert.equal(await call("PUT", `/photo/ABCD/alice/${f}.jpg`, "alice", JPEG), 201);
+  await db("rooms/ABCD/qz/" + z, { by: "alice" });
+  assert.equal(await call("DELETE", `/photo/ABCD/alice/${f}`, "bob"), 409); // its quiz is still there
+  await db("rooms/ABCD/qz/" + z, null);
+  assert.equal(await call("DELETE", `/photo/ABCD/alice/${f}`, "bob"), 204);
+  assert.equal(bucket.objects.size, 0);
+});
+
+test("photo service: a Google account's quiz library puts in its own pictures, named by their SHA-256", async () => {
+  const id = Buffer.from(await crypto.subtle.digest("SHA-256", JPEG)).toString("base64url").slice(0, 22);
+  assert.equal(await call("PUT", `/lib/ann/${id}.jpg`, "ann", JPEG), 403); // not signed in with Google: no users/ann/dh
+  await db("users/ann/dh", "BPub_key-123");
+  assert.equal(await call("PUT", `/lib/ann/${id}.jpg`, "ann", JPEG), 201);
+  assert.equal(bucket.objects.get(`u/ann/${id}.jpg`).httpMetadata.contentType, "image/jpeg");
+  assert.equal(await call("PUT", `/lib/ann/${id}.jpg`, "ann", JPEG), 409); // there already: the same picture
+  assert.equal(await call("PUT", `/lib/ann/${"A".repeat(22)}.jpg`, "ann", JPEG), 400); // not its hash
+  assert.equal(await call("PUT", `/lib/bob/${id}.jpg`, "ann", JPEG), 400); // someone else's library
+  assert.equal(await call("PUT", `/lib/ann/${id}.jpg`, null, JPEG), 401);
+  const html = new TextEncoder().encode("<html>"), hid = Buffer.from(await crypto.subtle.digest("SHA-256", html)).toString("base64url").slice(0, 22);
+  assert.equal(await call("PUT", `/lib/ann/${hid}.jpg`, "ann", html), 415);
+  assert.equal(await call("PUT", `/lib/ann/${id}.jpg`, "ann", new Uint8Array(165001).fill(0xff)), 413);
+  assert.equal(bucket.objects.size, 1);
+});
+
 test("cleanup: photos no marker points at, once they're old enough", async () => {
   const t = Date.now(), old = t - GRACE - 1;
   const objects = [
@@ -92,9 +118,26 @@ test("cleanup: photos no marker points at, once they're old enough", async () =>
     { key: "ABCD/bob/f3.bin", uploaded: t - 1000 }, // being sent right now
     { key: "WXYZ/bob/f1.bin", uploaded: old },   // its room is gone
     { key: "junk", uploaded: old },
+    { key: "ABCD/bob/-Nquiz0000000000000Aabc123XYZ0.jpg", uploaded: old },  // its quiz is on
+    { key: "ABCD/bob/-Nquiz0000000000000Babc123XYZ0.jpg", uploaded: old },  // its quiz is gone
+    { key: "ABCD/eve/-Nquiz0000000000000Aabc123XYZ1.bin", uploaded: old },  // not the quiz's host's
   ];
   const markers = async (code) => (code === "ABCD" ? { f1: { by: "bob", at: 1 } } : null);
-  assert.deepEqual(await strayPhotos(objects, markers, t), ["ABCD/bob/f2.jpg", "ABCD/eve/f1.jpg", "WXYZ/bob/f1.bin", "junk"]);
+  const quizBy = async (code, z) => (code === "ABCD" && z === "-Nquiz0000000000000A" ? "bob" : null);
+  assert.deepEqual(await strayPhotos(objects, markers, t, quizBy), ["ABCD/bob/f2.jpg", "ABCD/eve/f1.jpg", "WXYZ/bob/f1.bin", "junk",
+    "ABCD/bob/-Nquiz0000000000000Babc123XYZ0.jpg", "ABCD/eve/-Nquiz0000000000000Aabc123XYZ1.bin"]);
+});
+
+test("cleanup: a quiz library's pictures go once no set in the account points at them", async () => {
+  const t = Date.now(), old = t - GRACE - 1, A = "A".repeat(22), B = "B".repeat(22), C = "C".repeat(22);
+  const objects = [
+    { key: `u/ann/${A}.jpg`, uploaded: old },     // a set has it
+    { key: `u/ann/${B}.jpg`, uploaded: old },     // none does any more
+    { key: `u/ann/${C}.jpg`, uploaded: t - 1000 }, // just put in, its set on the way
+    { key: `u/gone/${A}.jpg`, uploaded: old },    // the account was deleted
+  ];
+  const library = async (uid) => (uid === "ann" ? { s1: JSON.stringify({ t: "x", q: [{ t: "q", img: { f: A, w: 1, h: 1 } }, { t: "r" }] }), s2: "not JSON" } : null);
+  assert.deepEqual(await strayPhotos(objects, async () => null, t, async () => null, library), [`u/ann/${B}.jpg`, `u/gone/${A}.jpg`]);
 });
 
 test("cleanup: the bucket listed page by page over R2's S3 API", async () => {
@@ -119,7 +162,7 @@ test("cleanup: the bucket listed page by page over R2's S3 API", async () => {
 
 /* ---------- Web Push ---------- */
 import { encrypt, vapid, sealSub, openSub, b64u, validSubscription } from "../worker/src/push.js";
-import { makeHandler, readDb } from "../worker/src/index.js";
+import { makeHandler, readDb, allowedOrigin } from "../worker/src/index.js";
 import { unsignedUid } from "./photo-stub.mjs";
 
 const hkdfBits = async (ikm, salt, info, n) => new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info },
@@ -169,7 +212,7 @@ test("push: a sealed subscription opens only as its owner's", async () => {
   assert.equal(await vapid({}), null);
 });
 
-test("push service: announces a message to members with a subscription who aren't online", async () => {
+test("push service: announces a message to members with a subscription who aren't online, on each of their devices", async () => {
   const E = { ...env(new MemoryBucket()), VAPID_KEY: await vapidKey() };
   const pushed = [];
   const fetcher = async (url, init) => { pushed.push({ url, init }); return new Response(null, { status: 201 }); };
@@ -178,7 +221,7 @@ test("push service: announces a message to members with a subscription who aren'
     headers: uid ? { Authorization: "Bearer " + unsigned(uid) } : {} }), E);
   const key = await (await go("GET", "/push/key")).json();
   assert.match(key.key, /^B[A-Za-z0-9_-]{86}$/); // an uncompressed P-256 point
-  const alice = await browser(), carol = await browser(), dave = await browser();
+  const alice = await browser(), alice2 = await browser(), carol = await browser(), dave = await browser();
   assert.equal((await go("POST", "/push/seal", "alice", { endpoint: "https://evil.example/x", keys: alice.sub.keys })).status, 400);
   assert.equal((await go("POST", "/push/seal", null, alice.sub)).status, 401);
   const seal = async (uid, b) => (await (await go("POST", "/push/seal", uid, b.sub)).json()).sealed;
@@ -187,7 +230,9 @@ test("push service: announces a message to members with a subscription who aren'
     meta: { owner: "alice", created: 1, last: t, title: "讀書會", pa: t },
     members: { alice: { joined: 1, name: "a", avatar: "🦊", online: false }, bob: { joined: 1, name: "b", avatar: "🐻", online: true },
                carol: { joined: 1, name: "c", avatar: "🐼", online: true }, dave: { joined: 1, name: "d", avatar: "🐯" } },
-    push: { alice: await seal("alice", alice), carol: await seal("carol", carol), dave: await seal("alice", dave) }, // dave's place holds alice's
+    // alice on her phone and her laptop; dave's place, in the one-string way from before devices, holds alice's
+    push: { alice: { devPhone0001: await seal("alice", alice), devLaptop001: await seal("alice", alice2) }, carol: { devCarol0001: await seal("carol", carol) },
+            dave: await seal("alice", dave) },
     msgs: { m1: { by: "bob", name: "b", avatar: "🐻", text: "大家好\n今天讀第三章", at: t }, m0: { by: "bob", name: "b", avatar: "🐻", text: "old", at: t - 600000 },
             m2: { by: "alice", name: "a", avatar: "🦊", text: "hi", at: t } },
   });
@@ -195,18 +240,30 @@ test("push service: announces a message to members with a subscription who aren'
   assert.equal((await go("POST", "/push/notify/ABCD", "bob", { id: "m0" })).status, 409); // not new
   assert.equal((await go("POST", "/push/notify/ABCD", "eve", { id: "m1" })).status, 403); // not in the room
   const res = await go("POST", "/push/notify/ABCD", "bob", { id: "m1" });
-  assert.deepEqual(await res.json(), { sent: 1, next: null });
-  assert.equal(pushed.length, 1); // carol is online; dave's place holds someone else's subscription
-  assert.equal(pushed[0].url, alice.sub.endpoint);
+  assert.deepEqual(await res.json(), { sent: 2, next: null });
+  assert.equal(pushed.length, 2); // carol is online; dave's place holds someone else's subscription
+  assert.deepEqual(pushed.map((p) => p.url).sort(), [alice.sub.endpoint, alice2.sub.endpoint].sort());
+  if (pushed[0].url !== alice.sub.endpoint) pushed.reverse();
   assert.equal(pushed[0].init.headers.Topic, "ABCD");
   assert.match(pushed[0].init.headers.Authorization, /^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=B/);
   assert.deepEqual(JSON.parse(await alice.open(pushed[0].init.body)), { c: "ABCD", k: "m", n: "b", a: "🐻", r: "讀書會", s: "大家好 今天讀第三章" });
-  // the room was just announced: the next message waits
-  assert.deepEqual(await (await go("POST", "/push/notify/ABCD", "bob", { id: "m1" })).json(), { sent: 0, next: null });
-  assert.equal(pushed.length, 1);
+  // the room was just announced: the next message waits, and is told for how long
+  const soon = await (await go("POST", "/push/notify/ABCD", "bob", { id: "m1" })).json();
+  assert.equal(soon.sent, 0);
+  assert.ok(soon.wait > 0 && soon.wait <= 20000);
+  assert.equal(pushed.length, 2);
   // a private message: only to the one it's for, and it says nothing of what's in it
   await db("rooms/ABCD/dm/alice_bob/d1", { by: "bob", to: "alice", x: "sealed", at: Date.now() });
   assert.equal((await go("POST", "/push/notify/ABCD", "bob", { id: "d1", to: "carol" })).status, 409);
-  assert.deepEqual(await (await go("POST", "/push/notify/ABCD", "bob", { id: "d1", to: "alice" })).json(), { sent: 1, next: null });
-  assert.deepEqual(JSON.parse(await alice.open(pushed[1].init.body)), { c: "ABCD", k: "d" });
+  assert.deepEqual(await (await go("POST", "/push/notify/ABCD", "bob", { id: "d1", to: "alice" })).json(), { sent: 2, next: null });
+  const dm = pushed.slice(2).find((p) => p.url === alice.sub.endpoint);
+  assert.deepEqual(JSON.parse(await alice.open(dm.init.body)), { c: "ABCD", k: "d" });
+});
+
+test("service: only the listed pages may call it (staging lets every preview under *.stoatalk.pages.dev in)", () => {
+  const list = "https://stoatalk.app,https://*.stoatalk.pages.dev";
+  for (const o of ["https://stoatalk.app", "https://staging.stoatalk.pages.dev", "https://claude-x.stoatalk.pages.dev"]) assert.ok(allowedOrigin(o, list), o);
+  for (const o of [null, "", "https://stoatalk.pages.dev", "https://evilstoatalk.pages.dev", "http://staging.stoatalk.pages.dev",
+    "https://staging.stoatalk.pages.dev.evil.com", "https://stoatalk.app.evil.com"]) assert.ok(!allowedOrigin(o, list), o);
+  assert.ok(!allowedOrigin("https://stoatalk.app", ""));
 });

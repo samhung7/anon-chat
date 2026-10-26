@@ -5,14 +5,14 @@
    anonymous to the owner too. In an encrypted room a question is sealed with the room key, bound to its id. */
 import { LIMITS } from "./constants.js?v=dev";
 import { t, fmtTime } from "./text.js?v=dev";
-import { $, el, toast, sheet, confirmSheet, orToast } from "./dom.js?v=dev";
+import { $, el, toast, sheet, confirmSheet, orToast, icon, avatar, bare } from "./dom.js?v=dev";
 import { StoredList, KEYS } from "./storage.js?v=dev";
 import { backend } from "./backend.js?v=dev";
 import { room } from "./session.js?v=dev";
 import { me } from "./identity.js?v=dev";
 import { linkify } from "./richtext.js?v=dev";
 import { posts } from "./composer.js?v=dev";
-import { LIST, setView } from "./chat.js?v=dev";
+import { LIST, SCROLLER, setView } from "./chat.js?v=dev";
 
 const MAX_MINE = 200;
 export function watchQa(r) {
@@ -59,6 +59,19 @@ async function removeQ(id, waiting) {
   orToast(room.api.removeQuestion(id, { waiting, clearNow: room.isStaff() && room.meta?.qnow === id }));
 }
 const markDone = (id, on) => orToast(room.api.markDone(id, on, on && room.meta?.qnow === id));
+// the host's other steps for a question: on the projector or off, answered or not, take it down
+async function qMenu(q, live) {
+  const a = await sheet("", el("p", { class: "muted qansq", text: q.text }), [
+    ...(!q.done || live ? [["now", t(live ? "qNowOff" : "qNowOn")]] : []),
+    ["done", t(q.done ? "qUndone" : "qDone")],
+    { group: "" },
+    ["remove", t("qRemove"), "danger"],
+  ]);
+  if (!room || room.gone) return;
+  if (a === "now") orToast(room.api.setQNow(live ? null : q.id));
+  if (a === "done") markDone(q.id, !q.done);
+  if (a === "remove") removeQ(q.id, false);
+}
 // write, rewrite or take down the answer; saving one also marks the question answered (and keeps it on the projector if it's the live one)
 async function answerQ(q) {
   const input = el("textarea", { class: "field", maxlength: LIMITS.answer, rows: 6, id: "ansText", placeholder: t("qAnsPh"), "aria-label": t("qAnsTitle") });
@@ -100,46 +113,50 @@ function qCard(q, waiting) {
   const btn = (label, fn, cls = "") => el("button", { type: "button", class: "btn small " + cls, text: label, onclick: fn });
   const tools = [];
   if (waiting) tools.push(btn(t("qApprove"), () => approveQ(q.id), "primary"), btn(t("qReject"), () => removeQ(q.id, true), "danger"));
-  else if (!room.gone) {
-    if (staff && !q.bad) tools.push(btn(t(q.ans ? "qAnsEdit" : "qAnsWrite"), () => answerQ(q), q.ans ? "" : "primary"));
-    if (staff && (!q.done || live)) tools.push(btn(t(live ? "qNowOff" : "qNowOn"), () => orToast(room.api.setQNow(live ? null : q.id))));
-    if (staff) tools.push(btn(t(q.done ? "qUndone" : "qDone"), () => markDone(q.id, !q.done)));
-    if (staff || mine) tools.push(btn(t(mine && !staff ? "qTakeBack" : "qRemove"), () => removeQ(q.id, false), "danger"));
-  }
+  else if (!room.gone && staff) {
+    // one step in view, writing or rewriting the answer; the rest wait under ⋯ so the card reads at a glance
+    if (!q.bad) tools.push(btn(t(q.ans ? "qAnsEdit" : "qAnsWrite"), () => answerQ(q), "primary"));
+    tools.push(el("button", { type: "button", class: "btn small more end", "aria-label": t("more"), onclick: () => qMenu(q, live) }, icon("more")));
+  } else if (!room.gone && mine) tools.push(btn(t("qTakeBack"), () => removeQ(q.id, false), "danger end"));
+  // vote | question, the host's tools on a row of their own; a waiting question shows an hourglass where the vote goes
   return el("div", { class: "qcard" + (live ? " live" : "") + (q.done ? " done" : "") + (waiting ? " waiting" : ""), id: "q-" + q.id },
-    waiting ? null : el("button", { type: "button", class: "upvote" + (voted ? " on" : ""), "aria-pressed": String(voted), "aria-label": t("qUpvote"),
+    waiting ? el("span", { class: "wicon" }, icon("hourglass")) : el("button", { type: "button", class: "upvote" + (voted ? " on" : ""), "aria-pressed": String(voted), "aria-label": t("qUpvote"),
       title: mine ? t("qMine") : t("qUpvote"), disabled: mine || room.gone || q.bad, onclick: () => orToast(room.api.upvote(q.id, !voted)) },
-      el("span", { text: "▲" }), el("b", { text: q.up.length })),
+      icon("upvote", "sm"), el("b", { text: q.up.length })),
     el("div", { class: "qbody" },
-      live ? el("span", { class: "qlive", text: t("qLive") }) : null,
-      el("div", { class: "qwho" }, el("span", { text: q.name ? `${q.avatar} ${q.name}` : t("anonAsker") }),
-        mine ? el("small", { class: "qmine", text: t("qMine") }) : null, el("time", { text: fmtTime(q.at) })),
+      live ? el("span", { class: "tag live", text: t("qLive") }) : q.done ? el("span", { class: "tag ok" }, icon("answered"), t("qDoneTag")) : null,
+      qWho(q.name, q.avatar, mine ? el("small", { class: "qmine", text: t("qMine") }) : null, el("time", { text: fmtTime(q.at) })),
       el("p", { class: "qtext" }, linkify(q.text)),
-      q.ans ? ansBox(q.ans, fmtTime) : null,
-      tools.length ? el("div", { class: "qtools" }, tools) : null));
+      q.ans ? ansBox(q.ans, fmtTime) : null),
+    tools.length ? el("div", { class: "qtools" }, tools) : null);
 }
+// who asked: their animal and name, or the anonymous mark
+export const qWho = (name, av, ...more) => el("div", { class: "qwho" },
+  name ? el("span", { class: "qav" }, avatar(av)) : el("span", { class: "qav anon" }, icon("anonymous", "sm")),
+  el("span", { class: "nm", text: name || bare(t("anonAsker")) }), ...more);
 // an answer under its question; when: how its time reads
 export const ansBox = (a, when) => el("div", { class: "qans" },
-  el("div", { class: "qwho" }, el("span", { text: a.name ? `💬 ${a.avatar || ""} ${a.name}`.replace(/\s+/g, " ") : "💬" }), el("small", { text: t("qAnsLabel") }), a.at ? el("time", { text: when(a.at) }) : null),
+  el("div", { class: "qwho" }, icon("chat", "sm"), a.name ? el("span", { class: "qav" }, avatar(a.avatar)) : null, a.name ? el("span", { class: "nm", text: a.name }) : null,
+    el("small", { text: t("qAnsLabel") }), a.at ? el("time", { text: when(a.at) }) : null),
   el("p", { class: "qtext" }, linkify(a.text)));
 export function renderQa() {
   if (!room || room.ui.view !== "qa" || $("#chat").hidden) return;
-  const list = LIST(), keep = list.scrollTop, staff = room.isStaff(), meta = room.meta;
+  const list = LIST(), keep = SCROLLER().scrollTop, staff = room.isStaff(), meta = room.meta;
   const all = [...room.qs.values()];
   const onScreen = (q) => meta?.qnow === q.id && !!q.ans; // an answered question stays up top while it's on the projector
   const open = all.filter((q) => !q.done || onScreen(q)).sort(byVotes), done = all.filter((q) => q.done && !onScreen(q)).sort((a, b) => b.done - a.done);
   const parts = [];
   if (!meta?.qa) parts.push(el("p", { class: "note", text: t("qaClosedNote") }));
-  else if (meta.qmod) parts.push(el("p", { class: "note qnote", text: t(staff ? "qModStaffNote" : "qModNote") }));
+  else if (meta.qmod) parts.push(el("p", { class: "note qnote" }, icon("info", "sm"), el("span", { text: t(staff ? "qModStaffNote" : "qModNote") })));
   if (staff && room.qq.size) parts.push(el("h3", { class: "qh", text: t("qWaitingN", { n: room.qq.size }) }), ...[...room.qq.values()].sort((a, b) => a.at - b.at).map((q) => qCard(q, true)), el("h3", { class: "qh", text: t("qOpenN", { n: open.length }) }));
-  if (!staff && room.myWait.size) parts.push(el("p", { class: "note qnote", text: t("qMineWaiting", { n: room.myWait.size }) }));
+  if (!staff && room.myWait.size) parts.push(el("p", { class: "note qnote wait" }, icon("hourglass", "sm"), el("span", { text: t("qMineWaiting", { n: room.myWait.size }) })));
   if (open.length) parts.push(...open.map((q) => qCard(q)));
   else if (!done.length && meta?.qa) parts.push(el("p", { class: "empty", text: t("qEmpty") }));
   if (done.length) {
-    const d = el("details", { class: "qdone", open: room.ui.qdoneOpen }, el("summary", { text: t("qDoneN", { n: done.length }) }), done.map((q) => qCard(q)));
+    const d = el("details", { class: "qdone", open: room.ui.qdoneOpen }, el("summary", {}, icon("expand", "sm chev"), t("qDoneN", { n: done.length })), done.map((q) => qCard(q)));
     d.addEventListener("toggle", () => (room.ui.qdoneOpen = d.open));
     parts.push(d);
   }
   list.replaceChildren(...parts);
-  list.scrollTop = keep;
+  SCROLLER().scrollTop = keep;
 }
