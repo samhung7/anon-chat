@@ -1,6 +1,8 @@
 # Deploys the photo and push service (worker/) to Cloudflare when it changes on main.
 # Needs the CLOUDFLARE_API_TOKEN ("Edit Cloudflare Workers") and CLOUDFLARE_ACCOUNT_ID secrets; without them it does nothing.
-# With the VAPID_KEY secret (made on site/admin.html) it also hands the service its Web Push key.
+# With the VAPID_KEY secret (made on site/admin.html) it also hands the service its Web Push key, and with
+# CLEANUP_DISPATCH_TOKEN (a fine-grained GitHub token for this repository with "Actions: Read and write") the token its
+# hourly cron starts the cleanup with.
 name: Deploy photo service
 on:
   push:
@@ -17,6 +19,7 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       VAPID_KEY: ${{ secrets.VAPID_KEY }}
+      CLEANUP_DISPATCH_TOKEN: ${{ secrets.CLEANUP_DISPATCH_TOKEN }}
     steps:
       - if: env.CLOUDFLARE_API_TOKEN == ''
         run: echo "CLOUDFLARE_API_TOKEN is not set; skipping."
@@ -29,4 +32,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: worker
           wranglerVersion: "4"
-          secrets: ${{ env.VAPID_KEY != '' && 'VAPID_KEY' || '' }}
+          secrets: |
+            ${{ env.VAPID_KEY != '' && 'VAPID_KEY' || '' }}
+            ${{ env.CLEANUP_DISPATCH_TOKEN != '' && 'CLEANUP_DISPATCH_TOKEN' || '' }}
