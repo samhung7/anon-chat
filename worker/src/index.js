@@ -23,7 +23,11 @@
    they have one from). A room's
    messages are announced at most every QUIET ms (a call too soon is told how long to wait); a private message only
    to the person it's for. In an encrypted room the push says only that there's something new. Each call sends at most PAGE pushes (a Worker's outgoing
-   requests are limited) and says where to go on from. */
+   requests are limited) and says where to go on from.
+
+   Every hour (wrangler.toml [triggers]) it starts the cleanup (.github/workflows/cleanup.yml) on GitHub, since GitHub
+   runs its own schedule only every three to six hours, too seldom for the warning an hour before a room turns
+   read-only. That needs CLEANUP_DISPATCH_TOKEN: a GitHub token allowed to run the repository's workflows. */
 import { verifier } from "./token.js";
 import { vapid, sealSub, openSub, send, validSubscription, devices } from "./push.js";
 
@@ -185,4 +189,15 @@ export function makeHandler({ verify, read, fetcher = (...a) => fetch(...a) }) {
   };
 }
 
-export default { fetch: makeHandler({ verify: verifier(), read: readDb }) };
+// the hourly cron: ask GitHub to run the cleanup now; nothing without the token
+export function makeScheduled({ fetcher = (...a) => fetch(...a) } = {}) {
+  return async (event, env) => {
+    if (!env.CLEANUP_DISPATCH_TOKEN || !env.GITHUB_REPO) return;
+    const res = await fetcher(`https://api.github.com/repos/${env.GITHUB_REPO}/actions/workflows/cleanup.yml/dispatches`, { method: "POST",
+      headers: { Authorization: "Bearer " + env.CLEANUP_DISPATCH_TOKEN, Accept: "application/vnd.github+json", "Content-Type": "application/json", "User-Agent": "stoatalk-photos" },
+      body: JSON.stringify({ ref: "main" }) });
+    if (!res.ok) console.error("cleanup dispatch: " + res.status);
+  };
+}
+
+export default { fetch: makeHandler({ verify: verifier(), read: readDb }), scheduled: makeScheduled() };

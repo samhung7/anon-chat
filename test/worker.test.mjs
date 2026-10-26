@@ -162,7 +162,7 @@ test("cleanup: the bucket listed page by page over R2's S3 API", async () => {
 
 /* ---------- Web Push ---------- */
 import { encrypt, vapid, sealSub, openSub, b64u, validSubscription } from "../worker/src/push.js";
-import { makeHandler, readDb, allowedOrigin } from "../worker/src/index.js";
+import { makeHandler, readDb, allowedOrigin, makeScheduled } from "../worker/src/index.js";
 import { unsignedUid } from "./photo-stub.mjs";
 
 const hkdfBits = async (ikm, salt, info, n) => new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info },
@@ -266,4 +266,18 @@ test("service: only the listed pages may call it (staging lets every preview und
   for (const o of [null, "", "https://stoatalk.pages.dev", "https://evilstoatalk.pages.dev", "http://staging.stoatalk.pages.dev",
     "https://staging.stoatalk.pages.dev.evil.com", "https://stoatalk.app.evil.com"]) assert.ok(!allowedOrigin(o, list), o);
   assert.ok(!allowedOrigin("https://stoatalk.app", ""));
+});
+
+test("service: its hourly cron starts the cleanup on GitHub, with a token, and does nothing without one", async () => {
+  const asked = [];
+  const fetcher = async (url, init) => { asked.push({ url, init }); return new Response(null, { status: 204 }); };
+  const run = makeScheduled({ fetcher });
+  await run({}, { GITHUB_REPO: "samhung7/anon-chat" });
+  assert.equal(asked.length, 0);
+  await run({}, { GITHUB_REPO: "samhung7/anon-chat", CLEANUP_DISPATCH_TOKEN: "ghp_x" });
+  assert.equal(asked[0].url, "https://api.github.com/repos/samhung7/anon-chat/actions/workflows/cleanup.yml/dispatches");
+  assert.equal(asked[0].init.method, "POST");
+  assert.equal(asked[0].init.headers.Authorization, "Bearer ghp_x");
+  assert.ok(asked[0].init.headers["User-Agent"]); // GitHub refuses a request without one
+  assert.deepEqual(JSON.parse(asked[0].init.body), { ref: "main" });
 });
