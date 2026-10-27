@@ -457,6 +457,7 @@ I18N.add("ko", {
   terms: "이용약관",
   privacy: "개인정보 처리방침",
   contact: "문의하기",
+  chromeExt: "Chrome 확장 프로그램",
   // lecture Q&A and the projector screen
   chatTab: "채팅",
   qaTabIcon: "질문",
