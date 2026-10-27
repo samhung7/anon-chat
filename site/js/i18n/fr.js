@@ -457,6 +457,7 @@ I18N.add("fr", {
   terms: "Conditions d'utilisation",
   privacy: "Politique de confidentialité",
   contact: "Contact",
+  chromeExt: "Extension Chrome",
   // lecture Q&A and the projector screen
   chatTab: "Discussion",
   qaTabIcon: "Questions",

@@ -457,6 +457,7 @@ I18N.add("zh-TW", {
   terms: "服務條款",
   privacy: "隱私權政策",
   contact: "聯絡我們",
+  chromeExt: "Chrome 擴充功能",
   // lecture Q&A and the projector screen
   chatTab: "聊天",
   qaTabIcon: "提問",

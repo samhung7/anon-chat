@@ -233,6 +233,7 @@ code { font-size: .9em; }
 .legal a { display: inline-flex; align-items: center; min-height: var(--hit); color: var(--muted); text-decoration: none; }
 .legal a:hover { color: var(--text); }
 .legal span { color: var(--muted); }
+.legal + .legal { margin-top: -18px; }
 .note { border-radius: var(--radius-md); padding: 10px var(--sp-3); margin: 0 0 14px; font-size: var(--fs-md); }
 .home > .note { margin: 0; }
 .note.warn { background: var(--warn-bg); color: var(--warn); }
