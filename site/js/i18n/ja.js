@@ -457,6 +457,7 @@ I18N.add("ja", {
   terms: "利用規約",
   privacy: "プライバシーポリシー",
   contact: "お問い合わせ",
+  chromeExt: "Chrome 拡張機能",
   // lecture Q&A and the projector screen
   chatTab: "チャット",
   qaTabIcon: "質問",
