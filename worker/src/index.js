@@ -25,7 +25,7 @@
    to the person it's for. In an encrypted room the push says only that there's something new. Each call sends at most PAGE pushes (a Worker's outgoing
    requests are limited) and says where to go on from.
 
-   Every hour (wrangler.toml [triggers]) it starts the cleanup (.github/workflows/cleanup.yml) on GitHub, since GitHub
+   Every 15 minutes (wrangler.toml [triggers]) it starts the cleanup (.github/workflows/cleanup.yml) on GitHub, since GitHub
    runs its own schedule only every three to six hours, too seldom for the warning an hour before a room turns
    read-only. That needs CLEANUP_DISPATCH_TOKEN: a GitHub token allowed to run the repository's workflows. */
 import { verifier } from "./token.js";
@@ -189,7 +189,7 @@ export function makeHandler({ verify, read, fetcher = (...a) => fetch(...a) }) {
   };
 }
 
-// the hourly cron: ask GitHub to run the cleanup now; nothing without the token
+// the cron: ask GitHub to run the cleanup now; nothing without the token
 export function makeScheduled({ fetcher = (...a) => fetch(...a) } = {}) {
   return async (event, env) => {
     if (!env.CLEANUP_DISPATCH_TOKEN || !env.GITHUB_REPO) return;

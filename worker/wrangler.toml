@@ -2,7 +2,7 @@
 # which is public at files.stoatalk.app, and the Web Push sender (src/push.js). Deployed by .github/workflows/worker.yml
 # with the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets; the VAPID_KEY secret (a P-256 JWK, made on
 # site/admin.html) turns push on. The CLEANUP_DISPATCH_TOKEN secret (a GitHub token that may run this repository's
-# workflows) lets the hourly cron below start the cleanup, which GitHub's own schedule runs only every few hours.
+# workflows) lets the cron below start the cleanup every 15 minutes, which GitHub's own schedule runs only every few hours.
 name = "stoatalk-photos"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
@@ -20,7 +20,7 @@ ORIGINS = "https://stoatalk.app"
 GITHUB_REPO = "samhung7/anon-chat"
 
 [triggers]
-crons = ["17 * * * *"]
+crons = ["2,17,32,47 * * * *"]   # every 15 minutes, so a warning comes 45 to 60 minutes ahead
 
 # Staging (.github/workflows/staging.yml deploys it with --env staging): the same service as stoatalk-photos-staging at
 # api-staging.stoatalk.app, with its own bucket (public at files-staging.stoatalk.app) and the staging Firebase project.
