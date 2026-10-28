@@ -2,7 +2,7 @@
 # Needs the CLOUDFLARE_API_TOKEN ("Edit Cloudflare Workers") and CLOUDFLARE_ACCOUNT_ID secrets; without them it does nothing.
 # With the VAPID_KEY secret (made on site/admin.html) it also hands the service its Web Push key, and with
 # CLEANUP_DISPATCH_TOKEN (a fine-grained GitHub token for this repository with "Actions: Read and write") the token its
-# hourly cron starts the cleanup with.
+# cron starts the cleanup with every 15 minutes.
 name: Deploy photo service
 on:
   push:

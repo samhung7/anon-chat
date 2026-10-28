@@ -6,8 +6,9 @@
 # their room turns read-only and an hour before it's deleted.
 # With STAGING_FIREBASE_SERVICE_ACCOUNT and STAGING_FIREBASE_DATABASE_URL (staging.yml) it does the same for the staging
 # database, but opens no issue for its reports; the staging bucket's photos go by its own lifecycle rule.
-# GitHub runs the schedule below only every three to six hours; the photo service's hourly cron (worker/) starts it
-# with workflow_dispatch in between, so the warnings come on time. Runs never overlap, so none is sent twice.
+# GitHub runs the schedule below only every three to six hours; the photo service's cron (worker/) starts it
+# with workflow_dispatch every 15 minutes, so the warnings come 45 to 60 minutes
+# ahead. Runs never overlap, so none is sent twice.
 name: Delete expired rooms
 on:
   schedule:
