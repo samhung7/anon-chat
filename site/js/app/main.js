@@ -202,7 +202,7 @@ ta.addEventListener("keydown", (e) => {
 $("#composer").addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = ta.value;
-  if (!text.trim()) { if (e.submitter?.classList.contains("send")) emptySendTap(e.submitter); return; } // quick.js: five in a row fly my animal
+  if (!text.trim()) { if (e.submitter?.classList.contains("send")) emptySendTap(e.submitter); return; } // quick.js: two in a row fly my animal
   ta.value = ""; grow(); mentionBar(); renderQuick();
   if (!(await (room?.ui.view === "qa" ? ask(text) : send(text))) && !ta.value) { ta.value = text; grow(); renderQuick(); } // not sent: give the text back
   else if (pickerOpen() === "emoji") closePicker();
