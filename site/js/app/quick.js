@@ -2,7 +2,7 @@
    typing. In the row: while replying to a message, a few answers to it; the room's own (the owner or a co-host writes
    them, meta/qr, sealed as xr in an encrypted room; a lecture's "too fast" or "got it"); and my own, kept on this
    device (until I edit them, the presets in my language). A quick reply is an ordinary text message. Tapping a
-   message twice gives it a 👍; tapping the send button five times with nothing written flies my animal up. */
+   message twice gives it a 👍; tapping the send button twice with nothing written flies my animal up. */
 import { LIMITS, REACTS, ANIMALS } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
 import { $, el, toast, sheet, orToast, icon, avatar } from "./dom.js?v=dev";
@@ -146,10 +146,10 @@ function like(node, id) {
   if (!v.re?.[0]?.[backend.uid]) orToast(room.api.react(id, 0, true));
 }
 
-/* ---------- a small surprise: five quick taps on the send button with nothing written ----------
-   Nothing is sent; my animal flies up off the button and fades into the room, on this screen only. Five more fly a
-   random animal each time, until three minutes go by without five taps: then it's my own again. */
-const EGG_TAPS = 5, EGG_GAP_MS = 600, EGG_MINE_MS = 3 * 60 * 1000;
+/* ---------- a small surprise: two quick taps on the send button with nothing written ----------
+   Nothing is sent; my animal flies up off the button and fades into the room, on this screen only. Two more fly a
+   random animal each time, until three minutes go by without two taps: then it's my own again. */
+const EGG_TAPS = 2, EGG_GAP_MS = 600, EGG_MINE_MS = 3 * 60 * 1000;
 let eggTaps = 0, eggTapAt = 0, eggFlewAt = 0, eggShown = null;
 export function emptySendTap(btn) {
   const now = Date.now();
@@ -167,5 +167,5 @@ export function emptySendTap(btn) {
   fly.style.top = `${r.top + r.height / 2}px`;
   fly.style.setProperty("--rise", `${-Math.max(120, (r.top - top) * 0.75)}px`);
   document.body.append(fly);
-  setTimeout(() => fly.remove(), 1600);
+  setTimeout(() => fly.remove(), 1700);
 }

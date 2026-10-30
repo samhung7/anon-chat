@@ -212,13 +212,13 @@ test("a made-up nickname: 🎲 picks a colour and an animal, and one that is tak
   noErrors();
 });
 
-test("five taps on the send button with nothing written fly my animal, then random ones; nothing is sent", async () => {
+test("two taps on the send button with nothing written fly my animal, then random ones; nothing is sent", async () => {
   const alice = await person("a");
   const { code } = await createRoom(alice, "Alice");
   const send = alice.locator("#composer .send");
   const art = (emoji) => alice.evaluate(async (e) => (await import("./js/app/constants.js?v=dev")).ANIMAL_ART[e], emoji);
   const mine = await art(Object.values(await dbGet(`rooms/${code}/members`))[0].avatar);
-  const five = async () => { for (let i = 0; i < 5; i++) await send.click({ delay: 10 }); };
+  const two = async () => { for (let i = 0; i < 2; i++) await send.click({ delay: 10 }); };
   const flown = async () => {
     const fly = alice.locator(".eggfly img").last();
     await fly.waitFor({ state: "attached" });
@@ -226,22 +226,22 @@ test("five taps on the send button with nothing written fly my animal, then rand
     await alice.locator(".eggfly").waitFor({ state: "detached" });
     return src.match(/avatars\/(\w+)\.svg/)[1];
   };
-  // four taps do nothing
-  for (let i = 0; i < 4; i++) await send.click();
+  // one tap does nothing
+  await send.click();
   await alice.waitForTimeout(700);
   assert.equal(await alice.locator(".eggfly").count(), 0);
-  // five: my own animal
-  await five();
+  // two: my own animal
+  await two();
   assert.equal(await flown(), mine);
-  // five more: another one each time
-  await five();
+  // two more: another one each time
+  await two();
   const next = await flown();
   assert.notEqual(next, mine);
-  await five();
+  await two();
   assert.notEqual(await flown(), next);
   // three quiet minutes later, my own again
   await alice.evaluate(() => { const now = Date.now; Date.now = () => now() + 3 * 60 * 1000 + 1000; });
-  await five();
+  await two();
   assert.equal(await flown(), mine);
   assert.equal(await dbGet(`rooms/${code}/msgs`), null, "nothing went to the room");
   noErrors();

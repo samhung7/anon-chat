@@ -820,16 +820,13 @@ html.l10n .splash p { visibility: hidden; }
 .likepop { position: absolute; left: 50%; top: 50%; font-size: 34px; pointer-events: none; animation: likepop .8s ease-out forwards; }
 @keyframes likepop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); } 25% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -120%) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .likepop { animation-duration: .01s; } }
-/* five taps on the send button with nothing written: an animal rises off it and fades into the room (quick.js) */
-.eggfly { position: fixed; z-index: 50; width: 44px; height: 44px; display: grid; place-items: center; font-size: 36px; pointer-events: none; animation: eggfly 1.5s cubic-bezier(.2, .7, .3, 1) forwards; }
+/* two taps on the send button with nothing written: an animal rises off it in one smooth glide and fades into the
+   room (quick.js); the rise is a single eased move, the fade runs beside it */
+.eggfly { position: fixed; z-index: 50; width: 44px; height: 44px; display: grid; place-items: center; font-size: 36px; pointer-events: none;
+  animation: eggrise 1.6s cubic-bezier(.22, .61, .36, 1) forwards, eggfade 1.6s linear forwards; }
 .eggfly img { width: 100%; height: 100%; }
-@keyframes eggfly {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(.4); }
-  15% { opacity: 1; transform: translate(-50%, -70%) scale(1.25); }
-  45% { transform: translate(calc(-50% - 14px), calc(-50% + var(--rise) * .45)) scale(1.1) rotate(-8deg); }
-  75% { opacity: .9; transform: translate(calc(-50% + 10px), calc(-50% + var(--rise) * .8)) scale(1) rotate(6deg); }
-  100% { opacity: 0; transform: translate(-50%, calc(-50% + var(--rise))) scale(.9); }
-}
+@keyframes eggrise { from { transform: translate(-50%, -50%) scale(.7); } to { transform: translate(-50%, calc(-50% + var(--rise))) scale(1.1); } }
+@keyframes eggfade { 0% { opacity: 0; } 12% { opacity: 1; } 55% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .eggfly { animation-duration: .01s; } }
 .replist { list-style: none; margin: 0; padding: 0; }
 .replist li { padding: 10px 0; border-bottom: 1px solid var(--line); }
