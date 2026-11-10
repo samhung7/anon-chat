@@ -229,9 +229,9 @@ export class Room extends Emitter {
     this.members = next; this.ready = true;
     Object.assign(this.seen, JSON.parse(JSON.stringify(next)));
     if (!next[uid]) return this.emit("lost");
-    // with a size limit, the owner's device keeps the count true (someone may have left without counting down)
+    // the owner's device keeps the count true (someone may have left without counting down), and starts it in a room from before
     const count = Object.keys(next).length;
-    if (this.isOwner() && this.meta?.cap && this.meta.n !== count) this.api.setCount(count).catch(() => {});
+    if (this.isOwner() && this.meta && this.meta.n !== count) this.api.setCount(count).catch(() => {});
     Object.keys(next).forEach((id) => id !== uid && this.watchDm(id));
     this.emit("members");
   }

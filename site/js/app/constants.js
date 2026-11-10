@@ -18,9 +18,14 @@ export const LIMITS = {
   name: 20, shownName: 24, avatar: 8, roomTitle: 40, roomDesc: 500, recordTitle: 60,
   postTitle: 60, postBody: 20000, postEx: 200, postPhotos: 9, comment: 1000,
   pollQ: 200, pollOpt: 80, pollOpts: 10, drawTitle: 60, gifUrl: 500, gifTitle: 120,
-  cap: 1000,
   quick: 40, quicks: 8, roomQuick: 20, roomQuicks: 6,
 };
+// The most people a room takes, by the host's plan (only the free one so far): every room counts its members, and
+// the owner can set a lower limit of their own (meta/cap). The rules (tools/rules.py MAX_MEMBERS) check the same.
+export const PLANS = { free: { members: 50 } };
+export const ROOM_MAX = PLANS.free.members;
+// how many people this room takes: the plan's size, or the owner's own lower limit
+export const roomLimit = (meta) => Math.min(meta?.cap || ROOM_MAX, ROOM_MAX);
 export const DAY = 864e5;          // a room nobody wrote in for this long is gone
 export const MAX_LOAD = 2000;      // the most messages loaded on entering a room
 export const GROUP_MS = 180000;    // messages from one person this close together share one header
