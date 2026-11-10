@@ -1,5 +1,5 @@
 /* Opening a room and joining one: with the code, a pasted link, or an encrypted room's invite link. */
-import { CODE_CHARS, LIMITS, CONNECT_MS } from "./constants.js?v=dev";
+import { CODE_CHARS, LIMITS, CONNECT_MS, roomLimit } from "./constants.js?v=dev";
 import { phase } from "./expiry.js?v=dev";
 import { t } from "./text.js?v=dev";
 import { $, el, toast, sheet, busy, enterPressesOk, icon, bare } from "./dom.js?v=dev";
@@ -63,7 +63,7 @@ export async function create() {
     if (await backend.val(backend.ref("bans/" + uid))) { toast(t("bannedAll")); return; }
     for (let i = 0; i < 30; i++) {
       const code = newCode();
-      const meta = { owner: uid, created: T, last: T };
+      const meta = { owner: uid, created: T, last: T, n: 1 }; // n: the members counted (roomLimit)
       if (cipher) { meta.enc = true; meta.kc = await cipher.keyCheck(); if (name) meta.xt = await cipher.seal({ t: name }, "t"); }
       else if (name) meta.title = name;
       try {
@@ -120,7 +120,8 @@ export async function join(raw) {
     if (bannedAll) { toast(t("bannedAll")); return; }
     if (banned) { toast(t("bannedToast")); return; }
     if (meta.locked) { toast(t("lockedToast")); return; }
-    if (meta.cap && (meta.n || 0) >= meta.cap) { toast(t("capFull")); return; }
+    const limit = roomLimit(meta), counts = meta.n != null || !!meta.cap; // a room from before the count may keep none yet
+    if (counts && (meta.n || 0) >= limit) { toast(t("capFull", { n: limit })); return; }
     let m = await asking(ensureMe, !me());
     if (!m) return;
     for (let tries = 0, rolls = 0; ; tries++) {
@@ -128,17 +129,17 @@ export async function join(raw) {
       const holder = await backend.val(ref("names/" + k));
       const at = (path) => `rooms/${code}/${path}`;
       const upd = { [at(`members/${uid}`)]: await joining(cipher, m), [at(`names/${k}`)]: uid }; // joining isn't speaking: it leaves meta/last alone
-      // a room with a size limit counts its members: joining adds one (and fails, to try again, if someone got in first)
-      if (meta.cap) {
+      // the room counts its members: joining adds one (and fails, to try again, if someone got in first)
+      if (counts) {
         const counted = await backend.val(ref("meta/n"));
-        if (typeof counted === "number" && counted >= meta.cap) { toast(t("capFull")); return; }
+        if (typeof counted === "number" && counted >= limit) { toast(t("capFull", { n: limit })); return; }
         upd[at("meta/n")] = (counted || 0) + 1;
       }
       try { await backend.update(upd); backend.stat("joins"); break; }
       catch (e) {
         if (!isDenied(e)) throw e;
         const taken = holder && holder !== uid; // someone here already goes by this name
-        if (meta.cap && tries < 3 && !taken) continue;
+        if (counts && tries < 3 && !taken) continue;
         if (!taken) { toast(t("cantJoin")); return; }
         if (m.col != null && rolls++ < 10) { m = saveMe(rollMe()); continue; } // a made-up name: make up another
         m = await asking(() => askMe(false, t("nameTakenJoin", { name: m.name }), false));

@@ -1,6 +1,6 @@
 /* Who's in the room, and what can be done with someone: everyone can message, mention and block; the owner names
    co-hosts and hands the room over; the owner and co-hosts remove people. */
-import { LIMITS } from "./constants.js?v=dev";
+import { ROOM_MAX, roomLimit } from "./constants.js?v=dev";
 import { t } from "./text.js?v=dev";
 import { el, toast, sheet, confirmSheet, pickSheet, icon, avatar, bare } from "./dom.js?v=dev";
 import { backend } from "./backend.js?v=dev";
@@ -38,7 +38,7 @@ export async function people(pick) {
       el("h3", {}, icon(ic, "sm"), label, el("span", { class: "c", text: mine.length })), el("ul", {}, mine.map(row))) : null;
   });
   const n = Object.keys(room.members).length;
-  const title = pick || (room.meta?.cap ? t("membersCap", { n, cap: room.meta.cap }) : t("membersN", { n }));
+  const title = pick || t("membersCap", { n, cap: roomLimit(room.meta) });
   const choice = await pickSheet(title, ids.length ? el("div", {}, groups) : el("p", { class: "muted", text: t("noOneElse") }), "button", (b) => ({ ...b.dataset }));
   if (!choice || !room || room.gone) return;
   if (choice.dm) openDm(choice.dm);
@@ -69,7 +69,7 @@ async function memberMenu(id) {
   if (a === "kick") kick(id);
 }
 // what's left of a size count once someone goes (null when the room keeps none)
-export const countAfterLeaving = () => (room.meta?.cap && room.meta.n > 0 ? room.meta.n - 1 : null);
+export const countAfterLeaving = () => (room.meta?.n > 0 ? room.meta.n - 1 : null);
 // someone's nickname claim, if it's still theirs: don't free a name someone else uses now
 export async function ownClaim(id) {
   const k = room.claimOf(id);
@@ -87,19 +87,19 @@ async function transferOwner(id) {
   if (!m || !room.isOwner() || !(await confirmSheet(t("transferTitle", { who: `${m.avatar} ${m.name}` }), t("transferBody"), t("transfer"), "primary"))) return;
   room.api.transfer(id).then(() => toast(t("transferDone", { name: m.name })), () => toast(t("tryAgain")));
 }
-// the most people the room takes (empty: no limit)
+// the most people the room takes, up to the plan's size (empty: the plan's size)
 export async function capSheet() {
   const n = Object.keys(room.members).length;
-  const input = el("input", { class: "field num", type: "number", inputmode: "numeric", min: Math.max(2, n), max: LIMITS.cap, id: "capN", placeholder: t("capPh"), value: room.meta?.cap || "" });
+  const input = el("input", { class: "field num", type: "number", inputmode: "numeric", min: Math.max(2, n), max: ROOM_MAX, id: "capN", placeholder: t("capPh", { max: ROOM_MAX }), value: room.meta?.cap || "" });
   const warn = el("p", { class: "note warn", hidden: true });
   const say = (text) => { warn.textContent = text; warn.hidden = false; };
-  const body = el("div", {}, warn, el("p", { class: "muted", text: t("capBody", { n }) }), el("label", { class: "lbl", for: "capN", text: t("cap") }), input);
+  const body = el("div", {}, warn, el("p", { class: "muted", text: t("capBody", { n, max: ROOM_MAX }) }), el("label", { class: "lbl", for: "capN", text: t("cap") }), input);
   for (;;) {
     const a = await sheet(t("cap"), body, [["no", t("cancel")], ["yes", t("save"), "primary"]], { onOpen: () => input.focus() });
     if (a !== "yes" || !room || room.gone) return;
     const raw = input.value.trim(), cap = Math.floor(+raw);
-    if (!raw) return room.api.setMeta({ cap: null, n: null }).then(() => toast(t("capOff")), failed);
-    if (!(cap >= 2 && cap <= LIMITS.cap)) { say(t("capBad")); continue; }
+    if (!raw) return room.api.setMeta({ cap: null, n }).then(() => toast(t("capOff", { max: ROOM_MAX })), failed);
+    if (!(cap >= 2 && cap <= ROOM_MAX)) { say(t("capBad", { max: ROOM_MAX })); continue; }
     if (cap < n) { say(t("capTooLow", { n })); continue; }
     return room.api.setMeta({ cap, n }).then(() => toast(t("capSet", { n: cap })), failed);
   }

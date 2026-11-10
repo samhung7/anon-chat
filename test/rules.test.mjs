@@ -11,11 +11,14 @@ const member = (name) => ({ name, avatar: "🦊", joined: T, online: true });
 const db = (uid) => env.authenticatedContext(uid).database();
 const createRoom = (uid, { code = C } = {}) =>
   update(ref(db(uid)), {
-    [`rooms/${code}`]: { meta: { owner: uid, created: T, last: T }, members: { [uid]: member("房主") }, names: { "房主": uid } },
+    [`rooms/${code}`]: { meta: { owner: uid, created: T, last: T, n: 1 }, members: { [uid]: member("房主") }, names: { "房主": uid } },
   });
-const join = (uid, name = uid) => update(ref(db(uid)), {
+// joining counts one more in meta/n, as the app does
+const count = async (code = C) => { let n; await admin(async (d) => { n = (await get(ref(d, `rooms/${code}/meta/n`))).val(); }); return n; };
+const join = async (uid, name = uid) => update(ref(db(uid)), {
   [`rooms/${C}/members/${uid}`]: member(name),
   [`rooms/${C}/names/${name.toLowerCase()}`]: uid,
+  [`rooms/${C}/meta/n`]: (await count()) + 1,
 });
 // a message as the app sends it: the same update stamps when this person last posted (ls) and names the message (lm).
 // Tests post faster than the rate limit allows, so the stamp is cleared first unless fast is set.
@@ -277,13 +280,31 @@ test("size limit: joining counts up to the limit, leaving counts down", async ()
   await assertFails(update(ref(db("bob"), `rooms/${C}/meta`), { cap: 3, n: 2 }));
   await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { cap: 3, n: 2 }));
   const joinN = (uid, n) => update(ref(db(uid)), { [`rooms/${C}/members/${uid}`]: member(uid), [`rooms/${C}/names/${uid}`]: uid, [`rooms/${C}/meta/n`]: n });
-  await assertFails(join("carol")); // without counting itself
+  await assertFails(update(ref(db("carol")), { [`rooms/${C}/members/carol`]: member("carol"), [`rooms/${C}/names/carol`]: "carol" })); // without counting itself
   await assertFails(joinN("carol", 4));
   await assertSucceeds(joinN("carol", 3));
   await assertFails(joinN("dave", 4)); // full
   await assertFails(set(ref(db("bob"), `rooms/${C}/meta/n`), 1)); // can't count down while staying
   await assertSucceeds(update(ref(db("carol"), `rooms/${C}`), { "members/carol": null, "names/carol": null, "meta/n": 2 }));
   await assertSucceeds(joinN("dave", 3));
+});
+
+test("size: a room takes at most 50 people, whatever its own limit, and keeps counting", async () => {
+  await assertFails(update(ref(db("alice")), { [`rooms/${C}`]: { meta: { owner: "alice", created: T, last: T }, members: { alice: member("房主") }, names: { "房主": "alice" } } })); // must count
+  await assertFails(update(ref(db("alice")), { [`rooms/${C}`]: { meta: { owner: "alice", created: T, last: T, n: 0 }, members: { alice: member("房主") }, names: { "房主": "alice" } } }));
+  await createRoom("alice");
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { cap: 51 }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { cap: 50 }));
+  await assertFails(update(ref(db("alice"), `rooms/${C}/meta`), { n: null })); // the count stays
+  await assertFails(set(ref(db("alice"), `rooms/${C}/meta/n`), null));
+  await admin((d) => update(ref(d, `rooms/${C}/meta`), { n: 49 }));
+  await assertSucceeds(join("bob"));
+  await assertFails(join("carol")); // 51
+  // a room from before the count (no n, no cap) still takes people, until its owner's page counts it
+  await admin((d) => update(ref(d, `rooms/${C}/meta`), { n: null, cap: null }));
+  await assertSucceeds(update(ref(db("carol")), { [`rooms/${C}/members/carol`]: member("carol"), [`rooms/${C}/names/carol`]: "carol" }));
+  await assertSucceeds(update(ref(db("alice"), `rooms/${C}/meta`), { n: 50 }));
+  await assertFails(join("dave"));
 });
 
 test("reactions: members toggle their own", async () => {
@@ -390,9 +411,9 @@ test("GIFs: only images hosted by KLIPY", async () => {
 const H = (n) => n.repeat(24).slice(0, 24);
 const encMember = (h) => ({ x: "c2VhbGVk", h, joined: T, online: true, pk: "cGs" });
 const createEnc = (uid) => update(ref(db(uid)), {
-  [`rooms/${C}`]: { meta: { owner: uid, created: T, last: T, priv: false, enc: true, kc: "0123456789abcdef", xt: "dGl0bGU" }, members: { [uid]: encMember(H("a")) }, names: { [H("a")]: uid } },
+  [`rooms/${C}`]: { meta: { owner: uid, created: T, last: T, priv: false, enc: true, kc: "0123456789abcdef", xt: "dGl0bGU", n: 1 }, members: { [uid]: encMember(H("a")) }, names: { [H("a")]: uid } },
 });
-const joinEnc = (uid, h) => update(ref(db(uid)), { [`rooms/${C}/members/${uid}`]: encMember(h), [`rooms/${C}/names/${h}`]: uid });
+const joinEnc = async (uid, h) => update(ref(db(uid)), { [`rooms/${C}/members/${uid}`]: encMember(h), [`rooms/${C}/names/${h}`]: uid, [`rooms/${C}/meta/n`]: (await count()) + 1 });
 
 test("encrypted room: only ciphertext and hashed nicknames", async () => {
   await assertFails(update(ref(db("alice")), { [`rooms/${C}`]: { meta: { owner: "alice", created: T, last: T, priv: false, enc: true, title: "明文" }, members: { alice: encMember(H("a")) }, names: { [H("a")]: "alice" } } }));

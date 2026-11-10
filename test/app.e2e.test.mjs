@@ -695,6 +695,16 @@ test("owner settings: rename, size limit, hand over; coming back after a reload;
   await sheet(alice).locator("h2", { hasText: "5" }).waitFor();
   await alice.keyboard.press("Escape");
   assert.equal((await dbGet(`rooms/${code}/meta`)).cap, 5);
+  assert.equal((await dbGet(`rooms/${code}/meta`)).n, 2, "the room counts its members");
+
+  // a room holds 50 at most, even with no limit of its own: someone new is told it's full
+  const patchMeta = (body) => fetch(dbUrl(`rooms/${code}/meta`), { method: "PATCH", headers: asOwner, body: JSON.stringify(body) });
+  await patchMeta({ cap: null, n: 50 });
+  const carol = await person("c");
+  await carol.goto(url);
+  await carol.locator(".toast", { hasText: "This room is full (50 people at most)" }).waitFor();
+  assert.equal(await carol.locator("#chat").isVisible(), false);
+  await patchMeta({ cap: 5, n: 2 });
 
   const first = (await dbGet(`rooms/${code}/meta`)).owner;
   await menuPick(alice, "transfer");

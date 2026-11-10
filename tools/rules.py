@@ -6,6 +6,11 @@ DAY = "86400000"
 GONE = "172800000"   # after 24 quiet hours a room is read-only; 24 hours after that it's gone (site/js/app/expiry.js agrees)
 QUIET = "20000"   # a room's messages are announced by Web Push at most this often (ms; worker/src/index.js agrees)
 GAP = "800"   # the shortest time between two messages from one person (ms): stops a script from flooding a room
+# The most people a room takes. Every room counts its members in meta/n, so this holds whatever the owner's own
+# limit (meta/cap, which can only be lower). It's the free plan's size; when paid plans come, the plan's size goes in
+# a path only the server writes (for example plans/{owner uid}) and member_join reads it instead of this number.
+# site/js/app/constants.js PLANS agrees.
+MAX_MEMBERS = "50"
 ROOM = "data.parent().parent()"           # from rooms/$code/<x>/$y
 NEWROOM = "newData.parent().parent()"
 def j(*parts): return " && ".join(f"({p})" for p in parts)
@@ -37,16 +42,20 @@ room_write = o(
       "!newData.child('reports').exists()", "!newData.child('qs').exists()", "!newData.child('qq').exists()", "!newData.child('qby').exists()",
       "!newData.child('push').exists()", "!newData.child('games').exists()", "!newData.child('posts').exists()", "!newData.child('pc').exists()",
       "!newData.child('pv').exists()", "!newData.child('ab').exists()", "!newData.child('av').exists()", "!newData.child('qz').exists()",
-      "!newData.child('sb').exists()"),
+      "!newData.child('sb').exists()",
+      "newData.child('meta/n').val() === 1"),   # the room counts its members from the start: the creator is one
 )
 
 member_join = j(
     f"{ROOM}.child('meta').exists()",
     alive(ROOM),
     f"{ROOM}.child('meta/locked').val() !== true",
-    # a room with a size limit (meta/cap) counts its members in meta/n: joining adds one, within the limit
-    o(f"!{ROOM}.child('meta/cap').exists()",
-      j(f"{NEWROOM}.child('meta/n').val() === {ROOM}.child('meta/n').val() + 1", f"{NEWROOM}.child('meta/n').val() <= {ROOM}.child('meta/cap').val()")),
+    # the room counts its members in meta/n: joining adds one, up to MAX_MEMBERS and the owner's own limit (meta/cap);
+    # a room from before the count has none until its owner's page counts it (room.js), so nothing to count against yet
+    # (checked first: adding to a missing count is an error, which would refuse the whole write)
+    o(j(f"!{ROOM}.child('meta/n').exists()", f"!{ROOM}.child('meta/cap').exists()", f"!{NEWROOM}.child('meta/n').exists()"),
+      j(f"{ROOM}.child('meta/n').exists()", f"{NEWROOM}.child('meta/n').val() === {ROOM}.child('meta/n').val() + 1", f"{NEWROOM}.child('meta/n').val() <= {MAX_MEMBERS}",
+        o(f"!{ROOM}.child('meta/cap').exists()", f"{NEWROOM}.child('meta/n').val() <= {ROOM}.child('meta/cap').val()"))),
     f"{ROOM}.child('meta/priv').val() !== true",   # an old password room, while it lasts: nobody new gets in
 )
 member_write = o(
@@ -545,7 +554,8 @@ rules = {"rules": {
                 ".read": "auth != null",
                 ".write": j("auth != null", "data.child('owner').val() === auth.uid", alive("data.parent()")),
                 # once encrypted, a room stays encrypted (until its code is reused after 48 idle hours)
-                ".validate": j("newData.hasChildren(['owner', 'created', 'last'])",
+                # ... and once counting its members, it keeps counting
+                ".validate": j("newData.hasChildren(['owner', 'created', 'last'])", o("!data.hasChild('n')", "newData.hasChild('n')"),
                                o("!data.child('enc').exists()", "newData.child('enc').val() === data.child('enc').val()", f"data.child('last').val() < now - {GONE}")),
                 # the owner can hand the room to someone in it
                 "owner": {".validate": "newData.isString() && " + o("newData.val() === auth.uid", "newData.val() === data.val()",
@@ -581,10 +591,10 @@ rules = {"rules": {
                 # asking the push service (worker/) to announce theirs, so a busy room sends one push now and then, not one a message
                 "pa": {".write": f"auth != null && data.parent().parent().child('members/' + auth.uid).exists() && (!data.exists() || data.val() < now - {QUIET})",
                        ".validate": "newData.val() === now"},
-                "cap": {".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 1000"},
+                "cap": {".validate": f"newData.isNumber() && newData.val() >= 2 && newData.val() <= {MAX_MEMBERS}"},
                 "ng": {".validate": "newData.isBoolean()"},   # the owner turned the mini-games off
                 "po": {".validate": "newData.isBoolean()"},   # the owner lets everyone post long posts, not only the hosts
-                # members counted while there's a size limit: each person adds or removes themselves; the owner sets it
+                # the members counted: each person adds or removes themselves; the owner's page keeps it true
                 "n": {".write": j("auth != null", o(
                           j("newData.val() === data.val() + 1", "newData.parent().parent().child('members/' + auth.uid).exists()", "!data.parent().parent().child('members/' + auth.uid).exists()"),
                           j("newData.val() === data.val() - 1", o(j("!newData.parent().parent().child('members/' + auth.uid).exists()", "data.parent().parent().child('members/' + auth.uid).exists()"),
